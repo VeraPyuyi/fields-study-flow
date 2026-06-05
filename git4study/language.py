@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from enum import StrEnum
+from enum import Enum
 
 
-class ResourceLanguagePreference(StrEnum):
+class ResourceLanguagePreference(str, Enum):
     ZH_FIRST = "zh-first"
     EN_FIRST = "en-first"
     BALANCED = "balanced"
     ZH_ONLY = "zh-only"
     EN_ONLY = "en-only"
+
+    def __str__(self) -> str:
+        return self.value
 
 
 OUTPUT_LANGUAGE_ALIASES = {
