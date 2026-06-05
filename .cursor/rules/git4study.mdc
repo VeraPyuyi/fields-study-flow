@@ -1,0 +1,11 @@
+---
+description: Use Git-4-Study Flow for AI/CS learning roadmaps and paper deep-reading plans.
+alwaysApply: false
+---
+
+When the user asks for an AI/CS learning path, paper understanding route, project reproduction route, or Chinese/English resource selection:
+
+1. Ask for goal, current level, time budget, output language, and resource language preference.
+2. Use Git-4-Study MCP tools when available.
+3. Prefer official APIs, public course pages, GitHub repositories, open papers, and user-provided URLs.
+4. Do not use pirate sources, bypass login, download videos, or copy long copyrighted passages.

@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "git4study": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "git4study.mcp_server"]
+    }
+  }
+}

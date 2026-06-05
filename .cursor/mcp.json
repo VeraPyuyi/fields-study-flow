@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "git4study": {
+      "command": "python",
+      "args": ["-m", "git4study.mcp_server"]
+    }
+  }
+}

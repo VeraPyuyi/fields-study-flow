@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "domains": [
+    {
+      "id": "math",
+      "name": "Mathematics",
+      "topics": ["linear algebra", "probability", "statistics", "optimization", "information theory"]
+    },
+    {
+      "id": "programming",
+      "name": "Programming",
+      "topics": ["python", "numpy", "pytorch", "debugging", "testing", "git", "linux"]
+    },
+    {
+      "id": "ml_dl",
+      "name": "Machine Learning and Deep Learning",
+      "topics": ["supervised learning", "cnn", "rnn", "transformer", "diffusion models", "representation learning"]
+    },
+    {
+      "id": "llm",
+      "name": "Large Language Models",
+      "topics": ["tokenization", "attention", "pretraining", "instruction tuning", "rag", "evaluation", "agents"]
+    },
+    {
+      "id": "rl",
+      "name": "Reinforcement Learning",
+      "topics": ["mdp", "policy gradient", "trpo", "ppo", "offline rl", "model-based rl"]
+    },
+    {
+      "id": "systems",
+      "name": "AI Systems",
+      "topics": ["cuda", "distributed training", "serving", "vector databases", "mlops", "profiling"]
+    },
+    {
+      "id": "paper_reading",
+      "name": "Paper Reading",
+      "topics": ["abstract triage", "proof tracing", "experiment table reading", "ablation analysis", "reproduction"]
+    }
+  ],
+  "levels": ["beginner", "familiar", "advanced", "expert"]
+}

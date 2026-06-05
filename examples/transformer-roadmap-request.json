@@ -1,0 +1,15 @@
+{
+  "goal": "从 Python 到掌握 Transformer",
+  "outputLanguage": "zh-CN",
+  "resourceLanguagePreference": "en-first",
+  "knownTopics": ["python", "basic linear algebra"],
+  "confidenceLevels": {
+    "math": "beginner",
+    "programming": "familiar",
+    "ml_dl": "beginner",
+    "paper_reading": "beginner"
+  },
+  "timeBudget": {
+    "weekly_hours": 8
+  }
+}
