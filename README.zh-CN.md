@@ -8,6 +8,10 @@ Git-4-Study Flow 可以把“读懂这篇论文”、“学习 Transformer”、
 
 > 为 Codex、Claude Code、Cursor、VS Code 以及任何可调用 CLI/MCP 工具的 agent 设计。
 
+<p align="center">
+  <img src="docs/assets/git4study-flow-architecture.svg" alt="Git-4-Study Flow 架构流程图" width="100%">
+</p>
+
 ## 为什么做这个项目
 
 很多学习路线生成工具只会给出一串“看起来合理”的链接。Git-4-Study Flow 把真正影响学习质量的部分显式建模：

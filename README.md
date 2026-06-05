@@ -8,6 +8,10 @@ Git-4-Study Flow turns a vague goal like “read this paper”, “learn Transfo
 
 > Built for Codex, Claude Code, Cursor, VS Code, and any agent that can call CLI/MCP-style tools.
 
+<p align="center">
+  <img src="docs/assets/git4study-flow-architecture.svg" alt="Git-4-Study Flow architecture diagram" width="100%">
+</p>
+
 ## Why This Exists
 
 Most learning-path tools stop at a plausible list of links. Git-4-Study Flow keeps the useful parts explicit:
