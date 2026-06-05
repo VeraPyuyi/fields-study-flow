@@ -1,5 +1,7 @@
 # Git-4-Study Flow
 
+[简体中文](README.zh-CN.md) | English
+
 Agent-native learning roadmaps for AI/CS researchers, builders, and students.
 
 Git-4-Study Flow turns a vague goal like “read this paper”, “learn Transformers”, or “reproduce YOLO” into a structured study route. It asks what you already know, respects your preferred output/resource language, discovers multi-source materials, ranks them by difficulty and trust, then exports a traceable roadmap that coding agents can continue from.
