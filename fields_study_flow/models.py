@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from git4study.language import ResourceLanguagePreference, normalize_resource_language_preference
+from fields_study_flow.language import ResourceLanguagePreference, normalize_resource_language_preference
 
 
 @dataclass(slots=True)

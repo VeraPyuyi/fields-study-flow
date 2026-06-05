@@ -1,6 +1,7 @@
 from pathlib import Path
+from importlib.resources import files
 
-from git4study.sources import SourceRegistry
+from fields_study_flow.sources import SourceRegistry, default_registry_path
 
 
 def test_source_registry_loads_declared_platforms():
@@ -10,6 +11,21 @@ def test_source_registry_loads_declared_platforms():
     assert "youtube" in registry.sources
     assert "bilibili" in registry.sources
     assert registry.sources["github"].access_mode == "official-api"
+
+
+def test_default_registry_is_packaged_with_library():
+    registry_path = default_registry_path()
+    registry = SourceRegistry.default()
+
+    assert registry_path.name == "source-registry.yaml"
+    assert "github" in registry.sources
+
+
+def test_packaged_registry_matches_root_registry():
+    packaged_registry = files("fields_study_flow").joinpath("source-registry.yaml")
+
+    assert packaged_registry.is_file()
+    assert packaged_registry.read_text(encoding="utf-8") == Path("source-registry.yaml").read_text(encoding="utf-8")
 
 
 def test_source_registry_filters_by_language_and_policy():

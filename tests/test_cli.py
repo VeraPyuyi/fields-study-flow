@@ -1,9 +1,10 @@
 import json
+import importlib
 import subprocess
 import sys
 from pathlib import Path
 
-from git4study.cli import _parse_sources
+from fields_study_flow.cli import _parse_sources
 
 
 def test_cli_roadmap_generates_expected_artifacts(tmp_path):
@@ -13,7 +14,7 @@ def test_cli_roadmap_generates_expected_artifacts(tmp_path):
         [
             sys.executable,
             "-m",
-            "git4study.cli",
+            "fields_study_flow.cli",
             "roadmap",
             "--goal",
             "从 Python 到掌握 Transformer",
@@ -47,7 +48,7 @@ def test_cli_discover_sources_outputs_language_filtered_sources():
         [
             sys.executable,
             "-m",
-            "git4study.cli",
+            "fields_study_flow.cli",
             "discover-sources",
             "--goal",
             "理解 Transformer",
@@ -68,6 +69,26 @@ def test_cli_source_aliases_match_documented_short_names():
     assert _parse_sources("pwc,hf,youtube") == {"papers-with-code", "hugging-face", "youtube"}
 
 
+def test_legacy_git4study_cli_wrapper_still_works():
+    result = subprocess.run(
+        [sys.executable, "-m", "git4study.cli", "--help"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "fields-study-flow" in result.stdout
+
+
+def test_legacy_git4study_submodule_is_available_as_package_attribute():
+    import git4study
+
+    importlib.import_module("git4study.language")
+
+    assert git4study.language.ResourceLanguagePreference.BALANCED == "balanced"
+
+
 def test_cli_paper_includes_target_url_in_resource_index(tmp_path):
     output_dir = tmp_path / "paper"
     paper_url = "https://arxiv.org/abs/1706.03762"
@@ -76,7 +97,7 @@ def test_cli_paper_includes_target_url_in_resource_index(tmp_path):
         [
             sys.executable,
             "-m",
-            "git4study.cli",
+            "fields_study_flow.cli",
             "paper",
             "--url",
             paper_url,
@@ -100,7 +121,7 @@ def test_cli_registry_course_source_id_keeps_course_catalog_resources(tmp_path):
         [
             sys.executable,
             "-m",
-            "git4study.cli",
+            "fields_study_flow.cli",
             "roadmap",
             "--goal",
             "从 Python 到掌握 Transformer",
@@ -129,7 +150,7 @@ def test_cli_paper_with_videos_flag_controls_video_resources(tmp_path):
         [
             sys.executable,
             "-m",
-            "git4study.cli",
+            "fields_study_flow.cli",
             "paper",
             "--url",
             paper_url,
@@ -144,7 +165,7 @@ def test_cli_paper_with_videos_flag_controls_video_resources(tmp_path):
         [
             sys.executable,
             "-m",
-            "git4study.cli",
+            "fields_study_flow.cli",
             "paper",
             "--url",
             paper_url,

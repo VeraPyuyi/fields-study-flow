@@ -1,20 +1,20 @@
-# Git-4-Study Flow
+# fields-study-flow
 
 简体中文 | [English](README.md)
 
 面向 AI/CS 研究者、工程师和学生的 agent-native 学习路线生成器。
 
-Git-4-Study Flow 可以把“读懂这篇论文”、“学习 Transformer”、“复现 YOLO”这类模糊目标，转成一条结构化、可追踪、可继续迭代的学习路线。它会先了解你的已有知识、语言偏好和时间预算，再从论文、GitHub、课程、视频、实践平台和中文社区中整理资源，按难度、可信度和前置知识排序，最后导出 Markdown 与 JSON。
+fields-study-flow 可以把“读懂这篇论文”、“学习 Transformer”、“复现 YOLO”这类模糊目标，转成一条结构化、可追踪、可继续迭代的学习路线。它会先了解你的已有知识、语言偏好和时间预算，再从论文、GitHub、课程、视频、实践平台和中文社区中整理资源，按难度、可信度和前置知识排序，最后导出 Markdown 与 JSON。
 
 > 为 Codex、Claude Code、Cursor、VS Code 以及任何可调用 CLI/MCP 工具的 agent 设计。
 
 <p align="center">
-  <img src="docs/assets/git4study-flow-architecture.svg" alt="Git-4-Study Flow 架构流程图" width="100%">
+  <img src="docs/assets/fields-study-flow-architecture-zh.svg" alt="fields-study-flow 架构流程图" width="100%">
 </p>
 
 ## 为什么做这个项目
 
-很多学习路线生成工具只会给出一串“看起来合理”的链接。Git-4-Study Flow 把真正影响学习质量的部分显式建模：
+很多学习路线生成工具只会给出一串“看起来合理”的链接。fields-study-flow 把真正影响学习质量的部分显式建模：
 
 - 学习者画像：你会什么、卡在哪里、每周能投入多久；
 - 语言策略：路线语言和资料语言分开控制；
@@ -38,7 +38,7 @@ Git-4-Study Flow 可以把“读懂这篇论文”、“学习 Transformer”、
 
 ```bash
 python -m pip install -e .
-python -m git4study.cli roadmap \
+fields-study-flow roadmap \
   --goal "从 Python 到掌握 Transformer" \
   --output-language zh-CN \
   --resource-language en-first \
@@ -48,7 +48,7 @@ python -m git4study.cli roadmap \
 生成文件：
 
 ```text
-git4study-output/
+fields-study-flow-output/
   learner_profile.json
   resource_index.json
   source_registry_snapshot.json
@@ -59,7 +59,7 @@ git4study-output/
 论文深读路线：
 
 ```bash
-python -m git4study.cli paper \
+fields-study-flow paper \
   --url https://arxiv.org/abs/1706.03762 \
   --with-videos \
   --output-language bilingual \
@@ -69,7 +69,7 @@ python -m git4study.cli paper \
 查看可用资料源：
 
 ```bash
-python -m git4study.cli discover-sources \
+fields-study-flow discover-sources \
   --goal "理解 diffusion models" \
   --language zh-first
 ```
@@ -111,7 +111,7 @@ skills/
 运行：
 
 ```bash
-python -m git4study.mcp_server
+python -m fields_study_flow.mcp_server
 ```
 
 每行发送一个 JSON 对象：
@@ -137,7 +137,7 @@ python -m git4study.mcp_server
 
 ```text
 .cursor/mcp.json
-.cursor/rules/git4study.mdc
+.cursor/rules/fields-study-flow.mdc
 .vscode/mcp.json
 ```
 
@@ -173,7 +173,7 @@ python -m git4study.mcp_server
 核心模块：
 
 ```text
-git4study/
+fields_study_flow/
   language.py         # 语言别名、双语 query、语言权重
   sources.py          # source registry 加载与策略过滤
   offline_catalog.py  # MVP 离线确定性资源目录
@@ -186,7 +186,7 @@ git4study/
 
 ## 安全策略
 
-Git-4-Study Flow 只推荐、摘要和链接资料。它不会：
+fields-study-flow 只推荐、摘要和链接资料。它不会：
 
 - 使用 Z-Lib、Sci-Hub、LibGen、Anna’s Archive 或其他盗版镜像；
 - 绕过登录、付费墙或平台限制；

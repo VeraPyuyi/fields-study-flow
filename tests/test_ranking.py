@@ -1,6 +1,6 @@
-from git4study.language import ResourceLanguagePreference
-from git4study.models import LearnerProfile, Resource
-from git4study.ranking import rank_resources
+from fields_study_flow.language import ResourceLanguagePreference
+from fields_study_flow.models import LearnerProfile, Resource
+from fields_study_flow.ranking import rank_resources
 
 
 def test_rank_resources_values_teaching_structure_over_stars_only():

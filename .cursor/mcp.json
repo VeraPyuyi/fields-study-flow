@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "git4study": {
+    "fields-study-flow": {
       "command": "python",
-      "args": ["-m", "git4study.mcp_server"]
+      "args": ["-m", "fields_study_flow.mcp_server"]
     }
   }
 }

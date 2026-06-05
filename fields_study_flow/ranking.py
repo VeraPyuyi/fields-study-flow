@@ -4,8 +4,8 @@ import math
 import re
 from urllib.parse import urlparse
 
-from git4study.language import language_weight
-from git4study.models import LearnerProfile, Resource
+from fields_study_flow.language import language_weight
+from fields_study_flow.models import LearnerProfile, Resource
 
 
 DIFFICULTY_ORDER = {

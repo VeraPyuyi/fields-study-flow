@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from git4study.models import LearnerProfile, Resource
+from fields_study_flow.models import LearnerProfile, Resource
 
 
 OUTPUT_FILES = [
@@ -75,7 +75,7 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
     for phase in roadmap["phases"]:
         lines.extend([f"### {phase['name']}", phase["objective"], ""])
         if not phase["resources"]:
-            lines.append("- No resources selected yet; add sources with `git4study ingest-url`.")
+            lines.append("- No resources selected yet; add sources with `fields-study-flow ingest-url`.")
         for resource in phase["resources"]:
             lines.extend(
                 [

@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
-from git4study.language import normalize_resource_language_preference
-from git4study.models import Source
+from fields_study_flow.language import normalize_resource_language_preference
+from fields_study_flow.models import Source
 
 VALID_SOURCE_POLICIES = {"open", "all"}
 
@@ -59,7 +60,13 @@ class SourceRegistry:
 
 
 def default_registry_path() -> Path:
-    return Path(__file__).resolve().parent.parent / "source-registry.yaml"
+    repo_registry = Path(__file__).resolve().parent.parent / "source-registry.yaml"
+    if repo_registry.is_file():
+        return repo_registry
+    package_registry = files("fields_study_flow").joinpath("source-registry.yaml")
+    if package_registry.is_file():
+        return Path(str(package_registry))
+    raise FileNotFoundError("source-registry.yaml was not found in the repository root or package data.")
 
 
 def _load_yaml(raw: str) -> dict[str, Any]:

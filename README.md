@@ -1,20 +1,20 @@
-# Git-4-Study Flow
+# fields-study-flow
 
 [简体中文](README.zh-CN.md) | English
 
 Agent-native learning roadmaps for AI/CS researchers, builders, and students.
 
-Git-4-Study Flow turns a vague goal like “read this paper”, “learn Transformers”, or “reproduce YOLO” into a structured study route. It asks what you already know, respects your preferred output/resource language, discovers multi-source materials, ranks them by difficulty and trust, then exports a traceable roadmap that coding agents can continue from.
+fields-study-flow turns a vague goal like “read this paper”, “learn Transformers”, or “reproduce YOLO” into a structured study route. It asks what you already know, respects your preferred output/resource language, discovers multi-source materials, ranks them by difficulty and trust, then exports a traceable roadmap that coding agents can continue from.
 
 > Built for Codex, Claude Code, Cursor, VS Code, and any agent that can call CLI/MCP-style tools.
 
 <p align="center">
-  <img src="docs/assets/git4study-flow-architecture.svg" alt="Git-4-Study Flow architecture diagram" width="100%">
+  <img src="docs/assets/fields-study-flow-architecture-en.svg" alt="fields-study-flow architecture diagram" width="100%">
 </p>
 
 ## Why This Exists
 
-Most learning-path tools stop at a plausible list of links. Git-4-Study Flow keeps the useful parts explicit:
+Most learning-path tools stop at a plausible list of links. fields-study-flow keeps the useful parts explicit:
 
 - learner profile: what you know, where you are blocked, and how much time you have;
 - language policy: route language is separate from material language;
@@ -38,7 +38,7 @@ Most learning-path tools stop at a plausible list of links. Git-4-Study Flow kee
 
 ```bash
 python -m pip install -e .
-python -m git4study.cli roadmap \
+fields-study-flow roadmap \
   --goal "从 Python 到掌握 Transformer" \
   --output-language zh-CN \
   --resource-language en-first \
@@ -48,7 +48,7 @@ python -m git4study.cli roadmap \
 Generated files:
 
 ```text
-git4study-output/
+fields-study-flow-output/
   learner_profile.json
   resource_index.json
   source_registry_snapshot.json
@@ -59,7 +59,7 @@ git4study-output/
 Paper route:
 
 ```bash
-python -m git4study.cli paper \
+fields-study-flow paper \
   --url https://arxiv.org/abs/1706.03762 \
   --with-videos \
   --output-language bilingual \
@@ -69,7 +69,7 @@ python -m git4study.cli paper \
 Discover available source adapters:
 
 ```bash
-python -m git4study.cli discover-sources \
+fields-study-flow discover-sources \
   --goal "理解 diffusion models" \
   --language zh-first
 ```
@@ -108,7 +108,7 @@ Use `ai-cs-learning-path` for broad study goals, and `paper-roadmap` when the us
 Run:
 
 ```bash
-python -m git4study.mcp_server
+python -m fields_study_flow.mcp_server
 ```
 
 Send one JSON object per line:
@@ -134,7 +134,7 @@ Ready-to-edit examples are included:
 
 ```text
 .cursor/mcp.json
-.cursor/rules/git4study.mdc
+.cursor/rules/fields-study-flow.mdc
 .vscode/mcp.json
 ```
 
@@ -170,7 +170,7 @@ User goal
 Core modules:
 
 ```text
-git4study/
+fields_study_flow/
   language.py         # language aliases, query generation, language weights
   sources.py          # source registry loader and policy filtering
   offline_catalog.py  # deterministic MVP resource catalog
@@ -183,7 +183,7 @@ git4study/
 
 ## Safety Policy
 
-Git-4-Study Flow recommends and summarizes resources. It does not:
+fields-study-flow recommends and summarizes resources. It does not:
 
 - use Z-Lib, Sci-Hub, LibGen, Anna’s Archive, or other pirate mirrors;
 - bypass login, paywalls, or platform restrictions;

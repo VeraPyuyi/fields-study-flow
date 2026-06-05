@@ -1,4 +1,4 @@
-from git4study.language import (
+from fields_study_flow.language import (
     ResourceLanguagePreference,
     build_language_queries,
     language_weight,

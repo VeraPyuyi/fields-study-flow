@@ -1,8 +1,8 @@
 # MCP Integration
 
-`git4study.mcp_tools` contains pure Python functions that can be wrapped by an MCP host.
+`fields_study_flow.mcp_tools` contains pure Python functions that can be wrapped by an MCP host.
 
-For local experiments, `python -m git4study.mcp_server` runs a JSON-lines tool process. Each line should be:
+For local experiments, `python -m fields_study_flow.mcp_server` runs a JSON-lines tool process. Each line should be:
 
 ```json
 {"tool":"searchResources","arguments":{"query":"Transformer derivation","languagePreference":"en-first"}}

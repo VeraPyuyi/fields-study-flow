@@ -25,5 +25,5 @@ Use this skill when the target is a paper rather than a broad topic.
 ## CLI Example
 
 ```bash
-git4study paper --url https://arxiv.org/abs/1706.03762 --with-videos --output-language bilingual --resource-language en-first
+fields-study-flow paper --url https://arxiv.org/abs/1706.03762 --with-videos --output-language bilingual --resource-language en-first
 ```

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from git4study.models import Resource
+from fields_study_flow.models import Resource
 
 
 def offline_resources_for_goal(goal: str) -> list[Resource]:

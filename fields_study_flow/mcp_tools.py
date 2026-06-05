@@ -3,16 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from git4study.language import (
+from fields_study_flow.language import (
     build_language_queries,
     normalize_output_language,
     normalize_resource_language_preference,
 )
-from git4study.models import LearnerProfile, Resource
-from git4study.offline_catalog import offline_resources_for_goal
-from git4study.ranking import rank_resources
-from git4study.roadmap import build_roadmap
-from git4study.sources import SourceRegistry
+from fields_study_flow.models import LearnerProfile, Resource
+from fields_study_flow.offline_catalog import offline_resources_for_goal
+from fields_study_flow.ranking import rank_resources
+from fields_study_flow.roadmap import build_roadmap
+from fields_study_flow.sources import SourceRegistry
 
 DISALLOWED_URL_TERMS = (
     "z-lib",

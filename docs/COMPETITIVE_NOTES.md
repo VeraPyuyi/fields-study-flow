@@ -1,6 +1,6 @@
 # Competitive Notes
 
-Git-4-Study Flow is designed to sit between full tutoring platforms and one-shot prompt libraries.
+fields-study-flow is designed to sit between full tutoring platforms and one-shot prompt libraries.
 
 ## Observed Gaps in Similar Projects
 

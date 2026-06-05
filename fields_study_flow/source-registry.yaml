@@ -1,0 +1,204 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "github",
+      "name": "GitHub",
+      "category": "code-learning",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "official-api",
+      "auth_required": false,
+      "allowed_use": "Search repositories, topics, READMEs, notebooks, awesome lists, and paper implementations through official API or user-provided URLs.",
+      "quality_signals": ["license", "readme_structure", "curriculum", "notebooks", "recent_activity", "issue_quality", "stars_as_weak_signal"],
+      "restricted": false,
+      "notes": "Treat stars and forks as weak popularity signals, not learning quality."
+    },
+    {
+      "id": "arxiv",
+      "name": "arXiv",
+      "category": "academic",
+      "languages": ["en"],
+      "access_mode": "official-api",
+      "auth_required": false,
+      "allowed_use": "Search metadata and link to abstract/PDF pages for open preprints.",
+      "quality_signals": ["paper_title", "abstract", "authors", "citations_via_cross_source", "recency"],
+      "restricted": false
+    },
+    {
+      "id": "openalex",
+      "name": "OpenAlex",
+      "category": "academic",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "official-api",
+      "auth_required": false,
+      "allowed_use": "Search scholarly metadata, concepts, citations, venues, and open access status.",
+      "quality_signals": ["citation_graph", "concepts", "open_access", "venue", "recency"],
+      "restricted": false
+    },
+    {
+      "id": "semantic-scholar",
+      "name": "Semantic Scholar",
+      "category": "academic",
+      "languages": ["en"],
+      "access_mode": "official-api",
+      "auth_required": false,
+      "allowed_use": "Search paper metadata, recommendations, references, and citations within API terms.",
+      "quality_signals": ["citations", "references", "recommendations", "fields_of_study"],
+      "restricted": false
+    },
+    {
+      "id": "unpaywall",
+      "name": "Unpaywall",
+      "category": "academic",
+      "languages": ["en"],
+      "access_mode": "official-api",
+      "auth_required": false,
+      "allowed_use": "Resolve legal open-access full-text locations from DOI metadata.",
+      "quality_signals": ["open_access_status", "host_type", "license"],
+      "restricted": false
+    },
+    {
+      "id": "papers-with-code",
+      "name": "Papers with Code",
+      "category": "academic-code",
+      "languages": ["en"],
+      "access_mode": "official-api-or-client",
+      "auth_required": false,
+      "allowed_use": "Discover papers, tasks, datasets, methods, leaderboards, and linked code.",
+      "quality_signals": ["task_match", "dataset_match", "official_code", "leaderboard_presence"],
+      "restricted": false
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "category": "video",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "official-api",
+      "auth_required": true,
+      "allowed_use": "Search public video and playlist metadata with YouTube Data API. Do not download videos.",
+      "quality_signals": ["channel_authority", "playlist_structure", "chapters", "captions_available", "duration"],
+      "restricted": false
+    },
+    {
+      "id": "bilibili",
+      "name": "Bilibili",
+      "category": "video-cn",
+      "languages": ["zh-CN"],
+      "access_mode": "official-or-url-only",
+      "auth_required": false,
+      "allowed_use": "Prefer official/open platform capabilities. If search is unavailable, parse user-provided BV/URL metadata only.",
+      "quality_signals": ["uploader_authority", "series_structure", "duration", "danmaku_comment_quality_as_weak_signal"],
+      "restricted": false
+    },
+    {
+      "id": "zhihu",
+      "name": "Zhihu",
+      "category": "community-cn",
+      "languages": ["zh-CN"],
+      "access_mode": "official-or-url-only",
+      "auth_required": false,
+      "allowed_use": "Use official/open platform or user-provided URLs. Summarize and link; do not bulk scrape or bypass login.",
+      "quality_signals": ["author_authority", "answer_structure", "citations", "recency"],
+      "restricted": false
+    },
+    {
+      "id": "hugging-face",
+      "name": "Hugging Face",
+      "category": "practice",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "official-api",
+      "auth_required": false,
+      "allowed_use": "Search models, datasets, Spaces, model cards, dataset cards, and course pages.",
+      "quality_signals": ["card_quality", "downloads", "likes_as_weak_signal", "license", "task_match"],
+      "restricted": false
+    },
+    {
+      "id": "kaggle",
+      "name": "Kaggle",
+      "category": "practice",
+      "languages": ["en"],
+      "access_mode": "official-api",
+      "auth_required": true,
+      "allowed_use": "Search datasets, notebooks, competitions, and practice projects with user-configured credentials.",
+      "quality_signals": ["dataset_usability", "notebook_votes_as_weak_signal", "competition_relevance", "recency"],
+      "restricted": false
+    },
+    {
+      "id": "mit-ocw",
+      "name": "MIT OpenCourseWare",
+      "category": "course",
+      "languages": ["en"],
+      "access_mode": "public-web-or-catalog",
+      "auth_required": false,
+      "allowed_use": "Recommend course pages and materials by link. Do not mirror course content.",
+      "quality_signals": ["institution", "syllabus", "assignments", "lecture_notes"],
+      "restricted": false
+    },
+    {
+      "id": "google-mlcc",
+      "name": "Google Machine Learning Crash Course",
+      "category": "course",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "public-web",
+      "auth_required": false,
+      "allowed_use": "Recommend official course pages by link.",
+      "quality_signals": ["official_docs", "exercises", "curriculum"],
+      "restricted": false
+    },
+    {
+      "id": "fast-ai",
+      "name": "fast.ai",
+      "category": "course",
+      "languages": ["en"],
+      "access_mode": "public-web",
+      "auth_required": false,
+      "allowed_use": "Recommend official course pages and notebooks by link.",
+      "quality_signals": ["course_sequence", "notebooks", "assignments", "community"],
+      "restricted": false
+    },
+    {
+      "id": "deep-learning-ai",
+      "name": "DeepLearning.AI",
+      "category": "course",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "link-only",
+      "auth_required": false,
+      "allowed_use": "Recommend public course landing pages and free resources by link.",
+      "quality_signals": ["instructor_authority", "course_sequence", "official_curriculum"],
+      "restricted": false
+    },
+    {
+      "id": "coursera",
+      "name": "Coursera",
+      "category": "course",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "link-only",
+      "auth_required": true,
+      "allowed_use": "Recommend public landing pages only; do not access paywalled content.",
+      "quality_signals": ["institution", "syllabus", "reviews_as_weak_signal"],
+      "restricted": true
+    },
+    {
+      "id": "xuetangx",
+      "name": "学堂在线",
+      "category": "course-cn",
+      "languages": ["zh-CN"],
+      "access_mode": "link-only",
+      "auth_required": false,
+      "allowed_use": "Recommend public course pages by link.",
+      "quality_signals": ["institution", "syllabus", "course_sequence"],
+      "restricted": false
+    },
+    {
+      "id": "icourse163",
+      "name": "中国大学 MOOC",
+      "category": "course-cn",
+      "languages": ["zh-CN"],
+      "access_mode": "link-only",
+      "auth_required": false,
+      "allowed_use": "Recommend public course pages by link.",
+      "quality_signals": ["institution", "syllabus", "course_sequence"],
+      "restricted": false
+    }
+  ]
+}

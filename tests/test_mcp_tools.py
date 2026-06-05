@@ -1,4 +1,4 @@
-from git4study.mcp_tools import searchResources, validateSources
+from fields_study_flow.mcp_tools import searchResources, validateSources
 
 
 def test_search_resources_applies_hard_language_filter_at_tool_boundary():

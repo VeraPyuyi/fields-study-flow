@@ -1,6 +1,6 @@
-from git4study.language import ResourceLanguagePreference
-from git4study.models import LearnerProfile, Resource
-from git4study.roadmap import build_roadmap
+from fields_study_flow.language import ResourceLanguagePreference
+from fields_study_flow.models import LearnerProfile, Resource
+from fields_study_flow.roadmap import build_roadmap
 
 
 def test_build_roadmap_contains_required_files_and_resource_fields():

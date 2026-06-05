@@ -3,13 +3,13 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "git4study-flow"
+name = "fields-study-flow"
 version = "0.1.0"
 description = "Agent-native AI/CS learning roadmap generator with Skills, MCP tools, and multi-source resource ranking."
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-authors = [{ name = "Git-4-Study Flow contributors" }]
+authors = [{ name = "fields-study-flow contributors" }]
 keywords = ["ai", "learning-path", "mcp", "skills", "education", "research"]
 dependencies = ["PyYAML>=6.0"]
 
@@ -17,10 +17,14 @@ dependencies = ["PyYAML>=6.0"]
 dev = ["pytest>=8.0"]
 
 [project.scripts]
+fields-study-flow = "fields_study_flow.cli:main"
 git4study = "git4study.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["git4study*"]
+include = ["fields_study_flow*", "git4study*"]
+
+[tool.setuptools.package-data]
+fields_study_flow = ["source-registry.yaml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

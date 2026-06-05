@@ -41,7 +41,7 @@ Use this skill to build a personalized AI/CS learning roadmap.
 ## CLI Examples
 
 ```bash
-git4study roadmap --goal "从 Python 到掌握 Transformer" --output-language zh-CN --resource-language en-first --offline
-git4study discover-sources --goal "理解 diffusion models" --language balanced
-git4study ingest-url https://github.com/karpathy/nanoGPT
+fields-study-flow roadmap --goal "从 Python 到掌握 Transformer" --output-language zh-CN --resource-language en-first --offline
+fields-study-flow discover-sources --goal "理解 diffusion models" --language balanced
+fields-study-flow ingest-url https://github.com/karpathy/nanoGPT
 ```

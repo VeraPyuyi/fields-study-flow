@@ -4,6 +4,10 @@ __pycache__/
 git4study-output/
 git4study-paper-output/
 git4study-export/
+fields-study-flow-output/
+fields-study-flow-paper-output/
+fields-study-flow-export/
 dist/
 build/
 *.egg-info/
+docs/assets/*.preview.png
