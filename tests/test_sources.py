@@ -8,6 +8,7 @@ def test_source_registry_loads_declared_platforms():
     registry = SourceRegistry.from_yaml(Path("source-registry.yaml"))
 
     assert "github" in registry.sources
+    assert "local-library" in registry.sources
     assert "youtube" in registry.sources
     assert "bilibili" in registry.sources
     assert registry.sources["github"].access_mode == "official-api"
@@ -34,6 +35,7 @@ def test_source_registry_filters_by_language_and_policy():
     zh_sources = registry.discover(language_preference="zh-only", source_policy="open")
     source_ids = {source.id for source in zh_sources}
 
+    assert "local-library" in source_ids
     assert "bilibili" in source_ids
     assert "zhihu" in source_ids
     assert "youtube" in source_ids

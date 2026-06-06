@@ -11,6 +11,7 @@ TOOLS: dict[str, Callable[..., Any]] = {
     "assessKnowledge": mcp_tools.assessKnowledge,
     "discoverSources": mcp_tools.discoverSources,
     "searchResources": mcp_tools.searchResources,
+    "analyzeLocalResources": mcp_tools.analyzeLocalResources,
     "ingestUrl": mcp_tools.ingestUrl,
     "rankResources": mcp_tools.rankResources,
     "buildRoadmap": mcp_tools.buildRoadmap,

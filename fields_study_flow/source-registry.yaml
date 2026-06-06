@@ -14,6 +14,18 @@
       "notes": "Treat stars and forks as weak popularity signals, not learning quality."
     },
     {
+      "id": "local-library",
+      "name": "Local Library",
+      "category": "local-resource",
+      "languages": ["en", "zh-CN"],
+      "access_mode": "explicit-user-path",
+      "auth_required": false,
+      "allowed_use": "Analyze files and folders explicitly provided by the user, then include only materials that shorten the mastery path.",
+      "quality_signals": ["goal_fit", "local_availability", "key_points", "focus_areas", "estimated_time", "privacy_boundary"],
+      "restricted": false,
+      "notes": "Never scan the whole machine by default; do not publish private paths or long private excerpts."
+    },
+    {
       "id": "arxiv",
       "name": "arXiv",
       "category": "academic",
