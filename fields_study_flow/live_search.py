@@ -11,6 +11,28 @@ from fields_study_flow.sources import SourceRegistry
 
 OPEN_API_SOURCES = {"arxiv", "github", "openalex", "semantic-scholar", "hugging-face"}
 MANUAL_ONLY_ACCESS_MARKERS = ("link-only", "url-only")
+CORE_RELEVANCE_TERMS = {
+    "attention",
+    "automated planning",
+    "chain of thought",
+    "chain-of-thought",
+    "deep learning",
+    "diffusion",
+    "large language model",
+    "neural network",
+    "neural networks",
+    "pddl",
+    "planbench",
+    "planning",
+    "ppo",
+    "pytorch",
+    "reinforcement learning",
+    "score matching",
+    "self attention",
+    "symbolic planning",
+    "transformer",
+    "yolo",
+}
 
 
 def search_live_resources(
@@ -66,18 +88,115 @@ def search_live_resources(
                 continue
             diagnostics["queried_sources"].append(source_id)
             try:
-                resources.extend(_search_source(source_id, query, client, max(1, limit // 3), timeout))
+                resources.extend(_search_source(source_id, query, client, limit, timeout))
             except Exception as exc:
                 diagnostics["errors"].append(f"{source_id}: {exc}")
     finally:
         if close_client:
             client.close()
 
+    resources = _filter_relevant_live_resources(query, resources)
     if diagnostics["errors"] and not resources:
         diagnostics["status"] = "fallback"
     elif diagnostics["errors"]:
         diagnostics["status"] = "partial"
     return resources[:limit], diagnostics
+
+
+def _filter_relevant_live_resources(query: str, resources: list[Resource]) -> list[Resource]:
+    query_terms = _relevance_terms(query)
+    if not query_terms:
+        return resources
+    query_core_terms = query_terms & CORE_RELEVANCE_TERMS
+    output: list[Resource] = []
+    for resource in resources:
+        resource_terms = _resource_relevance_terms(resource)
+        if query_core_terms and not (query_core_terms & resource_terms):
+            continue
+        overlap = query_terms & resource_terms
+        if overlap:
+            output.append(resource)
+            continue
+        if resource.metadata.get("citations", 0) and resource.source in {"openalex", "semantic-scholar"}:
+            continue
+        if resource.source in {"github", "hugging-face"} and _looks_like_curriculum(resource.title, resource.why_recommended):
+            output.append(resource)
+    return output
+
+
+def _resource_relevance_terms(resource: Resource) -> set[str]:
+    values = [
+        resource.title,
+        resource.type,
+        *resource.concepts,
+        *resource.learning_key_points,
+        *resource.focus_areas,
+    ]
+    return _relevance_terms(" ".join(values))
+
+
+def _relevance_terms(value: str) -> set[str]:
+    stopwords = {
+        "about",
+        "after",
+        "build",
+        "course",
+        "derive",
+        "fully",
+        "learn",
+        "master",
+        "paper",
+        "quickly",
+        "read",
+        "reading",
+        "reproduce",
+        "study",
+        "understand",
+        "with",
+    }
+    normalized = value.lower().replace("/", " ").replace("-", " ")
+    tokens = {token.strip(".,:;()[]{}") for token in re.split(r"\s+", normalized) if len(token.strip(".,:;()[]{}")) >= 3}
+    terms = {token for token in tokens if token not in stopwords}
+    for phrase in (
+        "transformer",
+        "attention",
+        "diffusion",
+        "score matching",
+        "yolo",
+        "ppo",
+        "reinforcement learning",
+        "language model",
+        "large language model",
+        "symbolic planning",
+        "automated planning",
+        "pddl",
+        "chain of thought",
+        "chain-of-thought",
+        "planbench",
+        "pytorch",
+        "deep learning",
+        "neural network",
+    ):
+        if phrase in normalized:
+            terms.add(phrase)
+    return _expand_relevance_terms(terms)
+
+
+def _expand_relevance_terms(terms: set[str]) -> set[str]:
+    expanded = set(terms)
+    if "transformer" in terms:
+        expanded.update({"attention", "self attention", "sequence transduction"})
+    if "attention" in terms or "self attention" in terms:
+        expanded.update({"transformer"})
+    if "deep learning" in terms:
+        expanded.update({"neural network", "neural networks", "pytorch"})
+    if "neural network" in terms or "neural networks" in terms:
+        expanded.add("deep learning")
+    if "symbolic planning" in terms or "automated planning" in terms:
+        expanded.update({"pddl", "planbench", "planning"})
+    if "pddl" in terms:
+        expanded.update({"symbolic planning", "automated planning", "planning"})
+    return expanded
 
 
 def _requested_sources(registry: SourceRegistry, sources: list[str] | None, language_preference: str) -> list[str]:
@@ -276,6 +395,18 @@ def _concepts_from_text(value: str) -> list[str]:
         "ppo": "ppo",
         "reinforcement": "reinforcement learning",
         "language model": "language model",
+        "llm": "large language model",
+        "large language model": "large language model",
+        "symbolic planning": "symbolic planning",
+        "automated planning": "automated planning",
+        "pddl": "pddl",
+        "planning domain definition language": "pddl",
+        "chain-of-thought": "chain-of-thought",
+        "chain of thought": "chain-of-thought",
+        "logical chain": "logical chain-of-thought",
+        "planbench": "planbench",
+        "val feedback": "val verifier",
+        "plan validation": "plan validation",
         "pytorch": "pytorch",
         "python": "python",
     }

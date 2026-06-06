@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -13,6 +14,7 @@ from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve_paper_metadata
 from fields_study_flow.ranking import rank_resources
+from fields_study_flow.resource_bundle import bundle_study_resources
 from fields_study_flow.roadmap import build_roadmap, write_outputs
 from fields_study_flow.sources import SourceRegistry
 
@@ -52,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command")
 
     roadmap = subparsers.add_parser("roadmap", help="Generate a learning roadmap.")
-    roadmap.add_argument("--goal", required=True)
+    roadmap.add_argument("--goal")
     roadmap.add_argument("--sources", default="auto")
     roadmap.add_argument("--output-language", default="zh-CN")
     roadmap.add_argument("--resource-language", default="balanced")
@@ -63,11 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     _add_unified_planner_args(roadmap)
     roadmap.add_argument("--local-resource", action="append", default=[], help="Explicit local file or folder to analyze as a shortcut candidate.")
     roadmap.add_argument("--output-dir", default="fields-study-flow-output")
+    roadmap.add_argument("--resource-dir", help="Copy/download the full study resource library into this private local directory.")
+    roadmap.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
     roadmap.add_argument("--offline", action="store_true", help="Use the bundled deterministic resource catalog and disable live search.")
     roadmap.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
 
     paper = subparsers.add_parser("paper", help="Generate a paper deep-reading roadmap.")
-    paper.add_argument("--url", required=True)
+    paper.add_argument("--url")
     paper.add_argument("--goal", default="fully understand, derive, and reproduce the paper")
     paper.add_argument("--with-videos", action="store_true")
     paper.add_argument("--output-language", default="zh-CN")
@@ -76,6 +80,8 @@ def build_parser() -> argparse.ArgumentParser:
     paper.add_argument("--local-resource", action="append", default=[], help="Explicit local file or folder to analyze as a shortcut candidate.")
     paper.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
     paper.add_argument("--output-dir", default="fields-study-flow-paper-output")
+    paper.add_argument("--resource-dir", help="Copy/download the full study resource library into this private local directory.")
+    paper.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
 
     ingest = subparsers.add_parser("ingest-url", help="Parse a user-provided resource URL at metadata level.")
     ingest.add_argument("url")
@@ -127,6 +133,11 @@ def _planner_options(args: argparse.Namespace) -> dict[str, str]:
 
 
 def _roadmap(args: argparse.Namespace) -> int:
+    if args.interactive:
+        _interactive_update_args(args, "roadmap")
+    if not args.goal:
+        print("error: --goal is required unless --interactive supplies one", file=sys.stderr)
+        return 2
     planner = _planner_options(args)
     profile = LearnerProfile(
         goal=args.goal,
@@ -154,11 +165,20 @@ def _roadmap(args: argparse.Namespace) -> int:
     ranked = rank_resources(resources, profile)
     roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
+    if args.resource_dir:
+        manifest = bundle_study_resources(Path(args.resource_dir), ranked, roadmap)
+        print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
+        print(f"resources: {manifest['summary']}")
     print(Path(args.output_dir).resolve())
     return 0
 
 
 def _paper(args: argparse.Namespace) -> int:
+    if args.interactive:
+        _interactive_update_args(args, "paper")
+    if not args.url:
+        print("error: --url is required unless --interactive supplies one", file=sys.stderr)
+        return 2
     target_resource = _paper_resource_from_url(args.url, live=not args.no_live_search)
     planner = _planner_options(args)
     profile = LearnerProfile(
@@ -185,8 +205,78 @@ def _paper(args: argparse.Namespace) -> int:
     ranked = rank_resources(resources, profile)
     roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
+    if args.resource_dir:
+        manifest = bundle_study_resources(Path(args.resource_dir), ranked, roadmap)
+        print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
+        print(f"resources: {manifest['summary']}")
     print(Path(args.output_dir).resolve())
     return 0
+
+
+def _interactive_update_args(args: argparse.Namespace, mode: str) -> None:
+    print("fields-study-flow interactive setup")
+    print("Press Enter to keep the value shown in brackets.")
+    if mode == "paper":
+        args.url = _prompt_text("Paper URL / DOI / local PDF path", args.url)
+        args.goal = _prompt_text("Learning goal", args.goal)
+        args.with_videos = _prompt_bool("Include video resources as links", args.with_videos)
+    else:
+        args.goal = _prompt_text("Learning goal", args.goal)
+    args.output_language = _prompt_choice("Output language", args.output_language, ["zh-CN", "en", "bilingual"])
+    args.resource_language = _prompt_choice("Resource language preference", args.resource_language, ["zh-first", "en-first", "balanced", "zh-only", "en-only"])
+    args.route_depth = _prompt_choice("Route depth", args.route_depth or "balanced", ["fastest", "balanced", "complete"])
+    args.learning_style = _prompt_choice("Learning style", args.learning_style or "practical", ["practical", "theory", "video", "auto"])
+    args.target_kind = _prompt_choice(
+        "Target kind",
+        args.target_kind or getattr(args, "default_target_kind", "auto"),
+        ["paper", "field", "course", "auto"],
+    )
+    local_paths = _prompt_text("Local resource path(s), separated by ;", ";".join(args.local_resource or []), required=False)
+    args.local_resource = [path.strip() for path in local_paths.split(";") if path.strip()]
+    args.output_dir = _prompt_text("Report output directory", args.output_dir)
+    want_bundle = _prompt_bool("Copy/download the full study resource library to a private folder", bool(args.resource_dir))
+    if want_bundle:
+        default_resource_dir = args.resource_dir or str(Path(args.output_dir) / "study_resources")
+        args.resource_dir = _prompt_text("Resource download/copy directory", default_resource_dir)
+    else:
+        args.resource_dir = None
+    if mode == "roadmap":
+        args.offline = _prompt_bool("Use offline deterministic catalog only", args.offline)
+    if not getattr(args, "offline", False):
+        args.no_live_search = not _prompt_bool("Enable live open-source discovery", not args.no_live_search)
+
+
+def _prompt_text(label: str, current: str | None, *, required: bool = True) -> str:
+    current = current or ""
+    while True:
+        value = input(f"{label} [{current}]: ").strip()
+        output = value or current
+        if output or not required:
+            return output
+        print("This value is required.")
+
+
+def _prompt_choice(label: str, current: str | None, choices: list[str]) -> str:
+    current = current if current in choices else choices[0]
+    options = "/".join(choices)
+    while True:
+        value = input(f"{label} ({options}) [{current}]: ").strip()
+        output = value or current
+        if output in choices:
+            return output
+        print(f"Choose one of: {options}")
+
+
+def _prompt_bool(label: str, current: bool) -> bool:
+    default = "y" if current else "n"
+    while True:
+        value = input(f"{label} (y/n) [{default}]: ").strip().lower()
+        value = value or default
+        if value in {"y", "yes", "true", "1"}:
+            return True
+        if value in {"n", "no", "false", "0"}:
+            return False
+        print("Choose y or n.")
 
 
 def _paper_profile_goal(goal: str, target_resource: Resource, original_url: str) -> str:

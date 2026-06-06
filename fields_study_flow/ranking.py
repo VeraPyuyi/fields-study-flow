@@ -172,7 +172,22 @@ def _translation_note(resource: Resource, output_language: str) -> str:
 def _tokenize(value: str) -> set[str]:
     normalized = value.lower().replace("/", " ").replace("-", " ")
     tokens = {token.strip(".,:;()[]{}") for token in normalized.split() if token.strip()}
-    for keyword in ("transformer", "diffusion", "yolo", "ppo", "trpo", "cnn", "python"):
+    for keyword in (
+        "transformer",
+        "diffusion",
+        "yolo",
+        "ppo",
+        "trpo",
+        "cnn",
+        "python",
+        "pddl",
+        "planning",
+        "symbolic planning",
+        "chain of thought",
+        "chain-of-thought",
+        "planbench",
+        "instruction tuning",
+    ):
         if keyword in normalized:
             tokens.add(keyword)
     return tokens

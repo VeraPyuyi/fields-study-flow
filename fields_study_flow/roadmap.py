@@ -82,6 +82,14 @@ REPORT_LABELS: dict[str, tuple[str, str]] = {
     "mastery_standard": ("Mastery standard", "掌握标准"),
     "estimated_total_time": ("Estimated total time", "预计总耗时"),
     "selected_resources": ("Selected resources", "已选资源"),
+    "resource_library": ("Learning Resource Library", "学习资料库"),
+    "all_resources": ("All resources", "全部资料"),
+    "resource_status": ("Route status", "路线状态"),
+    "selected": ("selected", "已进入最短路线"),
+    "generated_resource": ("generated", "自动生成"),
+    "omitted": ("omitted", "未进入最短路线"),
+    "phase": ("Phase", "阶段"),
+    "reason": ("Reason", "原因"),
     "principle": ("Principle", "路线原则"),
     "paper_metadata": ("Paper Metadata", "论文元数据"),
     "title": ("Title", "标题"),
@@ -126,6 +134,9 @@ REPORT_LABELS: dict[str, tuple[str, str]] = {
     "next_actions": ("Next Actions", "下一步行动"),
     "study_tasks": ("Study Tasks", "学习任务"),
     "coverage": ("Coverage", "覆盖度"),
+    "readiness": ("Readiness", "路线可信度"),
+    "coverage_gate": ("Coverage Gate", "覆盖门槛"),
+    "recommended_action": ("Recommended action", "建议动作"),
     "omitted_resources": ("Omitted resources", "省略资源"),
     "level": ("Level", "等级"),
     "evidence": ("Evidence", "证据"),
@@ -177,8 +188,37 @@ def build_roadmap(profile: LearnerProfile, resources: list[Resource], live_searc
     mastery_graph = _mastery_graph(profile, selected_resources, target_kind, final_artifact)
     study_tasks = _study_tasks(profile, selected_resources, target_kind)
     route_audit = _route_audit(profile, resources, selected_resources, study_tasks)
+    coverage_gate = _coverage_gate(profile, resources, route_audit, target_kind)
+    if coverage_gate["status"] == "insufficient-evidence":
+        final_artifact = _resource_discovery_artifact(profile)
+        selected_resources = [_resource_discovery_checklist(profile, route_audit)]
+        artifact_requirements = {
+            "type": final_artifact["type"],
+            "requires_runnable": False,
+            "policy": "resource-discovery-first",
+            "satisfied_by": [selected_resources[0].title],
+            "evidence": final_artifact["evidence"],
+        }
+        artifact_gaps = _resource_gap_messages(profile, route_audit, resources)
+        generated_artifacts = []
+        phases = _build_phases(profile, selected_resources)
+        total_minutes = sum(_resource_minutes(resource) or 0 for resource in selected_resources)
+        mastery_graph = _mastery_graph(profile, selected_resources, target_kind, final_artifact)
+        study_tasks = _resource_discovery_tasks(profile, route_audit)
+        route_audit = _route_audit(profile, resources, selected_resources, study_tasks)
+        route_audit["coverage_gate"] = coverage_gate
+    else:
+        route_audit["coverage_gate"] = coverage_gate
+    resource_library = _resource_library(profile, resources, selected_resources, phases, route_audit)
     quality_report = _quality_report(profile, selected_resources, study_tasks, route_audit, artifact_requirements, generated_artifacts)
     next_actions = _next_actions(study_tasks)
+    generated_selected_count = sum(
+        1
+        for resource in selected_resources
+        if resource.metadata.get("generated_template")
+        or resource.metadata.get("generated_prerequisite_sprint")
+        or resource.metadata.get("generated_resource_discovery")
+    )
     roadmap = {
         "title": _title(profile),
         "profile": profile.to_dict(),
@@ -189,15 +229,17 @@ def build_roadmap(profile: LearnerProfile, resources: list[Resource], live_searc
             "learning_style": profile.learning_style,
             "mastery_standard": "explain_derive_reproduce_critique",
             "principle": _strategy_principle(profile),
+            "readiness": coverage_gate["status"],
             "estimated_total_minutes": total_minutes or None,
             "estimated_total_time": _format_minutes(total_minutes) if total_minutes else "unknown",
-            "candidate_resources": candidate_count,
+            "candidate_resources": len(resources) + generated_selected_count,
             "selected_resources": len(selected_resources),
         },
         "outputs": OUTPUT_FILES.copy() + generated_artifacts,
         "mastery_graph": mastery_graph,
         "study_tasks": study_tasks,
         "next_actions": next_actions,
+        "resource_library": resource_library,
         "route_audit": route_audit,
         "quality_report": quality_report,
         "final_artifact": final_artifact,
@@ -256,6 +298,7 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
         f"- {_label(language, 'target_kind')}: {strategy.get('target_kind', 'auto')}",
         f"- {_label(language, 'learning_style')}: {strategy.get('learning_style', 'practical')}",
         f"- {_label(language, 'mastery_standard')}: {strategy.get('mastery_standard', 'explain_derive_reproduce_critique')}",
+        f"- {_label(language, 'readiness')}: {strategy.get('readiness', 'ready')}",
         f"- {_label(language, 'estimated_total_time')}: {strategy.get('estimated_total_time', _label(language, 'unknown'))}",
         f"- {_label(language, 'selected_resources')}: {strategy.get('selected_resources', 0)} / {strategy.get('candidate_resources', 0)}",
         f"- {_label(language, 'principle')}: {strategy.get('principle', _label(language, 'not_specified'))}",
@@ -274,6 +317,8 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
                 f"## {_label(language, 'route_audit')}",
                 "",
                 f"- {_label(language, 'coverage')}: {route_audit.get('coverage_ratio', 0):.2f}",
+                f"- {_label(language, 'coverage_gate')}: {route_audit.get('coverage_gate', {}).get('status', 'ready')}",
+                f"- {_label(language, 'recommended_action')}: {route_audit.get('coverage_gate', {}).get('recommended_action', _label(language, 'not_specified'))}",
                 f"- {_label(language, 'omitted_resources')}: {len(route_audit.get('omitted_resources', []))}",
             ]
         )
@@ -324,6 +369,34 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
                 [
                     f"- {gap.get('status', 'open')}: {gap.get('message', '')}",
                     f"  - {_label(language, 'resolved_by')}: {gap.get('resolved_by', _label(language, 'not_available'))}",
+                ]
+            )
+        lines.append("")
+    resource_library = roadmap.get("resource_library", [])
+    if resource_library:
+        lines.extend([f"## {_label(language, 'resource_library')}", ""])
+        selected_count = sum(1 for resource in resource_library if resource.get("selected"))
+        lines.append(f"- {_label(language, 'all_resources')}: {len(resource_library)}")
+        lines.append(f"- {_label(language, 'selected_resources')}: {selected_count} / {len(resource_library)}")
+        lines.append("")
+        for resource in resource_library:
+            route_status = str(resource.get("route_status", "omitted"))
+            status_label = _route_status_label(language, route_status)
+            phase = resource.get("selected_phase") or _label(language, "not_available")
+            reason = resource.get("route_reason") or _label(language, "not_specified")
+            lines.extend(
+                [
+                    f"- [{resource.get('title', 'Resource')}]({resource.get('url', '#')})",
+                    f"  - {_label(language, 'resource_status')}: {status_label}",
+                    f"  - {_label(language, 'source')}: {resource.get('source', _label(language, 'unknown'))} / {resource.get('type', _label(language, 'unknown'))} / {resource.get('language', _label(language, 'unknown'))}",
+                    f"  - {_label(language, 'phase')}: {phase}",
+                    f"  - {_label(language, 'reason')}: {reason}",
+                    f"  - {_label(language, 'difficulty')}: {resource.get('difficulty', _label(language, 'unknown'))} | {_label(language, 'time')}: {resource.get('estimated_time', _label(language, 'unknown'))} | {_label(language, 'trust')}: {resource.get('trust_score', _label(language, 'unknown'))}",
+                    f"  - {_label(language, 'concepts')}: {', '.join(resource.get('concepts', [])) or _label(language, 'not_tagged')}",
+                    f"  - {_label(language, 'key_points')}: {', '.join(resource.get('learning_key_points', [])) or _label(language, 'not_tagged')}",
+                    f"  - {_label(language, 'focus')}: {', '.join(resource.get('focus_areas', [])) or _label(language, 'not_tagged')}",
+                    f"  - {_label(language, 'why')}: {resource.get('why_recommended', '')}",
+                    f"  - {_label(language, 'access')}: {resource.get('license_or_access_note', '')}",
                 ]
             )
         lines.append("")
@@ -387,6 +460,14 @@ def _join_or_unknown(values: Any, language: str = "en") -> str:
     if isinstance(values, str):
         return values
     return ", ".join(str(value) for value in values if value) or _label(language, "not_available")
+
+
+def _route_status_label(language: str, status: str) -> str:
+    if status == "selected":
+        return _label(language, "selected")
+    if status == "generated":
+        return _label(language, "generated_resource")
+    return _label(language, "omitted")
 
 
 def render_svg(roadmap: dict[str, Any]) -> str:
@@ -564,6 +645,8 @@ def render_html(roadmap: dict[str, Any]) -> str:
         <section class="graph-panel route-audit-panel">
           <h2>{escape(_label(language, 'route_audit'))}</h2>
           <p class="meta">{escape(_label(language, 'coverage'))}: {escape(f"{route_audit.get('coverage_ratio', 0):.2f}")}</p>
+          <p class="meta">{escape(_label(language, 'coverage_gate'))}: {escape(str(route_audit.get('coverage_gate', {}).get('status', 'ready')))}</p>
+          <p class="meta">{escape(_label(language, 'recommended_action'))}: {escape(str(route_audit.get('coverage_gate', {}).get('recommended_action', _label(language, 'not_specified'))))}</p>
           <ul>{omitted_items or f'<li>{escape(_label(language, "not_available"))}</li>'}</ul>
         </section>
         """
@@ -579,6 +662,45 @@ def render_html(roadmap: dict[str, Any]) -> str:
         <section class="graph-panel next-actions-panel">
           <h2>{escape(_label(language, 'next_actions'))}</h2>
           <ol>{action_items}</ol>
+        </section>
+        """
+
+    resource_library_panel = ""
+    resource_library = roadmap.get("resource_library", [])
+    if resource_library:
+        library_cards: list[str] = []
+        for resource in resource_library:
+            route_status = str(resource.get("route_status", "omitted"))
+            status_label = _route_status_label(language, route_status)
+            phase = resource.get("selected_phase") or _label(language, "not_available")
+            reason = resource.get("route_reason") or _label(language, "not_specified")
+            concepts = ", ".join(str(item) for item in resource.get("concepts", [])[:6]) or _label(language, "not_tagged")
+            key_points = "".join(f"<li>{escape(str(item))}</li>" for item in resource.get("learning_key_points", [])[:3])
+            focus = ", ".join(str(item) for item in resource.get("focus_areas", [])[:5]) or _label(language, "not_tagged")
+            library_cards.append(
+                f"""
+                <article class="library-card">
+                  <div class="resource-head">
+                    <h3><a href="{escape(str(resource.get('url', '#')))}">{escape(str(resource.get('title', 'Resource')))}</a></h3>
+                    <span class="badge {escape(route_status)}">{escape(status_label)}</span>
+                  </div>
+                  <p class="meta">{escape(str(resource.get('source', _label(language, 'unknown'))))} / {escape(str(resource.get('type', _label(language, 'unknown'))))} / {escape(str(resource.get('language', _label(language, 'unknown'))))} / {escape(str(resource.get('estimated_time', _label(language, 'unknown'))))}</p>
+                  <p class="meta"><strong>{escape(_label(language, 'phase'))}:</strong> {escape(str(phase))}</p>
+                  <p class="meta"><strong>{escape(_label(language, 'reason'))}:</strong> {escape(str(reason))}</p>
+                  <p class="meta"><strong>{escape(_label(language, 'concepts'))}:</strong> {escape(concepts)}</p>
+                  <p class="meta"><strong>{escape(_label(language, 'focus'))}:</strong> {escape(focus)}</p>
+                  <ul>{key_points or f'<li>{escape(_label(language, "not_tagged"))}</li>'}</ul>
+                </article>
+                """
+            )
+        selected_count = sum(1 for resource in resource_library if isinstance(resource, dict) and resource.get("selected"))
+        resource_library_panel = f"""
+        <section class="graph-panel resource-library-panel">
+          <div class="phase-title-row">
+            <h2>{escape(_label(language, 'resource_library'))}</h2>
+            <span class="meta">{escape(_label(language, 'selected_resources'))}: {escape(str(selected_count))} / {escape(str(len(resource_library)))}</span>
+          </div>
+          <div class="library-grid">{''.join(library_cards)}</div>
         </section>
         """
 
@@ -667,13 +789,17 @@ def render_html(roadmap: dict[str, Any]) -> str:
     .phase-title-row {{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap; }}
     h2 {{ margin:0; font-size:22px; line-height:1.2; letter-spacing:0; }}
     .phase-body p, .meta, .why {{ color:var(--muted); line-height:1.5; }}
-    .resource-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); margin-top:14px; }}
-    .resource-card {{ min-width:0; border:1px solid #e4ebf4; background:#f9fbff; border-radius:8px; padding:14px; }}
+    .resource-grid, .library-grid {{ display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); margin-top:14px; }}
+    .library-grid {{ grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); }}
+    .resource-card, .library-card {{ min-width:0; border:1px solid #e4ebf4; background:#f9fbff; border-radius:8px; padding:14px; }}
     .resource-head {{ display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap; }}
     h3 {{ flex:1 1 170px; min-width:0; margin:0; font-size:17px; line-height:1.25; letter-spacing:0; }}
     a {{ color:#255f9f; text-decoration:none; }}
     .badge {{ display:inline-flex; align-items:center; min-height:24px; padding:3px 8px; border-radius:999px; background:#eef4fb; color:#41607e; font-size:12px; font-weight:700; }}
     .badge.local {{ background:#e7f6ec; color:#247144; }}
+    .badge.selected {{ background:#e7f6ec; color:#247144; }}
+    .badge.generated {{ background:#fff4d7; color:#7a5a00; }}
+    .badge.omitted {{ background:#f1f4f8; color:#647085; }}
     .mini-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }}
     ul {{ margin:6px 0 0; padding-left:18px; }}
     li {{ margin:4px 0; line-height:1.42; }}
@@ -691,7 +817,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
       h1 {{ font-size:24px; line-height:1.16; }}
       .phase-card {{ grid-template-columns:42px minmax(0,1fr); }}
       .phase-body {{ padding:14px; }}
-      .resource-grid {{ grid-template-columns:1fr; }}
+      .resource-grid, .library-grid {{ grid-template-columns:1fr; }}
     }}
     @media (max-width:520px) {{
       .summary-grid, .info-grid, .mini-grid {{ grid-template-columns:1fr; }}
@@ -706,6 +832,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
     <div class="summary-grid">
       <div class="summary-card"><b>{escape(_label(language, 'goal'))}</b><span>{escape(str(profile.get('goal', '')))}</span></div>
       <div class="summary-card"><b>{escape(_label(language, 'mode'))}</b><span>{escape(str(strategy.get('mode', 'balanced')))} / {escape(str(strategy.get('target_kind', 'auto')))}</span></div>
+      <div class="summary-card"><b>{escape(_label(language, 'readiness'))}</b><span>{escape(str(strategy.get('readiness', 'ready')))}</span></div>
       <div class="summary-card"><b>{escape(_label(language, 'total_time'))}</b><span>{escape(str(strategy.get('estimated_total_time', _label(language, 'unknown'))))}</span></div>
       <div class="summary-card"><b>{escape(_label(language, 'resources'))}</b><span>{escape(str(strategy.get('selected_resources', 0)))} / {escape(str(strategy.get('candidate_resources', 0)))}</span></div>
     </div>
@@ -716,6 +843,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
   {quality_panel}
   {route_panel}
   {next_actions_panel}
+  {resource_library_panel}
   <section class="graph-panel">
     <h2>{escape(_label(language, 'mastery_graph'))}</h2>
     <p>{escape(str(strategy.get('principle', '')))}</p>
@@ -954,6 +1082,213 @@ def _next_actions(study_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return actions
 
 
+def _coverage_gate(profile: LearnerProfile, resources: list[Resource], route_audit: dict[str, Any], target_kind: str) -> dict[str, Any]:
+    coverage = float(route_audit.get("coverage_ratio", 0.0))
+    threshold = _coverage_readiness_threshold(profile, target_kind)
+    has_real_resource = any(not _is_generated_resource(resource) for resource in resources)
+    if coverage >= threshold and has_real_resource:
+        return {
+            "status": "ready",
+            "threshold": threshold,
+            "coverage_ratio": coverage,
+            "recommended_action": _localized(profile, "Proceed with the mastery route.", "可以进入掌握路线。"),
+        }
+    missing_terms = [term for term in route_audit.get("needed_terms", []) if term not in route_audit.get("covered_terms", [])][:8]
+    return {
+        "status": "insufficient-evidence",
+        "threshold": threshold,
+        "coverage_ratio": coverage,
+        "missing_terms": missing_terms,
+        "recommended_action": _localized(
+            profile,
+            "Add target-specific papers, official docs, course notes, or enable live search before treating this as a mastery route.",
+            "先添加目标相关论文、官方文档、课程笔记，或开启实时搜索；在此之前不要把它当成完整掌握路线。",
+        ),
+    }
+
+
+def _coverage_readiness_threshold(profile: LearnerProfile, target_kind: str) -> float:
+    if target_kind == "paper":
+        return 0.55 if profile.route_depth == "fastest" else 0.68
+    if target_kind == "course":
+        return 0.58
+    if profile.route_depth == "fastest":
+        return 0.6
+    if profile.route_depth == "complete":
+        return 0.72
+    return 0.66
+
+
+def _resource_discovery_artifact(profile: LearnerProfile) -> dict[str, str]:
+    return {
+        "type": "resource-discovery-plan",
+        "evidence": _localized(
+            profile,
+            "Collect enough target-specific resources to regenerate a trustworthy mastery route.",
+            "先收集足够目标相关资料，再重新生成可信掌握路线。",
+        ),
+    }
+
+
+def _resource_discovery_checklist(profile: LearnerProfile, route_audit: dict[str, Any]) -> Resource:
+    missing_terms = route_audit.get("coverage_gate", {}).get("missing_terms") or route_audit.get("needed_terms", [])[:6]
+    concepts = [str(term) for term in missing_terms if str(term)][:6] or sorted(_terms(profile.goal))[:6] or ["target topic"]
+    return Resource(
+        title="fields-study-flow-resource-discovery-checklist",
+        url="local://fields-study-flow-resource-discovery-checklist",
+        source="fields-study-flow",
+        type="checklist",
+        language="en",
+        difficulty="beginner",
+        concepts=concepts,
+        estimated_time="60min",
+        estimated_minutes=60,
+        learning_key_points=[
+            "find one primary paper or official reference for each missing concept",
+            "prefer official docs, maintained repositories, and recognized courses",
+            "rerun the planner after adding the collected sources",
+        ],
+        focus_areas=concepts,
+        critical_path_role="prerequisite",
+        trust_score=0.64,
+        why_recommended="The current candidate set does not cover the goal well enough, so the next useful step is resource discovery rather than a mastery route.",
+        license_or_access_note="Generated checklist; add legal open resources or explicit local files.",
+        metadata={"generated_resource_discovery": True},
+    )
+
+
+def _resource_discovery_tasks(profile: LearnerProfile, route_audit: dict[str, Any]) -> list[dict[str, Any]]:
+    missing_terms = route_audit.get("coverage_gate", {}).get("missing_terms") or route_audit.get("needed_terms", [])[:6]
+    missing = ", ".join(str(term) for term in missing_terms[:6]) or profile.goal
+    tasks = [
+        (
+            "discover",
+            "Collect target-specific resources",
+            f"Find at least one authoritative paper, book chapter, official doc, or maintained repository for: {missing}.",
+            "At least three goal-aligned sources are saved as URLs or local files.",
+        ),
+        (
+            "verify",
+            "Verify resource relevance",
+            "Reject sources that do not share the goal concepts or do not support explain, reproduce, or synthesize tasks.",
+            "Each retained source has a reason and expected role in the route.",
+        ),
+        (
+            "regenerate",
+            "Regenerate the roadmap",
+            "Run fields-study-flow again with the collected URLs or local resources.",
+            "Coverage is above the readiness threshold and the plan has concrete resources.",
+        ),
+    ]
+    return [
+        {
+            "id": f"task-{index}-{task_type}",
+            "type": task_type,
+            "title": title,
+            "resource_titles": ["fields-study-flow-resource-discovery-checklist"],
+            "estimated_minutes": 30,
+            "evidence": _localized(profile, evidence, evidence),
+            "acceptance": _localized(profile, acceptance, acceptance),
+        }
+        for index, (task_type, title, evidence, acceptance) in enumerate(tasks, start=1)
+    ]
+
+
+def _resource_gap_messages(profile: LearnerProfile, route_audit: dict[str, Any], resources: list[Resource]) -> list[dict[str, str]]:
+    missing_terms = route_audit.get("coverage_gate", {}).get("missing_terms") or route_audit.get("needed_terms", [])[:6]
+    return [
+        {
+            "kind": "resource-coverage",
+            "status": "resource-discovery-required",
+            "message": _localized(
+                profile,
+                f"Current resources cover only {route_audit.get('coverage_ratio', 0):.2f} of the goal terms. Missing: {', '.join(str(term) for term in missing_terms[:6]) or 'target-specific concepts'}.",
+                f"当前资源只覆盖目标词的 {route_audit.get('coverage_ratio', 0):.2f}。缺口：{', '.join(str(term) for term in missing_terms[:6]) or '目标相关概念'}。",
+            ),
+            "resolved_by": "add-live-search-or-local-resources",
+        },
+        {
+            "kind": "candidate-quality",
+            "status": "not-enough-aligned-resources",
+            "message": _localized(
+                profile,
+                f"Only {len(resources)} candidate resources were available, and the selected set is not sufficient for mastery.",
+                f"当前只有 {len(resources)} 个候选资源，且不足以支撑掌握路线。",
+            ),
+            "resolved_by": "collect-authoritative-sources",
+        },
+    ]
+
+
+def _is_generated_resource(resource: Resource) -> bool:
+    return bool(
+        resource.metadata.get("generated_template")
+        or resource.metadata.get("generated_prerequisite_sprint")
+        or resource.metadata.get("generated_resource_discovery")
+    )
+
+
+def _resource_library(
+    profile: LearnerProfile,
+    candidate_resources: list[Resource],
+    selected_resources: list[Resource],
+    phases: list[dict[str, Any]],
+    route_audit: dict[str, Any],
+) -> list[dict[str, Any]]:
+    selected_ids = {id(resource) for resource in selected_resources}
+    candidate_ids = {id(resource) for resource in candidate_resources}
+    phase_by_key: dict[tuple[str, str], str] = {}
+    for phase in phases:
+        phase_name = str(phase.get("name", ""))
+        for item in phase.get("resources", []):
+            phase_by_key[_resource_dict_key(item)] = phase_name
+
+    omitted_by_title = {
+        str(item.get("title", "")): str(item.get("reason", ""))
+        for item in route_audit.get("omitted_resources", [])
+        if isinstance(item, dict)
+    }
+    needed = _needed_terms(profile.goal, candidate_resources or selected_resources)
+    ordered_resources = [
+        *candidate_resources,
+        *[resource for resource in selected_resources if id(resource) not in candidate_ids],
+    ]
+    library: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for resource in ordered_resources:
+        public = resource.to_dict()
+        key = _resource_dict_key(public)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        is_generated = _is_generated_resource(resource)
+        is_selected = id(resource) in selected_ids
+        route_status = "generated" if is_generated else "selected" if is_selected else "omitted"
+        phase_name = phase_by_key.get(key, "")
+        if is_selected:
+            reason = f"included-in-shortest-path: {phase_name}" if phase_name else "included-in-shortest-path"
+        elif is_generated:
+            reason = "generated-to-preserve-shortest-verifiable-path"
+        else:
+            reason = omitted_by_title.get(resource.title) or _omission_reason(profile, resource, needed)
+
+        public.update(
+            {
+                "route_status": route_status,
+                "selected": is_selected,
+                "selected_phase": phase_name or None,
+                "route_reason": reason,
+            }
+        )
+        library.append(public)
+    return library
+
+
+def _resource_dict_key(resource: dict[str, Any]) -> tuple[str, str]:
+    return (str(resource.get("title", "")), str(resource.get("url", "")))
+
+
 def _route_audit(profile: LearnerProfile, candidate_resources: list[Resource], selected_resources: list[Resource], study_tasks: list[dict[str, Any]]) -> dict[str, Any]:
     selected_ids = {id(resource) for resource in selected_resources}
     needed = _needed_terms(profile.goal, candidate_resources or selected_resources)
@@ -1011,6 +1346,32 @@ def _quality_report(
     artifact_requirements: dict[str, Any],
     generated_artifacts: list[str],
 ) -> dict[str, Any]:
+    coverage_gate = route_audit.get("coverage_gate", {})
+    if coverage_gate.get("status") == "insufficient-evidence":
+        dimensions = {
+            "usefulness": _dimension_level(
+                "medium",
+                "The report is useful as a resource-discovery plan, but current evidence is insufficient for a mastery route.",
+            ),
+            "usability": _dimension_level(
+                "high",
+                "The report explicitly flags insufficient coverage and provides next actions.",
+            ),
+            "convenience": _dimension_level(
+                "medium",
+                "The plan prevents a false route, but the learner still needs to collect target-specific resources.",
+            ),
+            "novelty": _dimension_level(
+                "high",
+                "Combines coverage gating, resource discovery tasks, and local/private resource policy.",
+            ),
+            "completeness": _dimension_level(
+                "medium",
+                "Mastery gates are deferred until the resource set covers the target.",
+            ),
+        }
+        return {"overall": "needs-resources", "dimensions": dimensions}
+
     task_types = {task.get("type") for task in study_tasks if task.get("resource_titles")}
     has_validation = artifact_requirements.get("requires_runnable") is False or artifact_requirements.get("policy") in {
         "existing-runnable-resource",
@@ -1047,6 +1408,10 @@ def _dimension(condition: bool, evidence: str) -> dict[str, str]:
     return {"level": "high" if condition else "medium", "evidence": evidence}
 
 
+def _dimension_level(level: str, evidence: str) -> dict[str, str]:
+    return {"level": level, "evidence": evidence}
+
+
 def _mastery_graph(profile: LearnerProfile, resources: list[Resource], target_kind: str, final_artifact: dict[str, str]) -> dict[str, Any]:
     nodes: list[dict[str, str]] = []
     edges: list[dict[str, str]] = []
@@ -1074,7 +1439,7 @@ def _mastery_graph(profile: LearnerProfile, resources: list[Resource], target_ki
             if concept_id:
                 edges.append({"from": concept_id, "to": resource_id, "label": "covered_by"})
 
-    tasks = _mastery_tasks(target_kind)
+    tasks = _graph_tasks(target_kind, final_artifact)
     for index, task in enumerate(tasks, start=1):
         task_id = f"task-{index}"
         nodes.append({"id": task_id, "kind": "task", "label": task})
@@ -1094,6 +1459,8 @@ def _mastery_graph(profile: LearnerProfile, resources: list[Resource], target_ki
 
 def _task_key(task: str) -> str:
     lowered = task.lower()
+    if "discover" in lowered or "verify" in lowered or "regenerate" in lowered:
+        return "discover"
     if "derive" in lowered or "equation" in lowered or "proof" in lowered:
         return "derive"
     if "reproduce" in lowered or "implement" in lowered or "run" in lowered:
@@ -1157,6 +1524,16 @@ def _mastery_tasks(target_kind: str) -> list[str]:
         "Connect key papers, tools, and concepts",
         "Critique trade-offs and choose next steps",
     ]
+
+
+def _graph_tasks(target_kind: str, final_artifact: dict[str, str]) -> list[str]:
+    if final_artifact.get("type") == "resource-discovery-plan":
+        return [
+            "Discover target-specific resources",
+            "Verify resource relevance",
+            "Regenerate the roadmap",
+        ]
+    return _mastery_tasks(target_kind)
 
 
 def _compress_short_route_prerequisites(profile: LearnerProfile, resources: list[Resource]) -> list[Resource]:
@@ -1403,9 +1780,13 @@ def _is_local_shortcut(resource: Resource) -> bool:
 
 def _needed_terms(goal: str, resources: list[Resource]) -> set[str]:
     terms = _terms(goal)
+    has_target_paper = False
     for resource in resources:
         if resource.metadata.get("target_paper"):
+            has_target_paper = True
             terms.update(_resource_terms(resource))
+    if has_target_paper:
+        return terms
     if not terms:
         for resource in resources[:3]:
             terms.update(_resource_terms(resource))
@@ -1418,13 +1799,73 @@ def _resource_terms(resource: Resource) -> set[str]:
 
 
 def _terms(value: str) -> set[str]:
-    generic = {"and", "from", "fully", "learn", "learning", "master", "paper", "read", "study", "understand", "with"}
+    generic = {
+        "and",
+        "arxiv",
+        "beginner",
+        "build",
+        "course",
+        "derive",
+        "doi",
+        "field",
+        "from",
+        "fully",
+        "group",
+        "implement",
+        "learn",
+        "learning",
+        "master",
+        "paper",
+        "papers",
+        "path",
+        "project",
+        "projects",
+        "quickly",
+        "read",
+        "reading",
+        "reproduce",
+        "study",
+        "survey",
+        "target",
+        "understand",
+        "unknown",
+        "with",
+        "write",
+    }
     normalized = value.lower().replace("/", " ").replace("-", " ")
     tokens = {token.strip(".,:;()[]{}") for token in normalized.split() if len(token.strip(".,:;()[]{}")) >= 3 and token.strip(".,:;()[]{}") not in generic}
-    for keyword in ("transformer", "attention", "diffusion", "yolo", "cnn", "ppo", "trpo", "python", "论文", "推导", "复现"):
+    tokens = {token for token in tokens if not any(char.isdigit() for char in token)}
+    tokens.update({token[:-1] for token in list(tokens) if len(token) > 4 and token.endswith("s")})
+    for keyword in (
+        "transformer",
+        "attention",
+        "diffusion",
+        "yolo",
+        "cnn",
+        "ppo",
+        "trpo",
+        "python",
+        "pddl",
+        "planning",
+        "symbolic planning",
+        "chain of thought",
+        "chain-of-thought",
+        "planbench",
+        "instruction tuning",
+        "deep learning",
+        "neural network",
+        "neural networks",
+        "pytorch",
+    ):
         if keyword in normalized:
             tokens.add(keyword)
-    return tokens
+    return {token for token in tokens if not _is_route_intent_term(token)}
+
+
+def _is_route_intent_term(token: str) -> bool:
+    if token in {"学习", "掌握", "论文", "阅读", "推导", "复现", "实现"}:
+        return True
+    return "完成" in token or "项目" in token
 
 
 def _resource_minutes(resource: Resource) -> int | None:

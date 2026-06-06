@@ -87,6 +87,18 @@ def test_resolve_arxiv_metadata_uses_offline_catalog_when_live_disabled() -> Non
     assert {"transformer", "self attention"} <= set(metadata["concepts"])
 
 
+def test_resolve_arxiv_doi_prefers_arxiv_fallback_when_live_api_fails() -> None:
+    client = FakeClient({"https://export.arxiv.org/api/query": RuntimeError("rate limited")})
+
+    metadata = resolve_paper_metadata("https://doi.org/10.48550/arXiv.1706.03762", client=client)
+
+    assert metadata["title"] == "Attention Is All You Need"
+    assert metadata["source"] == "arxiv"
+    assert metadata["source_ids"]["arxiv"] == "1706.03762"
+    assert "offline_catalog_fallback" in metadata["warnings"]
+    assert not any("semanticscholar" in url for url, _params in client.requests)
+
+
 def test_resolve_doi_metadata_uses_open_source_fallback_when_semantic_scholar_fails() -> None:
     client = FakeClient(
         {

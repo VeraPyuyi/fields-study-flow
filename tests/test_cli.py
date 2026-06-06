@@ -168,6 +168,93 @@ The method optimizes a residual.
     assert "[private local path]" not in roadmap["title"]
 
 
+def test_cli_paper_resource_dir_copies_local_pdf(tmp_path):
+    pdf = tmp_path / "private-symbolic-planning.pdf"
+    pdf.write_bytes(
+        b"""%PDF-1.4
+Teaching LLMs to Plan
+Abstract
+We study PDDL symbolic planning.
+1 Method
+The method verifies preconditions and effects.
+%%EOF"""
+    )
+    output_dir = tmp_path / "out"
+    resource_dir = tmp_path / "resources"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "paper",
+            "--url",
+            str(pdf),
+            "--output-language",
+            "en",
+            "--no-live-search",
+            "--output-dir",
+            str(output_dir),
+            "--resource-dir",
+            str(resource_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    manifest = json.loads((resource_dir / "study_bundle_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["summary"]["copied"] == 1
+    copied = resource_dir / manifest["resources"][0]["file"]
+    assert copied.exists()
+    assert copied.read_bytes() == pdf.read_bytes()
+    assert "study_bundle_manifest.json" in result.stdout
+
+
+def test_cli_interactive_collects_learning_language_and_storage_preferences(tmp_path):
+    output_dir = tmp_path / "interactive-out"
+    resource_dir = tmp_path / "interactive-resources"
+    user_input = "\n".join(
+        [
+            "master Transformer paper",
+            "en",
+            "en-first",
+            "fastest",
+            "practical",
+            "paper",
+            "",
+            str(output_dir),
+            "n",
+            "y",
+        ]
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "roadmap",
+            "--interactive",
+        ],
+        input=user_input + "\n",
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    roadmap = json.loads((output_dir / "roadmap.json").read_text(encoding="utf-8"))
+    assert roadmap["profile"]["goal"] == "master Transformer paper"
+    assert roadmap["profile"]["output_language"] == "en"
+    assert roadmap["profile"]["resource_language_preference"] == "en-first"
+    assert roadmap["profile"]["route_depth"] == "fastest"
+    assert roadmap["profile"]["target_kind"] == "paper"
+    assert "Copy/download the full study resource library" in result.stdout
+    assert not resource_dir.exists()
+
+
 def test_cli_paper_resource_uses_resolved_metadata(monkeypatch):
     def fake_resolve(url: str, *, live: bool = True):
         return {

@@ -1,5 +1,7 @@
 from fields_study_flow.language import ResourceLanguagePreference
 from fields_study_flow.models import LearnerProfile, Resource
+from fields_study_flow.offline_catalog import offline_resources_for_goal
+from fields_study_flow.ranking import rank_resources
 from fields_study_flow.roadmap import build_roadmap, render_html, render_markdown, render_svg, sanitize_roadmap_for_export
 
 
@@ -185,6 +187,11 @@ def test_build_roadmap_keeps_shortest_mastery_path_not_every_candidate():
     assert "Attention Is All You Need" in selected_titles
     assert "Local Transformer derivation notes" in selected_titles
     assert "Large generic ML course" not in selected_titles
+    library_titles = [resource["title"] for resource in roadmap["resource_library"]]
+    omitted = next(resource for resource in roadmap["resource_library"] if resource["title"] == "Large generic ML course")
+    assert library_titles == ["Attention Is All You Need", "Local Transformer derivation notes", "Large generic ML course", "fields-study-flow-template"]
+    assert omitted["route_status"] == "omitted"
+    assert omitted["route_reason"] in {"broad-detour", "lower-marginal-value", "off-target"}
     assert roadmap["path_strategy"]["selected_resources"] < roadmap["path_strategy"]["candidate_resources"]
 
 
@@ -829,7 +836,138 @@ def test_reports_show_quality_route_audit_and_next_actions():
     assert "## Plan Quality" in markdown
     assert "## Route Audit" in markdown
     assert "## Next Actions" in markdown
+    assert "## Learning Resource Library" in markdown
     assert "quality-panel" in html
     assert "route-audit-panel" in html
     assert "next-actions-panel" in html
+    assert "resource-library-panel" in html
+    assert "library-grid" in html
     assert "Plan Quality" in svg
+
+
+def test_planning_paper_route_exposes_books_papers_and_validation_tools():
+    profile = LearnerProfile(
+        goal="fully master Teaching LLMs to Plan with PDDL symbolic planning PlanBench and logical chain-of-thought",
+        output_language="en",
+        target_kind="paper",
+        route_depth="fastest",
+    )
+    resources = [
+        Resource(
+            title="Teaching LLMs to Plan",
+            url="local://teaching-llms-to-plan",
+            source="local-library",
+            type="paper",
+            language="en",
+            concepts=["large language model", "symbolic planning", "pddl", "chain-of-thought"],
+            estimated_minutes=360,
+            trust_score=0.8,
+            metadata={"target_paper": True},
+            critical_path_role="core-paper",
+        ),
+        Resource(
+            title="Automated Planning: Theory and Practice",
+            url="https://www.automatedplanning.info/",
+            source="book",
+            type="book",
+            language="en",
+            concepts=["automated planning", "symbolic planning"],
+            estimated_minutes=720,
+            trust_score=0.9,
+            critical_path_role="prerequisite",
+        ),
+        Resource(
+            title="PlanBench: On the Planning Abilities of Large Language Models",
+            url="https://arxiv.org/abs/2305.15771",
+            source="arxiv",
+            type="paper",
+            language="en",
+            concepts=["planbench", "large language model", "pddl"],
+            estimated_minutes=240,
+            trust_score=0.92,
+            critical_path_role="focused-support",
+        ),
+        Resource(
+            title="VAL: The Automatic Validation Tool for PDDL Planning",
+            url="https://github.com/KCL-Planning/VAL",
+            source="github",
+            type="repository",
+            language="en",
+            concepts=["val verifier", "pddl", "plan validation"],
+            estimated_minutes=120,
+            trust_score=0.86,
+            critical_path_role="practice-validation",
+        ),
+    ]
+
+    roadmap = build_roadmap(profile, resources)
+    selected_titles = [resource["title"] for phase in roadmap["phases"] for resource in phase["resources"]]
+    library = roadmap["resource_library"]
+    library_titles = {resource["title"] for resource in library}
+
+    assert len(selected_titles) <= 3
+    assert "Automated Planning: Theory and Practice" in library_titles
+    assert "PlanBench: On the Planning Abilities of Large Language Models" in library_titles
+    assert "VAL: The Automatic Validation Tool for PDDL Planning" in library_titles
+    assert any(resource["type"] == "book" for resource in library)
+    assert any(resource["type"] == "paper" for resource in library)
+    assert any(resource["route_status"] == "omitted" for resource in library)
+
+
+def test_unknown_topic_downgrades_to_resource_discovery_instead_of_fake_mastery_route():
+    profile = LearnerProfile(
+        goal="learn quantum error correction for a reading group",
+        output_language="en",
+        target_kind="field",
+        route_depth="balanced",
+    )
+    resources = [
+        Resource(
+            title="Mathematics for Machine Learning",
+            url="https://mml-book.github.io/",
+            source="course",
+            type="book",
+            language="en",
+            concepts=["linear algebra", "probability", "optimization"],
+            estimated_minutes=720,
+            trust_score=0.92,
+            critical_path_role="prerequisite",
+        )
+    ]
+
+    roadmap = build_roadmap(profile, resources)
+
+    assert roadmap["path_strategy"]["readiness"] == "insufficient-evidence"
+    assert roadmap["final_artifact"]["type"] == "resource-discovery-plan"
+    assert roadmap["artifact_requirements"]["policy"] == "resource-discovery-first"
+    assert roadmap["quality_report"]["overall"] == "needs-resources"
+    assert roadmap["resource_library"][0]["title"] == "Mathematics for Machine Learning"
+    assert any(resource["title"] == "fields-study-flow-resource-discovery-checklist" for resource in roadmap["resource_library"])
+    assert {task["type"] for task in roadmap["study_tasks"]} == {"discover", "verify", "regenerate"}
+    assert any(gap["status"] == "resource-discovery-required" for gap in roadmap["artifact_gaps"])
+    assert any(node["label"] == "Discover target-specific resources" for node in roadmap["mastery_graph"]["nodes"])
+
+
+def test_deep_learning_course_gets_books_courses_and_practice_resources():
+    profile = LearnerProfile(
+        goal="build a deep learning course path from beginner to projects",
+        output_language="en",
+        target_kind="course",
+        route_depth="complete",
+        learning_style="practical",
+    )
+    resources = rank_resources(offline_resources_for_goal(profile.goal), profile)
+
+    roadmap = build_roadmap(profile, resources)
+    library_titles = {resource["title"] for resource in roadmap["resource_library"]}
+    selected_titles = {resource["title"] for phase in roadmap["phases"] for resource in phase["resources"]}
+
+    assert roadmap["path_strategy"]["readiness"] == "ready"
+    assert roadmap["route_audit"]["coverage_ratio"] >= 0.58
+    assert "Dive into Deep Learning" in library_titles
+    assert "Deep Learning Book" in library_titles
+    assert "PyTorch Tutorials" in library_titles
+    assert "Practical Deep Learning for Coders" in library_titles
+    assert any(title in selected_titles for title in {"Dive into Deep Learning", "PyTorch Tutorials", "Practical Deep Learning for Coders"})
+    assert any(resource["type"] == "book" for resource in roadmap["resource_library"])
+    assert any(resource["critical_path_role"] == "practice-validation" for resource in roadmap["resource_library"])

@@ -34,7 +34,8 @@ fields-study-flow roadmap \
   --preset field-project \
   --output-language zh-CN \
   --resource-language en-first \
-  --local-resource ./my-notes/diffusion
+  --local-resource ./my-notes/diffusion \
+  --resource-dir ./study-assets/diffusion
 ```
 
 如果不希望实时搜索，可以使用确定性的离线模式：
@@ -53,7 +54,15 @@ fields-study-flow paper \
   --url https://arxiv.org/abs/1706.03762 \
   --preset paper-fastest \
   --output-language bilingual \
-  --resource-language en-first
+  --resource-language en-first \
+  --resource-dir ./study-assets/transformer
+```
+
+交互向导会先询问语言、存储和学习偏好，再执行规划：
+
+```bash
+fields-study-flow paper --interactive
+fields-study-flow roadmap --interactive
 ```
 
 生成文件：
@@ -74,6 +83,11 @@ fields-study-flow-output/
     reproduction_log.md
     notebook_skeleton.ipynb
     src/main.py
+
+study-assets/
+  study_bundle_manifest.json # 设置 --resource-dir 时生成
+  links.md
+  01-selected-local-or-open-resource.pdf
 ```
 
 ## 关键参数
@@ -85,11 +99,13 @@ fields-study-flow-output/
 | `--route-depth fastest\|balanced\|complete` | 控制路线是最短、平衡还是最完整。 |
 | `--learning-style practical\|theory\|video\|auto` | 控制资源排序偏向实战、理论或直觉材料。 |
 | `--local-resource PATH` | 分析显式提供的本地文件或文件夹，可重复传入。 |
+| `--resource-dir PATH` | 将完整学习资料库复制/下载到私有资料目录，包括显式本地文件、可直接获取的开放文件、GitHub 公开归档，以及可安全保存的网页快照。 |
+| `--interactive` | 先询问目标、语言、路线深度、学习风格、本地资源、报告目录和资料目录，再执行。 |
 | `--no-live-search` / `--offline` | 关闭默认实时搜索，使用确定性目录和显式资源。 |
 | `--output-language zh-CN\|en\|bilingual` | 控制路线输出语言。 |
 | `--resource-language zh-first\|en-first\|balanced\|zh-only\|en-only` | 控制资料语言偏好。 |
 
-本地资源支持 Markdown、TXT、TeX、PDF、Jupyter Notebook、Python、YAML/JSON/CSV，以及常见文档和课件格式的元数据级分析。
+本地资源支持 Markdown、TXT、TeX、PDF、Jupyter Notebook、Python、YAML/JSON/CSV，以及常见文档和课件格式的元数据级分析。资料打包只复制用户显式提供的路径，会下载 arXiv PDF、GitHub raw 文件等直接开放文件，把 GitHub 仓库保存为公开归档下载，并在服务器允许时把普通公开网页保存为小型 HTML 快照；视频、受限页面、失败下载和需要凭证的来源会保留在 `links.md` 中。
 
 ## MCP 风格工具
 

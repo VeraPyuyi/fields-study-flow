@@ -65,7 +65,7 @@ def resolve_paper_metadata(
                 return _metadata_from_arxiv(arxiv_id, client, timeout)
             except Exception as exc:
                 warnings.append(f"arxiv_unavailable: {exc}")
-        if live and doi and client is not None:
+        if live and doi and client is not None and not _is_arxiv_doi(doi):
             return _metadata_from_doi(doi, target, client, timeout)
     finally:
         if close_client and client is not None:
@@ -109,6 +109,7 @@ def paper_metadata_to_resource(metadata: dict[str, Any]) -> Resource:
     title = paper_metadata.get("title") or "Target paper"
     source = metadata.get("source") or paper_metadata.get("source") or "user-paper"
     url = metadata.get("url") or paper_metadata.get("url") or ""
+    private_local_path = metadata.get("_local_path")
     concepts = list(dict.fromkeys(["paper reading", *paper_metadata.get("concepts", [])]))
     learning_key_points = [
         "problem, contribution, and assumptions",
@@ -138,6 +139,7 @@ def paper_metadata_to_resource(metadata: dict[str, Any]) -> Resource:
         learning_key_points=learning_key_points,
         focus_areas=list(dict.fromkeys(focus_areas))[:6],
         critical_path_role="core-paper",
+        local_path=str(private_local_path) if private_local_path else None,
         trust_score=0.95 if source in {"arxiv", "semantic-scholar", "openalex"} else 0.72,
         why_recommended="Target paper for the deep-reading route, with extracted metadata guiding the shortest mastery path.",
         license_or_access_note="Paper metadata and links only. Link and summarize; do not copy long copyrighted passages.",
@@ -294,6 +296,7 @@ def _metadata_from_local_pdf(path: Path) -> dict[str, Any]:
             "code_links": _code_links_from_text(text),
             "local_path": None,
             "path_name": path.name,
+            "_local_path": str(path.resolve()),
         },
     )
 
@@ -396,6 +399,8 @@ def _offline_catalog_papers() -> list[Resource]:
 
 def _public_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     data = dict(metadata)
+    data.pop("_local_path", None)
+    data.pop("_private_local_path", None)
     data["local_path"] = None
     if isinstance(data.get("paper_metadata"), dict):
         data["paper_metadata"] = _public_metadata(data["paper_metadata"])
@@ -420,6 +425,10 @@ def _extract_doi(target: str) -> str:
         return unquote(parsed.path.lstrip("/")).strip()
     match = re.search(r"\b10\.\d{4,9}/[^\s?#]+", target, flags=re.I)
     return match.group(0).rstrip(".,);") if match else ""
+
+
+def _is_arxiv_doi(doi: str) -> bool:
+    return doi.lower().startswith("10.48550/arxiv.")
 
 
 def _read_pdf_text(path: Path) -> str:
@@ -569,6 +578,22 @@ def _concepts_from_text(value: str) -> list[str]:
         "sampler": "sampling",
         "sampling": "sampling",
         "language model": "language model",
+        "llm": "large language model",
+        "large language model": "large language model",
+        "symbolic planning": "symbolic planning",
+        "automated planning": "automated planning",
+        "pddl": "pddl",
+        "planning domain definition language": "pddl",
+        "chain-of-thought": "chain-of-thought",
+        "chain of thought": "chain-of-thought",
+        "logical chain": "logical chain-of-thought",
+        "planbench": "planbench",
+        "val feedback": "val verifier",
+        "automatic validation": "val verifier",
+        "verifier": "plan verification",
+        "state transition": "state transitions",
+        "precondition": "action preconditions",
+        "instruction tuning": "instruction tuning",
         "reproduc": "reproducibility",
         "verification": "verification",
         "python": "python",

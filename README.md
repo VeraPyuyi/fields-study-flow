@@ -34,7 +34,8 @@ fields-study-flow roadmap \
   --preset field-project \
   --output-language en \
   --resource-language en-first \
-  --local-resource ./my-notes/diffusion
+  --local-resource ./my-notes/diffusion \
+  --resource-dir ./study-assets/diffusion
 ```
 
 Use deterministic offline mode when you do not want live search:
@@ -53,7 +54,15 @@ fields-study-flow paper \
   --url https://arxiv.org/abs/1706.03762 \
   --preset paper-fastest \
   --output-language bilingual \
-  --resource-language en-first
+  --resource-language en-first \
+  --resource-dir ./study-assets/transformer
+```
+
+Guided mode asks for language, storage, and learning preferences before it runs:
+
+```bash
+fields-study-flow paper --interactive
+fields-study-flow roadmap --interactive
 ```
 
 Generated files:
@@ -74,6 +83,11 @@ fields-study-flow-output/
     reproduction_log.md
     notebook_skeleton.ipynb
     src/main.py
+
+study-assets/
+  study_bundle_manifest.json # generated when --resource-dir is set
+  links.md
+  01-selected-local-or-open-resource.pdf
 ```
 
 ## Key CLI Options
@@ -85,11 +99,13 @@ fields-study-flow-output/
 | `--route-depth fastest\|balanced\|complete` | Control how short or comprehensive the route should be. |
 | `--learning-style practical\|theory\|video\|auto` | Bias ranking toward implementation, theory, or intuition resources. |
 | `--local-resource PATH` | Analyze an explicit local file/folder as a private candidate. Repeatable. |
+| `--resource-dir PATH` | Copy/download the full study resource library into a private study folder, including explicit local files, direct/open files, GitHub archives, and safe page snapshots where possible. |
+| `--interactive` | Ask for goal, language, route depth, learning style, local resources, output directory, and resource directory before executing. |
 | `--no-live-search` / `--offline` | Disable default live discovery and use deterministic local catalog behavior. |
 | `--output-language zh-CN\|en\|bilingual` | Control roadmap language. |
 | `--resource-language zh-first\|en-first\|balanced\|zh-only\|en-only` | Control material-language preference. |
 
-Supported local resource types include Markdown, TXT, TeX, PDF, Jupyter notebooks, Python files, YAML/JSON/CSV, and common document/slide formats at metadata level.
+Supported local resource types include Markdown, TXT, TeX, PDF, Jupyter notebooks, Python files, YAML/JSON/CSV, and common document/slide formats at metadata level. Resource bundling copies only paths the user explicitly provided, downloads direct/open files such as arXiv PDFs or raw GitHub files, saves GitHub repositories as public archive downloads, and snapshots ordinary public pages as small HTML files when the server allows it. Videos, restricted pages, failed downloads, and credentialed sources stay as links in `links.md`.
 
 ## MCP-Style Tools
 
@@ -154,7 +170,7 @@ fields_study_flow/
 
 ## Safety Policy
 
-fields-study-flow recommends and summarizes resources. It does not scan local disks by default, expose private local paths, bypass logins or paywalls, download videos, use pirate mirrors, or copy long copyrighted passages. External content is treated as untrusted source material.
+fields-study-flow recommends and summarizes resources. It does not scan local disks by default, expose private local paths in shareable reports, bypass logins or paywalls, download videos, use pirate mirrors, or copy long copyrighted passages. When `--resource-dir` is used, downloaded/copied files are kept in the private local bundle selected by the user. External content is treated as untrusted source material.
 
 ## Development
 
