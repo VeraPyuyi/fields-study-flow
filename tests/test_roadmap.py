@@ -941,11 +941,54 @@ def test_unknown_topic_downgrades_to_resource_discovery_instead_of_fake_mastery_
     assert roadmap["final_artifact"]["type"] == "resource-discovery-plan"
     assert roadmap["artifact_requirements"]["policy"] == "resource-discovery-first"
     assert roadmap["quality_report"]["overall"] == "needs-resources"
+    assert roadmap["route_audit"]["coverage_ratio"] == roadmap["route_audit"]["coverage_gate"]["coverage_ratio"]
+    assert roadmap["route_audit"]["coverage_ratio"] < roadmap["route_audit"]["coverage_gate"]["threshold"]
+    assert "original target-specific candidate resources" in roadmap["route_audit"]["coverage_note"]
     assert roadmap["resource_library"][0]["title"] == "Mathematics for Machine Learning"
     assert any(resource["title"] == "fields-study-flow-resource-discovery-checklist" for resource in roadmap["resource_library"])
     assert {task["type"] for task in roadmap["study_tasks"]} == {"discover", "verify", "regenerate"}
     assert any(gap["status"] == "resource-discovery-required" for gap in roadmap["artifact_gaps"])
     assert any(node["label"] == "Discover target-specific resources" for node in roadmap["mastery_graph"]["nodes"])
+    markdown = render_markdown(roadmap)
+    html = render_html(roadmap)
+    assert "- Coverage: 1.00" not in markdown
+    assert "Coverage note" in markdown
+    assert "Coverage note" in html
+
+
+def test_chinese_resource_discovery_route_is_localized():
+    profile = LearnerProfile(
+        goal="学习量子纠错并能做组会汇报",
+        output_language="zh-CN",
+        target_kind="field",
+        route_depth="balanced",
+    )
+    resources = [
+        Resource(
+            title="Mathematics for Machine Learning",
+            url="https://mml-book.github.io/",
+            source="course",
+            type="book",
+            language="en",
+            concepts=["linear algebra", "probability", "optimization"],
+            estimated_minutes=720,
+            trust_score=0.92,
+            critical_path_role="prerequisite",
+        )
+    ]
+
+    roadmap = build_roadmap(profile, resources)
+    task_titles = [task["title"] for task in roadmap["study_tasks"]]
+    task_evidence = [task["evidence"] for task in roadmap["study_tasks"]]
+    next_titles = [action["title"] for action in roadmap["next_actions"]]
+    checklist = next(resource for resource in roadmap["resource_library"] if resource["title"] == "fields-study-flow-resource-discovery-checklist")
+
+    assert roadmap["path_strategy"]["readiness"] == "insufficient-evidence"
+    assert task_titles == ["收集目标相关资料", "验证资料相关性", "重新生成学习路线"]
+    assert any("权威论文" in evidence for evidence in task_evidence)
+    assert all(title.startswith("从 fields-study-flow-resource-discovery-checklist 开始") for title in next_titles)
+    assert checklist["language"] == "zh-CN"
+    assert "当前候选资料" in checklist["why_recommended"]
 
 
 def test_deep_learning_course_gets_books_courses_and_practice_resources():
@@ -964,6 +1007,8 @@ def test_deep_learning_course_gets_books_courses_and_practice_resources():
 
     assert roadmap["path_strategy"]["readiness"] == "ready"
     assert roadmap["route_audit"]["coverage_ratio"] >= 0.58
+    assert "derive" in {task["type"] for task in roadmap["study_tasks"]}
+    assert {"explain", "derive", "reproduce", "critique"} <= {task["type"] for task in roadmap["study_tasks"]}
     assert "Dive into Deep Learning" in library_titles
     assert "Deep Learning Book" in library_titles
     assert "PyTorch Tutorials" in library_titles

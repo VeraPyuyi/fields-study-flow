@@ -134,6 +134,7 @@ REPORT_LABELS: dict[str, tuple[str, str]] = {
     "next_actions": ("Next Actions", "下一步行动"),
     "study_tasks": ("Study Tasks", "学习任务"),
     "coverage": ("Coverage", "覆盖度"),
+    "coverage_note": ("Coverage note", "覆盖说明"),
     "readiness": ("Readiness", "路线可信度"),
     "coverage_gate": ("Coverage Gate", "覆盖门槛"),
     "recommended_action": ("Recommended action", "建议动作"),
@@ -205,13 +206,13 @@ def build_roadmap(profile: LearnerProfile, resources: list[Resource], live_searc
         total_minutes = sum(_resource_minutes(resource) or 0 for resource in selected_resources)
         mastery_graph = _mastery_graph(profile, selected_resources, target_kind, final_artifact)
         study_tasks = _resource_discovery_tasks(profile, route_audit)
-        route_audit = _route_audit(profile, resources, selected_resources, study_tasks)
-        route_audit["coverage_gate"] = coverage_gate
+        discovery_route_audit = _route_audit(profile, resources, selected_resources, study_tasks)
+        route_audit = _resource_discovery_route_audit(profile, route_audit, discovery_route_audit, coverage_gate)
     else:
         route_audit["coverage_gate"] = coverage_gate
     resource_library = _resource_library(profile, resources, selected_resources, phases, route_audit)
     quality_report = _quality_report(profile, selected_resources, study_tasks, route_audit, artifact_requirements, generated_artifacts)
-    next_actions = _next_actions(study_tasks)
+    next_actions = _next_actions(profile, study_tasks)
     generated_selected_count = sum(
         1
         for resource in selected_resources
@@ -312,16 +313,17 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
         lines.append("")
     route_audit = roadmap.get("route_audit", {})
     if route_audit:
+        lines.extend([f"## {_label(language, 'route_audit')}", ""])
         lines.extend(
             [
-                f"## {_label(language, 'route_audit')}",
-                "",
                 f"- {_label(language, 'coverage')}: {route_audit.get('coverage_ratio', 0):.2f}",
                 f"- {_label(language, 'coverage_gate')}: {route_audit.get('coverage_gate', {}).get('status', 'ready')}",
                 f"- {_label(language, 'recommended_action')}: {route_audit.get('coverage_gate', {}).get('recommended_action', _label(language, 'not_specified'))}",
-                f"- {_label(language, 'omitted_resources')}: {len(route_audit.get('omitted_resources', []))}",
             ]
         )
+        if route_audit.get("coverage_note"):
+            lines.append(f"- {_label(language, 'coverage_note')}: {route_audit.get('coverage_note')}")
+        lines.append(f"- {_label(language, 'omitted_resources')}: {len(route_audit.get('omitted_resources', []))}")
         for omitted in route_audit.get("omitted_resources", [])[:5]:
             lines.append(f"  - {omitted.get('title', '')}: {omitted.get('reason', '')}")
         lines.append("")
@@ -641,12 +643,16 @@ def render_html(roadmap: dict[str, Any]) -> str:
             for item in route_audit.get("omitted_resources", [])[:6]
             if isinstance(item, dict)
         )
+        coverage_note_html = ""
+        if route_audit.get("coverage_note"):
+            coverage_note_html = f"<p class=\"meta\">{escape(_label(language, 'coverage_note'))}: {escape(str(route_audit.get('coverage_note')))}</p>"
         route_panel = f"""
         <section class="graph-panel route-audit-panel">
           <h2>{escape(_label(language, 'route_audit'))}</h2>
           <p class="meta">{escape(_label(language, 'coverage'))}: {escape(f"{route_audit.get('coverage_ratio', 0):.2f}")}</p>
           <p class="meta">{escape(_label(language, 'coverage_gate'))}: {escape(str(route_audit.get('coverage_gate', {}).get('status', 'ready')))}</p>
           <p class="meta">{escape(_label(language, 'recommended_action'))}: {escape(str(route_audit.get('coverage_gate', {}).get('recommended_action', _label(language, 'not_specified'))))}</p>
+          {coverage_note_html}
           <ul>{omitted_items or f'<li>{escape(_label(language, "not_available"))}</li>'}</ul>
         </section>
         """
@@ -1065,7 +1071,7 @@ def _task_acceptance(profile: LearnerProfile, task_type: str) -> str:
     return _localized(profile, en, zh)
 
 
-def _next_actions(study_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def _next_actions(profile: LearnerProfile, study_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     actions: list[dict[str, Any]] = []
     for index, task in enumerate(study_tasks[:3], start=1):
         resources = task.get("resource_titles", [])
@@ -1074,12 +1080,45 @@ def _next_actions(study_tasks: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "order": index,
                 "task_id": task.get("id", f"task-{index}"),
-                "title": f"Start {task.get('type', 'task')} with {resource_hint}",
+                "title": _next_action_title(profile, task, resource_hint),
                 "estimated_minutes": task.get("estimated_minutes", 45),
                 "evidence": task.get("evidence", ""),
             }
         )
     return actions
+
+
+def _next_action_title(profile: LearnerProfile, task: dict[str, Any], resource_hint: str) -> str:
+    task_title = str(task.get("title") or task.get("type") or "task")
+    task_type = str(task.get("type") or "task")
+    return _localized(
+        profile,
+        f"Start {task_type} with {resource_hint}",
+        f"从 {resource_hint} 开始：{task_title}",
+    )
+
+
+def _resource_discovery_route_audit(
+    profile: LearnerProfile,
+    original_route_audit: dict[str, Any],
+    discovery_route_audit: dict[str, Any],
+    coverage_gate: dict[str, Any],
+) -> dict[str, Any]:
+    route_audit = dict(discovery_route_audit)
+    original_ratio = float(coverage_gate.get("coverage_ratio", original_route_audit.get("coverage_ratio", 0.0)))
+    route_audit["coverage_ratio"] = round(original_ratio, 3)
+    route_audit["needed_terms"] = original_route_audit.get("needed_terms", [])
+    route_audit["covered_terms"] = original_route_audit.get("covered_terms", [])
+    route_audit["candidate_minutes"] = original_route_audit.get("candidate_minutes", route_audit.get("candidate_minutes", 0))
+    route_audit["estimated_minutes_saved"] = original_route_audit.get("estimated_minutes_saved", route_audit.get("estimated_minutes_saved", 0))
+    route_audit["coverage_gate"] = coverage_gate
+    route_audit["fallback_selected_coverage_ratio"] = discovery_route_audit.get("coverage_ratio", 0)
+    route_audit["coverage_note"] = _localized(
+        profile,
+        "Coverage is measured against the original target-specific candidate resources before the resource-discovery fallback.",
+        "覆盖率按进入资源发现兜底前的目标相关候选资源计算。",
+    )
+    return route_audit
 
 
 def _coverage_gate(profile: LearnerProfile, resources: list[Resource], route_audit: dict[str, Any], target_kind: str) -> dict[str, Any]:
@@ -1138,21 +1177,29 @@ def _resource_discovery_checklist(profile: LearnerProfile, route_audit: dict[str
         url="local://fields-study-flow-resource-discovery-checklist",
         source="fields-study-flow",
         type="checklist",
-        language="en",
+        language="zh-CN" if profile.output_language == "zh-CN" else "en",
         difficulty="beginner",
         concepts=concepts,
         estimated_time="60min",
         estimated_minutes=60,
         learning_key_points=[
-            "find one primary paper or official reference for each missing concept",
-            "prefer official docs, maintained repositories, and recognized courses",
-            "rerun the planner after adding the collected sources",
+            _localized(profile, "find one primary paper or official reference for each missing concept", "为每个缺口概念找到一篇主论文或官方参考资料"),
+            _localized(profile, "prefer official docs, maintained repositories, and recognized courses", "优先选择官方文档、维护良好的代码仓库和公认课程"),
+            _localized(profile, "rerun the planner after adding the collected sources", "补充资料后重新生成学习路线"),
         ],
         focus_areas=concepts,
         critical_path_role="prerequisite",
         trust_score=0.64,
-        why_recommended="The current candidate set does not cover the goal well enough, so the next useful step is resource discovery rather than a mastery route.",
-        license_or_access_note="Generated checklist; add legal open resources or explicit local files.",
+        why_recommended=_localized(
+            profile,
+            "The current candidate set does not cover the goal well enough, so the next useful step is resource discovery rather than a mastery route.",
+            "当前候选资料还不足以覆盖目标，下一步应该先补资料，而不是直接进入掌握路线。",
+        ),
+        license_or_access_note=_localized(
+            profile,
+            "Generated checklist; add legal open resources or explicit local files.",
+            "自动生成的资料发现清单；请补充合法开放资源或显式本地文件。",
+        ),
         metadata={"generated_resource_discovery": True},
     )
 
@@ -1164,33 +1211,42 @@ def _resource_discovery_tasks(profile: LearnerProfile, route_audit: dict[str, An
         (
             "discover",
             "Collect target-specific resources",
+            "收集目标相关资料",
             f"Find at least one authoritative paper, book chapter, official doc, or maintained repository for: {missing}.",
+            f"围绕这些缺口至少找到一项权威论文、书籍章节、官方文档或维护良好的代码仓库：{missing}。",
             "At least three goal-aligned sources are saved as URLs or local files.",
+            "至少保存 3 个与目标高度相关的 URL 或本地文件。",
         ),
         (
             "verify",
             "Verify resource relevance",
+            "验证资料相关性",
             "Reject sources that do not share the goal concepts or do not support explain, reproduce, or synthesize tasks.",
+            "剔除不覆盖目标概念、也不能支撑解释/推导/复现/综合任务的资料。",
             "Each retained source has a reason and expected role in the route.",
+            "每个保留资料都有推荐理由和预期路线角色。",
         ),
         (
             "regenerate",
             "Regenerate the roadmap",
+            "重新生成学习路线",
             "Run fields-study-flow again with the collected URLs or local resources.",
+            "带上新增 URL 或本地资料重新运行 fields-study-flow。",
             "Coverage is above the readiness threshold and the plan has concrete resources.",
+            "覆盖率超过可信门槛，并且路线包含具体可学习资料。",
         ),
     ]
     return [
         {
             "id": f"task-{index}-{task_type}",
             "type": task_type,
-            "title": title,
+            "title": _localized(profile, en_title, zh_title),
             "resource_titles": ["fields-study-flow-resource-discovery-checklist"],
             "estimated_minutes": 30,
-            "evidence": _localized(profile, evidence, evidence),
-            "acceptance": _localized(profile, acceptance, acceptance),
+            "evidence": _localized(profile, en_evidence, zh_evidence),
+            "acceptance": _localized(profile, en_acceptance, zh_acceptance),
         }
-        for index, (task_type, title, evidence, acceptance) in enumerate(tasks, start=1)
+        for index, (task_type, en_title, zh_title, en_evidence, zh_evidence, en_acceptance, zh_acceptance) in enumerate(tasks, start=1)
     ]
 
 
@@ -1520,6 +1576,7 @@ def _mastery_tasks(target_kind: str) -> list[str]:
         ]
     return [
         "Explain the field map and prerequisite chain",
+        "Derive or trace the core mechanism behind one representative method",
         "Implement or run a minimal representative example",
         "Connect key papers, tools, and concepts",
         "Critique trade-offs and choose next steps",
