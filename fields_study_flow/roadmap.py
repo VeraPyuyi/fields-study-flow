@@ -142,6 +142,28 @@ REPORT_LABELS: dict[str, tuple[str, str]] = {
     "level": ("Level", "等级"),
     "evidence": ("Evidence", "证据"),
     "live_search": ("Live search", "实时搜索"),
+    "study_bundle": ("Study Asset Bundle", "学习资料包"),
+    "bundle_manifest": ("Bundle manifest", "资料包清单"),
+    "bundle_links": ("Fallback links", "备用链接"),
+    "bundle_policy": ("Bundle policy", "打包策略"),
+    "bundle_summary": ("Bundle summary", "打包摘要"),
+    "download_status": ("Download status", "下载状态"),
+    "download_manager": ("Download Manager", "下载管理"),
+    "download_queue": ("Download queue", "下载队列"),
+    "retry_file": ("Retry file", "重试清单"),
+    "copied": ("copied", "已复制"),
+    "downloaded": ("downloaded", "已下载"),
+    "snapshotted": ("snapshotted", "已快照"),
+    "link_only": ("link-only", "仅链接"),
+    "failed": ("failed", "失败"),
+    "completed": ("completed", "已完成"),
+    "retryable": ("retryable", "可重试"),
+    "attempts": ("Attempts", "尝试次数"),
+    "file_or_link": ("File or link", "文件或链接"),
+    "retry": ("Retry", "重试"),
+    "route": ("Route", "路线"),
+    "full_resource_table": ("Full resource table", "完整资料表"),
+    "total": ("total", "总计"),
     "not_available": ("not available", "不可用"),
     "not_tagged": ("not tagged", "未标注"),
     "not_specified": ("not specified", "未指定"),
@@ -160,6 +182,62 @@ def _label(language: str, key: str) -> str:
 
 def _roadmap_language(roadmap: dict[str, Any]) -> str:
     return str(roadmap.get("profile", {}).get("output_language", "en"))
+
+
+def _bundle_summary_text(summary: dict[str, Any], language: str) -> str:
+    ordered = [
+        ("copied", "copied"),
+        ("downloaded", "downloaded"),
+        ("snapshotted", "snapshotted"),
+        ("link-only", "link_only"),
+        ("failed", "failed"),
+        ("completed", "completed"),
+        ("retryable", "retryable"),
+        ("total", "total"),
+    ]
+    parts = []
+    for source_key, label_key in ordered:
+        if source_key in summary:
+            parts.append(f"{_label(language, label_key)}={summary.get(source_key, 0)}")
+    return ", ".join(parts) or _label(language, "not_available")
+
+
+def _bundle_resource_detail(resource: dict[str, Any], language: str) -> str:
+    status = str(resource.get("status", _label(language, "unknown")))
+    status_label = _bundle_status_label(language, status)
+    file_name = resource.get("file")
+    reason = resource.get("reason")
+    parts = [status_label]
+    if file_name:
+        parts.append(str(file_name))
+    if reason:
+        parts.append(str(reason))
+    return " - ".join(parts)
+
+
+def _bundle_file_or_link(resource: dict[str, Any], language: str) -> str:
+    for key in ("file", "download_url", "snapshot_url", "url"):
+        value = resource.get(key)
+        if value:
+            return str(value)
+    return str(resource.get("reason") or _label(language, "not_available"))
+
+
+def _md_cell(value: Any) -> str:
+    text = str(value).replace("\n", " ").replace("|", "\\|")
+    return text.strip()
+
+
+def _bundle_status_label(language: str, status: str) -> str:
+    labels = {
+        "copied": "copied",
+        "downloaded": "downloaded",
+        "snapshotted": "snapshotted",
+        "link-only": "link_only",
+        "failed": "failed",
+        "generated": "generated",
+    }
+    return _label(language, labels.get(status, status.replace("-", "_")))
 
 
 def _localized(profile: LearnerProfile, en: str, zh: str) -> str:
@@ -326,6 +404,60 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
         lines.append(f"- {_label(language, 'omitted_resources')}: {len(route_audit.get('omitted_resources', []))}")
         for omitted in route_audit.get("omitted_resources", [])[:5]:
             lines.append(f"  - {omitted.get('title', '')}: {omitted.get('reason', '')}")
+        lines.append("")
+    study_bundle = roadmap.get("study_bundle", {})
+    if study_bundle:
+        summary = study_bundle.get("summary", {})
+        manager = study_bundle.get("download_manager", {})
+        lines.extend([f"## {_label(language, 'study_bundle')}", ""])
+        lines.extend(
+            [
+                f"- {_label(language, 'bundle_manifest')}: {study_bundle.get('manifest_file', 'study_bundle_manifest.json')}",
+                f"- {_label(language, 'bundle_links')}: {study_bundle.get('links_file', 'links.md')}",
+                f"- {_label(language, 'bundle_summary')}: {_bundle_summary_text(summary, language)}",
+                f"- {_label(language, 'bundle_policy')}: {study_bundle.get('policy', _label(language, 'not_specified'))}",
+            ]
+        )
+        if manager:
+            lines.extend(
+                [
+                    f"- {_label(language, 'download_queue')}: {manager.get('download_queue_file', 'download_queue.json')}",
+                    f"- {_label(language, 'retry_file')}: {manager.get('retry_file', 'retry_failed.md')}",
+                    f"- {_label(language, 'completed')}: {manager.get('completed', summary.get('completed', 0))}",
+                    f"- {_label(language, 'retryable')}: {manager.get('retryable', summary.get('retryable', 0))}",
+                ]
+            )
+        lines.extend(
+            [
+                "",
+                f"## {_label(language, 'download_manager')}",
+                "",
+                f"| # | {_label(language, 'title')} | {_label(language, 'download_status')} | {_label(language, 'route')} | {_label(language, 'file_or_link')} | {_label(language, 'attempts')} | {_label(language, 'retry')} |",
+                "|---|---|---|---|---|---:|---|",
+            ]
+        )
+        for row_index, resource in enumerate(study_bundle.get("resources", []), start=1):
+            if not isinstance(resource, dict):
+                continue
+            number = resource.get("index") or row_index
+            status = _bundle_status_label(language, str(resource.get("status", "unknown")))
+            route = _route_status_label(language, str(resource.get("route_status", "unknown")))
+            retry = _label(language, "retryable") if resource.get("retryable") else "no"
+            lines.append(
+                "| "
+                + " | ".join(
+                    [
+                        _md_cell(number),
+                        _md_cell(resource.get("title", _label(language, "unknown"))),
+                        _md_cell(status),
+                        _md_cell(route),
+                        _md_cell(_bundle_file_or_link(resource, language)),
+                        _md_cell(resource.get("attempts", 0)),
+                        _md_cell(retry),
+                    ]
+                )
+                + " |"
+            )
         lines.append("")
     if roadmap.get("next_actions"):
         lines.extend([f"## {_label(language, 'next_actions')}", ""])
@@ -494,6 +626,14 @@ def render_svg(roadmap: dict[str, Any]) -> str:
         f"{strategy.get('estimated_total_time', 'unknown')} | "
         f"{strategy.get('selected_resources', 0)}/{strategy.get('candidate_resources', 0)} {_label(language, 'resources')}"
     )
+    bundle_summary = roadmap.get("study_bundle", {}).get("summary", {})
+    if bundle_summary:
+        summary = (
+            f"{summary} | "
+            f"{_label(language, 'downloaded')}={bundle_summary.get('downloaded', 0)}, "
+            f"{_label(language, 'link_only')}={bundle_summary.get('link-only', 0)}, "
+            f"{_label(language, 'failed')}={bundle_summary.get('failed', 0)}"
+        )
     parts = [
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         "<style>",
@@ -503,7 +643,7 @@ def render_svg(roadmap: dict[str, Any]) -> str:
         f'<rect width="{width}" height="{height}" rx="24" fill="#F7FAFD"/>',
         f'<text x="48" y="58" class="title">{_svg_escape(_truncate(roadmap.get("title", "Learning Roadmap"), 70))}</text>',
         f'<rect x="724" y="28" width="418" height="48" rx="18" fill="#FFFFFF" stroke="#D4DEE9"/>',
-        f'<text x="933" y="58" class="small" text-anchor="middle" fill="#4F9FD8" font-weight="700">{_svg_escape(summary)}</text>',
+        f'<text x="933" y="58" class="small" text-anchor="middle" fill="#4F9FD8" font-weight="700">{_svg_escape(_truncate(summary, 82))}</text>',
         '<line x1="48" y1="92" x2="1132" y2="92" stroke="#D8E1EC" stroke-width="2"/>',
     ]
     if has_summary_panels:
@@ -671,6 +811,84 @@ def render_html(roadmap: dict[str, Any]) -> str:
         </section>
         """
 
+    study_bundle_panel = ""
+    study_bundle = roadmap.get("study_bundle", {})
+    if study_bundle:
+        summary = study_bundle.get("summary", {})
+        manager = study_bundle.get("download_manager", {})
+        bundle_rows: list[str] = []
+        for row_index, resource in enumerate(study_bundle.get("resources", []), start=1):
+            if not isinstance(resource, dict):
+                continue
+            status = str(resource.get("status", "unknown"))
+            route_status = str(resource.get("route_status", "unknown"))
+            file_or_link = _bundle_file_or_link(resource, language)
+            retryable = bool(resource.get("retryable"))
+            retry_label = _label(language, "retryable") if retryable else "no"
+            number = resource.get("index") or row_index
+            bundle_rows.append(
+                f"""
+                <tr data-status="{escape(status)}" data-route="{escape(route_status)}" data-title="{escape(str(resource.get('title', ''))).lower()}">
+                  <td class="num-cell">{escape(str(number))}</td>
+                  <td class="title-cell">
+                    <strong>{escape(str(resource.get('title', _label(language, 'unknown'))))}</strong>
+                    <span class="meta">{escape(str(resource.get('source', _label(language, 'unknown'))))} / {escape(str(resource.get('type', _label(language, 'unknown'))))}</span>
+                  </td>
+                  <td><span class="badge {escape(status)}">{escape(_bundle_status_label(language, status))}</span></td>
+                  <td><span class="badge {escape(route_status)}">{escape(_route_status_label(language, route_status))}</span></td>
+                  <td><span class="table-link">{escape(file_or_link)}</span></td>
+                  <td>{escape(str(resource.get('attempts', 0)))}</td>
+                  <td>
+                    <span class="badge {'failed' if retryable else 'omitted'}">{escape(retry_label)}</span>
+                    <span class="meta">{escape(str(resource.get('reason', '')))}</span>
+                  </td>
+                </tr>
+                """
+            )
+        status_filters = ["all", "downloaded", "copied", "snapshotted", "link-only", "failed"]
+        filter_buttons = "".join(
+            f'<button type="button" data-bundle-filter="{escape(status)}">{escape(status)}</button>'
+            for status in status_filters
+        )
+        study_bundle_panel = f"""
+        <section class="graph-panel study-bundle-panel download-manager-panel">
+          <div class="phase-title-row">
+            <h2>{escape(_label(language, 'study_bundle'))}</h2>
+            <span class="badge">{escape(_label(language, 'download_manager'))}</span>
+            <span class="meta">{escape(_label(language, 'bundle_manifest'))}: {escape(str(study_bundle.get('manifest_file', 'study_bundle_manifest.json')))}</span>
+          </div>
+          <div class="info-grid bundle-dashboard">
+            <div><b>{escape(_label(language, 'bundle_summary'))}</b><span>{escape(_bundle_summary_text(summary, language))}</span></div>
+            <div><b>{escape(_label(language, 'completed'))}</b><span>{escape(str(manager.get('completed', summary.get('completed', 0))))} / {escape(str(summary.get('total', 0)))}</span></div>
+            <div><b>{escape(_label(language, 'retryable'))}</b><span>{escape(str(manager.get('retryable', summary.get('retryable', 0))))}</span></div>
+            <div><b>{escape(_label(language, 'download_queue'))}</b><span>{escape(str(manager.get('download_queue_file', 'download_queue.json')))}</span></div>
+            <div><b>{escape(_label(language, 'retry_file'))}</b><span>{escape(str(manager.get('retry_file', 'retry_failed.md')))}</span></div>
+            <div><b>{escape(_label(language, 'bundle_links'))}</b><span>{escape(str(study_bundle.get('links_file', 'links.md')))}</span></div>
+          </div>
+          <p class="meta">{escape(_label(language, 'bundle_policy'))}: {escape(str(study_bundle.get('policy', _label(language, 'not_specified'))))}</p>
+          <div class="bundle-controls">
+            <input type="search" data-bundle-search placeholder="{escape(_label(language, 'full_resource_table'))}">
+            <div class="segmented">{filter_buttons}</div>
+          </div>
+          <div class="bundle-table-shell">
+            <table class="bundle-table">
+              <thead>
+                <tr>
+                  <th class="num-cell">#</th>
+                  <th>{escape(_label(language, 'title'))}</th>
+                  <th>{escape(_label(language, 'download_status'))}</th>
+                  <th>{escape(_label(language, 'route'))}</th>
+                  <th>{escape(_label(language, 'file_or_link'))}</th>
+                  <th>{escape(_label(language, 'attempts'))}</th>
+                  <th>{escape(_label(language, 'retry'))}</th>
+                </tr>
+              </thead>
+              <tbody>{''.join(bundle_rows) or f'<tr><td colspan="7">{escape(_label(language, "not_available"))}</td></tr>'}</tbody>
+            </table>
+          </div>
+        </section>
+        """
+
     resource_library_panel = ""
     resource_library = roadmap.get("resource_library", [])
     if resource_library:
@@ -757,6 +975,37 @@ def render_html(roadmap: dict[str, Any]) -> str:
     manual_sources = ", ".join(live_search.get("manual_link_only_sources", []) or [])
     manual_note = f"; manual-link-only: {escape(manual_sources)}" if manual_sources else ""
     html_lang = "zh-CN" if language == "zh-CN" else "en"
+    download_manager_script = """
+<script>
+(() => {
+  const panel = document.querySelector('.download-manager-panel');
+  if (!panel) return;
+  const rows = Array.from(panel.querySelectorAll('.bundle-table tbody tr'));
+  const search = panel.querySelector('[data-bundle-search]');
+  const buttons = Array.from(panel.querySelectorAll('[data-bundle-filter]'));
+  let activeStatus = 'all';
+  function applyFilter() {
+    const query = (search?.value || '').trim().toLowerCase();
+    rows.forEach((row) => {
+      const status = row.dataset.status || '';
+      const title = row.dataset.title || row.textContent.toLowerCase();
+      const matchesStatus = activeStatus === 'all' || status === activeStatus;
+      const matchesQuery = !query || title.includes(query);
+      row.hidden = !(matchesStatus && matchesQuery);
+    });
+  }
+  buttons.forEach((button) => {
+    if (button.dataset.bundleFilter === 'all') button.classList.add('is-active');
+    button.addEventListener('click', () => {
+      activeStatus = button.dataset.bundleFilter || 'all';
+      buttons.forEach((item) => item.classList.toggle('is-active', item === button));
+      applyFilter();
+    });
+  });
+  search?.addEventListener('input', applyFilter);
+})();
+</script>
+"""
 
     return f"""<!doctype html>
 <html lang="{html_lang}">
@@ -806,6 +1055,26 @@ def render_html(roadmap: dict[str, Any]) -> str:
     .badge.selected {{ background:#e7f6ec; color:#247144; }}
     .badge.generated {{ background:#fff4d7; color:#7a5a00; }}
     .badge.omitted {{ background:#f1f4f8; color:#647085; }}
+    .badge.downloaded, .badge.copied {{ background:#e7f6ec; color:#247144; }}
+    .badge.snapshotted {{ background:#e8f4ff; color:#255f9f; }}
+    .badge.link-only {{ background:#fff4d7; color:#7a5a00; }}
+    .badge.failed {{ background:#fdecec; color:#9b2f2d; }}
+    .bundle-list .badge {{ margin-left:8px; margin-right:8px; }}
+    .bundle-dashboard {{ grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); }}
+    .bundle-controls {{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin:14px 0 10px; flex-wrap:wrap; }}
+    .bundle-controls input {{ min-width:min(100%,260px); flex:1 1 260px; border:1px solid #d8e3ef; border-radius:8px; padding:9px 11px; font:inherit; color:var(--ink); background:#fff; }}
+    .segmented {{ display:flex; gap:6px; flex-wrap:wrap; }}
+    .segmented button {{ border:1px solid #d8e3ef; border-radius:8px; background:#f7fafd; color:#41607e; padding:7px 10px; font:inherit; font-size:13px; font-weight:700; cursor:pointer; }}
+    .segmented button.is-active {{ background:#255f9f; border-color:#255f9f; color:#fff; }}
+    .bundle-table-shell {{ max-height:520px; overflow:auto; border:1px solid #dfe8f3; border-radius:8px; background:#fff; }}
+    .bundle-table {{ width:100%; min-width:860px; table-layout:fixed; border-collapse:separate; border-spacing:0; }}
+    .bundle-table th, .bundle-table td {{ padding:10px 11px; border-bottom:1px solid #e7edf5; vertical-align:top; text-align:left; overflow-wrap:anywhere; word-break:break-word; }}
+    .bundle-table th {{ position:sticky; top:0; z-index:1; background:#eef4fb; color:#41607e; font-size:12px; text-transform:uppercase; }}
+    .bundle-table th:nth-child(1), .bundle-table td:nth-child(1) {{ width:48px; text-align:right; }}
+    .bundle-table th:nth-child(2), .bundle-table td:nth-child(2) {{ width:28%; }}
+    .bundle-table th:nth-child(5), .bundle-table td:nth-child(5) {{ width:28%; }}
+    .bundle-table th:nth-child(6), .bundle-table td:nth-child(6) {{ width:86px; text-align:right; }}
+    .title-cell strong, .title-cell .meta, .table-link {{ display:block; min-width:0; }}
     .mini-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:10px; }}
     ul {{ margin:6px 0 0; padding-left:18px; }}
     li {{ margin:4px 0; line-height:1.42; }}
@@ -824,6 +1093,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
       .phase-card {{ grid-template-columns:42px minmax(0,1fr); }}
       .phase-body {{ padding:14px; }}
       .resource-grid, .library-grid {{ grid-template-columns:1fr; }}
+      .bundle-table {{ min-width:720px; }}
     }}
     @media (max-width:520px) {{
       .summary-grid, .info-grid, .mini-grid {{ grid-template-columns:1fr; }}
@@ -849,6 +1119,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
   {quality_panel}
   {route_panel}
   {next_actions_panel}
+  {study_bundle_panel}
   {resource_library_panel}
   <section class="graph-panel">
     <h2>{escape(_label(language, 'mastery_graph'))}</h2>
@@ -864,6 +1135,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
     <p class="meta">{escape(_label(language, 'live_search'))}: {escape(str(live_search.get('status', 'not_requested')))}{manual_note}</p>
   </section>
 </main>
+{download_manager_script}
 </body>
 </html>
 """

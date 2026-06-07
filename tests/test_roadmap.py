@@ -845,6 +845,72 @@ def test_reports_show_quality_route_audit_and_next_actions():
     assert "Plan Quality" in svg
 
 
+def test_reports_render_full_download_manager_table_for_large_study_bundles():
+    roadmap = build_roadmap(
+        LearnerProfile(goal="build a practical resource-heavy diffusion study path", output_language="en", target_kind="field"),
+        [
+            Resource(
+                title="Diffusion guide",
+                url="https://example.com/diffusion",
+                source="course",
+                type="article",
+                language="en",
+                concepts=["diffusion models"],
+                estimated_minutes=180,
+                trust_score=0.8,
+                critical_path_role="focused-support",
+            )
+        ],
+    )
+    bundle_resources = []
+    for index in range(1, 19):
+        status = "failed" if index == 18 else "downloaded"
+        bundle_resources.append(
+            {
+                "index": index,
+                "title": f"Long Resource {index} With Enough Words To Require Wrapping In The Download Manager Table",
+                "source": "arxiv" if index % 2 else "github",
+                "type": "paper" if index % 2 else "repository",
+                "status": status,
+                "route_status": "selected" if index <= 3 else "omitted",
+                "selected": index <= 3,
+                "file": f"{index:02d}-long-resource-{index}.pdf" if status != "failed" else "",
+                "download_url": f"https://example.com/resource-{index}.pdf",
+                "retryable": status == "failed",
+                "attempts": 2 if status == "failed" else 1,
+                "reason": "temporary network failure" if status == "failed" else "",
+            }
+        )
+    roadmap["study_bundle"] = {
+        "manifest_file": "study_bundle_manifest.json",
+        "links_file": "links.md",
+        "download_manager": {
+            "download_queue_file": "download_queue.json",
+            "retry_file": "retry_failed.md",
+            "completed": 17,
+            "retryable": 1,
+        },
+        "summary": {"downloaded": 17, "failed": 1, "retryable": 1, "completed": 17, "total": 18},
+        "policy": "Test bundle policy.",
+        "resources": bundle_resources,
+    }
+
+    markdown = render_markdown(roadmap)
+    html = render_html(roadmap)
+
+    assert "## Download Manager" in markdown
+    assert "Long Resource 18" in markdown
+    assert "download-manager-panel" in html
+    assert "bundle-table-shell" in html
+    assert "data-bundle-filter" in html
+    assert "download_queue.json" in html
+    assert "retry_failed.md" in html
+    assert "Long Resource 1 With Enough Words" in html
+    assert "Long Resource 18 With Enough Words" in html
+    assert ".bundle-table" in html
+    assert "table-layout:fixed" in html
+
+
 def test_planning_paper_route_exposes_books_papers_and_validation_tools():
     profile = LearnerProfile(
         goal="fully master Teaching LLMs to Plan with PDDL symbolic planning PlanBench and logical chain-of-thought",

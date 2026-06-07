@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import copy
 import json
 import re
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
 from fields_study_flow.models import Resource
@@ -26,6 +27,7 @@ DOWNLOADABLE_EXTENSIONS = {
 }
 SKIP_DOWNLOAD_TYPES = {"video"}
 DISALLOWED_HOST_TERMS = ("z-lib", "zlibrary", "sci-hub", "scihub", "libgen", "annas-archive", "annasarchive")
+ProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def bundle_study_resources(
@@ -36,6 +38,8 @@ def bundle_study_resources(
     timeout: float = 20.0,
     max_bytes: int = 80 * 1024 * 1024,
     client: Any | None = None,
+    retries: int = 2,
+    progress: ProgressCallback | None = None,
 ) -> dict[str, Any]:
     """Copy or download the full study resource library into a private bundle.
 
@@ -48,6 +52,7 @@ def bundle_study_resources(
 
     resource_dir.mkdir(parents=True, exist_ok=True)
     bundled_resources = _bundle_resources(resources)
+    bundle_total = len(bundled_resources)
     library_meta = _library_metadata_by_key(roadmap)
     entries: list[dict[str, Any]] = []
     used_names: set[str] = set()
@@ -71,9 +76,34 @@ def bundle_study_resources(
 
     try:
         for index, resource in enumerate(bundled_resources, start=1):
-            entry = _bundle_one_resource(resource_dir, index, resource, http_client, timeout, max_bytes, used_names)
+            _emit_progress(progress, {"event": "start", "index": index, "total": bundle_total, "title": resource.title})
+            entry = _bundle_one_resource(
+                resource_dir,
+                index,
+                bundle_total,
+                resource,
+                http_client,
+                timeout,
+                max_bytes,
+                used_names,
+                max(0, retries),
+                progress,
+            )
             entry.update(library_meta.get(_resource_key(resource), {}))
             entries.append(entry)
+            _emit_progress(
+                progress,
+                {
+                    "event": "finish",
+                    "index": index,
+                    "total": bundle_total,
+                    "title": resource.title,
+                    "status": entry.get("status", "unknown"),
+                    "file": entry.get("file"),
+                    "retryable": entry.get("retryable", False),
+                    "attempts": entry.get("attempts", 0),
+                },
+            )
         bundled_keys = {_resource_key(resource) for resource in bundled_resources}
         entries.extend(_library_only_entries(roadmap, bundled_keys))
     finally:
@@ -90,9 +120,68 @@ def bundle_study_resources(
         "summary": _summary(entries),
         "resources": entries,
     }
+    manifest["download_manager"] = _download_manager(manifest)
     (resource_dir / "study_bundle_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     (resource_dir / "links.md").write_text(_render_links_md(manifest), encoding="utf-8")
+    (resource_dir / manifest["download_manager"]["download_queue_file"]).write_text(
+        json.dumps(_download_queue(manifest), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    (resource_dir / manifest["download_manager"]["retry_file"]).write_text(_render_retry_md(manifest), encoding="utf-8")
     return manifest
+
+
+def attach_study_bundle(roadmap: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
+    """Attach a shareable bundle summary to a roadmap.
+
+    The full manifest is intentionally local-only because it contains the
+    absolute resource directory. Reports only need the status summary, relative
+    file names, public URLs, and failure reasons so users can see what was
+    actually downloaded, snapshotted, or left as a link.
+    """
+
+    updated = copy.deepcopy(roadmap)
+    updated["study_bundle"] = public_bundle_summary(manifest)
+    return updated
+
+
+def public_bundle_summary(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "manifest_file": "study_bundle_manifest.json",
+        "links_file": "links.md",
+        "download_manager": dict(manifest.get("download_manager", {})),
+        "policy": manifest.get("policy", ""),
+        "summary": dict(manifest.get("summary", {})),
+        "resources": [
+            _public_bundle_entry(entry)
+            for entry in manifest.get("resources", [])
+            if isinstance(entry, dict)
+        ],
+    }
+
+
+def _public_bundle_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "index",
+        "title",
+        "source",
+        "type",
+        "url",
+        "status",
+        "route_status",
+        "selected",
+        "selected_phase",
+        "route_reason",
+        "reason",
+        "file",
+        "download_url",
+        "snapshot_url",
+        "retryable",
+        "attempts",
+        "size_bytes",
+        "content_type",
+    }
+    return {key: value for key, value in entry.items() if key in allowed and value not in {None, ""}}
 
 
 def _bundle_resources(resources: list[Resource]) -> list[Resource]:
@@ -137,12 +226,15 @@ def _library_only_entries(roadmap: dict[str, Any], bundled_keys: set[tuple[str, 
             continue
         entries.append(
             {
+                "index": None,
                 "title": item.get("title", "Resource"),
                 "source": item.get("source", "roadmap"),
                 "type": item.get("type", "resource"),
                 "url": item.get("url", ""),
                 "status": "link-only",
                 "reason": "generated_or_report_only_resource",
+                "attempts": 0,
+                "retryable": False,
                 "route_status": item.get("route_status", "unknown"),
                 "selected": item.get("selected", False),
                 "selected_phase": item.get("selected_phase"),
@@ -155,17 +247,23 @@ def _library_only_entries(roadmap: dict[str, Any], bundled_keys: set[tuple[str, 
 def _bundle_one_resource(
     resource_dir: Path,
     index: int,
+    total: int,
     resource: Resource,
     client: Any | None,
     timeout: float,
     max_bytes: int,
     used_names: set[str],
+    retries: int,
+    progress: ProgressCallback | None,
 ) -> dict[str, Any]:
     base = {
+        "index": index,
         "title": resource.title,
         "source": resource.source,
         "type": resource.type,
         "url": resource.to_dict().get("url", resource.url),
+        "attempts": 0,
+        "retryable": False,
     }
     if resource.type in SKIP_DOWNLOAD_TYPES:
         return {**base, "status": "link-only", "reason": "video_resources_are_not_downloaded"}
@@ -179,47 +277,129 @@ def _bundle_one_resource(
             "status": "copied",
             "file": str(target.relative_to(resource_dir)),
             "source_path": str(local_path.resolve()),
+            "attempts": 1,
         }
 
     download_candidates, reason = _downloadable_candidates(resource)
     if client is None:
         if download_candidates:
-            return {**base, "status": "failed", "download_url": download_candidates[0][0], "reason": "http_client_unavailable"}
+            return {
+                **base,
+                "status": "failed",
+                "download_url": download_candidates[0][0],
+                "reason": "http_client_unavailable",
+                "retryable": True,
+            }
         return {**base, "status": "link-only", "reason": reason}
 
     failures: list[str] = []
+    attempt_log: list[dict[str, Any]] = []
+    max_attempts = retries + 1
     for downloadable_url, suffix in download_candidates:
         target = _target_path(resource_dir, index, resource.title, suffix or _suffix_for_resource(resource) or ".resource", used_names)
-        try:
-            _download_file(client, downloadable_url, target, timeout, max_bytes)
-        except Exception as exc:
-            failures.append(f"{downloadable_url}: {exc}")
-            if target.exists():
-                target.unlink()
-            used_names.discard(target.name.lower())
-            continue
-        return {**base, "status": "downloaded", "download_url": downloadable_url, "file": str(target.relative_to(resource_dir))}
+        for attempt in range(1, max_attempts + 1):
+            _emit_progress(
+                progress,
+                {
+                    "event": "attempt",
+                    "action": "download",
+                    "index": index,
+                    "total": total,
+                    "title": resource.title,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "url": downloadable_url,
+                },
+            )
+            try:
+                file_meta = _download_file(client, downloadable_url, target, timeout, max_bytes)
+            except Exception as exc:
+                message = str(exc)
+                failures.append(f"{downloadable_url} attempt {attempt}/{max_attempts}: {message}")
+                attempt_log.append({"url": downloadable_url, "attempt": attempt, "status": "failed", "error": message})
+                if target.exists():
+                    target.unlink()
+                used_names.discard(target.name.lower())
+                continue
+            attempt_log.append({"url": downloadable_url, "attempt": attempt, "status": "succeeded"})
+            return {
+                **base,
+                "status": "downloaded",
+                "download_url": downloadable_url,
+                "file": str(target.relative_to(resource_dir)),
+                "attempts": len(attempt_log),
+                "attempt_log": attempt_log,
+                **file_meta,
+            }
+
+    if download_candidates and failures:
+        return {
+            **base,
+            "status": "failed",
+            "download_url": download_candidates[0][0],
+            "reason": "; ".join(failures),
+            "attempts": len(attempt_log),
+            "attempt_log": attempt_log,
+            "retryable": True,
+        }
 
     if _can_snapshot_webpage(resource):
         target = _target_path(resource_dir, index, f"{resource.title}-snapshot", ".html", used_names)
-        try:
-            _download_html_snapshot(client, resource.url.strip(), target, timeout, max_bytes)
-        except Exception as exc:
-            if target.exists():
-                target.unlink()
-            used_names.discard(target.name.lower())
-            detail = "; ".join(failures) if failures else reason
-            return {**base, "status": "link-only", "reason": f"{detail}; snapshot_failed: {exc}"}
+        for attempt in range(1, max_attempts + 1):
+            _emit_progress(
+                progress,
+                {
+                    "event": "attempt",
+                    "action": "snapshot",
+                    "index": index,
+                    "total": total,
+                    "title": resource.title,
+                    "attempt": attempt,
+                    "max_attempts": max_attempts,
+                    "url": resource.url.strip(),
+                },
+            )
+            try:
+                file_meta = _download_html_snapshot(client, resource.url.strip(), target, timeout, max_bytes)
+            except Exception as exc:
+                message = str(exc)
+                failures.append(f"{resource.url.strip()} snapshot attempt {attempt}/{max_attempts}: {message}")
+                attempt_log.append({"url": resource.url.strip(), "attempt": attempt, "status": "failed", "error": message, "action": "snapshot"})
+                if target.exists():
+                    target.unlink()
+                used_names.discard(target.name.lower())
+                continue
+            attempt_log.append({"url": resource.url.strip(), "attempt": attempt, "status": "succeeded", "action": "snapshot"})
+            return {
+                **base,
+                "status": "snapshotted",
+                "file": str(target.relative_to(resource_dir)),
+                "snapshot_url": resource.url.strip(),
+                "reason": "saved_public_html_snapshot",
+                "attempts": len(attempt_log),
+                "attempt_log": attempt_log,
+                **file_meta,
+            }
+        detail = "; ".join(failures) if failures else reason
         return {
             **base,
-            "status": "snapshotted",
-            "file": str(target.relative_to(resource_dir)),
-            "snapshot_url": resource.url.strip(),
-            "reason": "saved_public_html_snapshot",
+            "status": "link-only",
+            "reason": f"{detail}; snapshot_failed",
+            "attempts": len(attempt_log),
+            "attempt_log": attempt_log,
+            "retryable": True,
         }
 
     if failures:
-        return {**base, "status": "failed", "download_url": download_candidates[0][0], "reason": "; ".join(failures)}
+        return {
+            **base,
+            "status": "failed",
+            "download_url": download_candidates[0][0],
+            "reason": "; ".join(failures),
+            "attempts": len(attempt_log),
+            "attempt_log": attempt_log,
+            "retryable": True,
+        }
     return {**base, "status": "link-only", "reason": reason}
 
 
@@ -295,7 +475,7 @@ def _github_archive_urls(parsed: Any) -> list[str]:
     ]
 
 
-def _download_file(client: Any, url: str, target: Path, timeout: float, max_bytes: int) -> None:
+def _download_file(client: Any, url: str, target: Path, timeout: float, max_bytes: int) -> dict[str, Any]:
     with client.stream("GET", url, timeout=timeout) as response:
         response.raise_for_status()
         content_type = str(response.headers.get("content-type", "")).lower()
@@ -310,9 +490,10 @@ def _download_file(client: Any, url: str, target: Path, timeout: float, max_byte
                 if total > max_bytes:
                     raise RuntimeError(f"file_exceeds_limit_{max_bytes}_bytes")
                 handle.write(chunk)
+        return {"size_bytes": total, "content_type": content_type}
 
 
-def _download_html_snapshot(client: Any, url: str, target: Path, timeout: float, max_bytes: int) -> None:
+def _download_html_snapshot(client: Any, url: str, target: Path, timeout: float, max_bytes: int) -> dict[str, Any]:
     with client.stream("GET", url, timeout=timeout) as response:
         response.raise_for_status()
         content_type = str(response.headers.get("content-type", "")).lower()
@@ -327,6 +508,7 @@ def _download_html_snapshot(client: Any, url: str, target: Path, timeout: float,
                 if total > max_bytes:
                     raise RuntimeError(f"file_exceeds_limit_{max_bytes}_bytes")
                 handle.write(chunk)
+        return {"size_bytes": total, "content_type": content_type}
 
 
 def _can_snapshot_webpage(resource: Resource) -> bool:
@@ -384,8 +566,78 @@ def _summary(entries: list[dict[str, Any]]) -> dict[str, int]:
     for entry in entries:
         status = str(entry.get("status", "failed"))
         statuses[status] = statuses.get(status, 0) + 1
+    statuses["completed"] = statuses.get("copied", 0) + statuses.get("downloaded", 0) + statuses.get("snapshotted", 0)
+    statuses["retryable"] = sum(1 for entry in entries if entry.get("retryable"))
     statuses["total"] = len(entries)
     return statuses
+
+
+def _download_manager(manifest: dict[str, Any]) -> dict[str, Any]:
+    summary = manifest.get("summary", {})
+    return {
+        "download_queue_file": "download_queue.json",
+        "retry_file": "retry_failed.md",
+        "completed": int(summary.get("completed", 0)),
+        "retryable": int(summary.get("retryable", 0)),
+        "failed": int(summary.get("failed", 0)),
+        "total": int(summary.get("total", 0)),
+        "retry_note": "Rerun the same fields-study-flow command after fixing network or access issues; existing bundle files are kept.",
+    }
+
+
+def _download_queue(manifest: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "summary": manifest.get("summary", {}),
+        "policy": manifest.get("policy", ""),
+        "retry_file": manifest.get("download_manager", {}).get("retry_file", "retry_failed.md"),
+        "resources": [_queue_entry(item) for item in manifest.get("resources", []) if isinstance(item, dict)],
+    }
+
+
+def _queue_entry(item: dict[str, Any]) -> dict[str, Any]:
+    keys = [
+        "index",
+        "title",
+        "source",
+        "type",
+        "url",
+        "status",
+        "route_status",
+        "selected",
+        "file",
+        "download_url",
+        "snapshot_url",
+        "retryable",
+        "attempts",
+        "reason",
+        "size_bytes",
+        "content_type",
+    ]
+    return {key: item[key] for key in keys if key in item and item[key] not in {None, ""}}
+
+
+def _render_retry_md(manifest: dict[str, Any]) -> str:
+    retryable = [item for item in manifest.get("resources", []) if isinstance(item, dict) and item.get("retryable")]
+    lines = [
+        "# Retry Failed Downloads",
+        "",
+        manifest.get("download_manager", {}).get("retry_note", "Rerun the same command after fixing network or access issues."),
+        "",
+    ]
+    if not retryable:
+        lines.extend(["No retryable failed resources.", ""])
+        return "\n".join(lines)
+    lines.extend(["## Retry Queue", ""])
+    for item in retryable:
+        lines.append(f"- **{item.get('title', 'Resource')}** [{item.get('status', 'unknown')}]")
+        retry_url = item.get("download_url") or item.get("snapshot_url") or item.get("url")
+        if retry_url:
+            lines.append(f"  - Retry URL: {retry_url}")
+        lines.append(f"  - Attempts: {item.get('attempts', 0)}")
+        if item.get("reason"):
+            lines.append(f"  - Last error: {item['reason']}")
+    lines.append("")
+    return "\n".join(lines)
 
 
 def _render_links_md(manifest: dict[str, Any]) -> str:
@@ -393,6 +645,9 @@ def _render_links_md(manifest: dict[str, Any]) -> str:
         "# Study Resource Bundle",
         "",
         manifest["policy"],
+        "",
+        f"Download queue: `{manifest.get('download_manager', {}).get('download_queue_file', 'download_queue.json')}`",
+        f"Retry failed: `{manifest.get('download_manager', {}).get('retry_file', 'retry_failed.md')}`",
         "",
         "## Resources",
         "",
@@ -407,7 +662,16 @@ def _render_links_md(manifest: dict[str, Any]) -> str:
             lines.append(f"  - Link: {item['url']}")
         if item.get("download_url"):
             lines.append(f"  - Download URL: {item['download_url']}")
+        if item.get("retryable"):
+            lines.append("  - Retryable: yes")
+        if item.get("attempts"):
+            lines.append(f"  - Attempts: {item['attempts']}")
         if item.get("reason"):
             lines.append(f"  - Note: {item['reason']}")
     lines.append("")
     return "\n".join(lines)
+
+
+def _emit_progress(progress: ProgressCallback | None, event: dict[str, Any]) -> None:
+    if progress is not None:
+        progress(event)

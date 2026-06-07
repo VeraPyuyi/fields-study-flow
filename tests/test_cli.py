@@ -169,14 +169,14 @@ The method optimizes a residual.
 
 
 def test_cli_paper_resource_dir_copies_local_pdf(tmp_path):
-    pdf = tmp_path / "private-symbolic-planning.pdf"
+    pdf = tmp_path / "private-zebra-calculus.pdf"
     pdf.write_bytes(
         b"""%PDF-1.4
-Teaching LLMs to Plan
+Private Zebra Calculus
 Abstract
-We study PDDL symbolic planning.
+We study a private local-only learning topic.
 1 Method
-The method verifies preconditions and effects.
+The method verifies a small local note.
 %%EOF"""
     )
     output_dir = tmp_path / "out"
@@ -210,6 +210,17 @@ The method verifies preconditions and effects.
     assert copied.exists()
     assert copied.read_bytes() == pdf.read_bytes()
     assert "study_bundle_manifest.json" in result.stdout
+    roadmap = json.loads((output_dir / "roadmap.json").read_text(encoding="utf-8"))
+    assert roadmap["study_bundle"]["summary"]["copied"] == 1
+    assert roadmap["study_bundle"]["resources"][0]["status"] == "copied"
+    dumped = json.dumps(roadmap, ensure_ascii=False)
+    assert str(resource_dir) not in dumped
+    assert str(pdf) not in dumped
+    html = (output_dir / "roadmap.html").read_text(encoding="utf-8")
+    markdown = (output_dir / "roadmap.md").read_text(encoding="utf-8")
+    assert "Study Asset Bundle" in html
+    assert "study_bundle_manifest.json" in html
+    assert "Study Asset Bundle" in markdown
 
 
 def test_cli_interactive_collects_learning_language_and_storage_preferences(tmp_path):
@@ -252,6 +263,7 @@ def test_cli_interactive_collects_learning_language_and_storage_preferences(tmp_
     assert roadmap["profile"]["route_depth"] == "fastest"
     assert roadmap["profile"]["target_kind"] == "paper"
     assert "Copy/download the full study resource library" in result.stdout
+    assert "是否复制或下载学习资料包" in result.stdout
     assert not resource_dir.exists()
 
 

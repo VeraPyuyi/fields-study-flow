@@ -39,6 +39,23 @@ class FakeHtmlClient(FakeClient):
         return FakeStream(b"<!doctype html><title>open docs</title>", "text/html")
 
 
+class FailingStream(FakeStream):
+    def raise_for_status(self) -> None:
+        raise RuntimeError("temporary network failure")
+
+
+class FlakyClient(FakeClient):
+    def __init__(self, failures_before_success: int) -> None:
+        super().__init__()
+        self.failures_before_success = failures_before_success
+
+    def stream(self, method: str, url: str, timeout: float | None = None):
+        self.urls.append(url)
+        if len(self.urls) <= self.failures_before_success:
+            return FailingStream(b"", "application/pdf")
+        return FakeStream(b"%PDF-1.4\nretry success\n%%EOF")
+
+
 def test_bundle_copies_explicit_local_resources(tmp_path):
     paper = tmp_path / "private-paper.pdf"
     paper.write_bytes(b"%PDF-1.4\nprivate paper\n%%EOF")
@@ -86,6 +103,63 @@ def test_bundle_downloads_arxiv_pdf_and_keeps_video_as_link(tmp_path):
     assert any(item.get("reason") == "video_resources_are_not_downloaded" for item in manifest["resources"])
     dumped = json.dumps(manifest, ensure_ascii=False)
     assert "Attention Is All You Need" in dumped
+
+
+def test_bundle_retries_transient_download_failures_and_records_progress(tmp_path):
+    paper = Resource(
+        title="Attention Is All You Need",
+        url="https://arxiv.org/abs/1706.03762",
+        source="arxiv",
+        type="paper",
+    )
+    client = FlakyClient(failures_before_success=1)
+    events: list[dict[str, object]] = []
+
+    manifest = bundle_study_resources(
+        tmp_path / "bundle",
+        [paper],
+        {"phases": []},
+        client=client,
+        retries=1,
+        progress=events.append,
+    )
+
+    assert client.urls == ["https://arxiv.org/pdf/1706.03762.pdf", "https://arxiv.org/pdf/1706.03762.pdf"]
+    entry = manifest["resources"][0]
+    assert entry["status"] == "downloaded"
+    assert entry["attempts"] == 2
+    assert [attempt["status"] for attempt in entry["attempt_log"]] == ["failed", "succeeded"]
+    assert manifest["summary"]["completed"] == 1
+    assert manifest["summary"]["retryable"] == 0
+    assert manifest["download_manager"]["download_queue_file"] == "download_queue.json"
+    assert (tmp_path / "bundle" / "download_queue.json").exists()
+    assert (tmp_path / "bundle" / "retry_failed.md").exists()
+    assert [event["event"] for event in events] == ["start", "attempt", "attempt", "finish"]
+
+
+def test_bundle_marks_exhausted_downloads_retryable_and_writes_retry_queue(tmp_path):
+    paper = Resource(
+        title="Retryable Planning Paper",
+        url="https://arxiv.org/abs/2509.13351",
+        source="arxiv",
+        type="paper",
+    )
+    client = FlakyClient(failures_before_success=9)
+
+    manifest = bundle_study_resources(tmp_path / "bundle", [paper], {"phases": []}, client=client, retries=1)
+
+    entry = manifest["resources"][0]
+    assert entry["status"] == "failed"
+    assert entry["retryable"] is True
+    assert entry["attempts"] == 2
+    assert manifest["summary"]["failed"] == 1
+    assert manifest["summary"]["retryable"] == 1
+    retry_md = (tmp_path / "bundle" / "retry_failed.md").read_text(encoding="utf-8")
+    queue = json.loads((tmp_path / "bundle" / "download_queue.json").read_text(encoding="utf-8"))
+    assert "Retryable Planning Paper" in retry_md
+    assert "https://arxiv.org/pdf/2509.13351.pdf" in retry_md
+    assert queue["resources"][0]["retryable"] is True
+    assert queue["resources"][0]["status"] == "failed"
 
 
 def test_bundle_downloads_github_repository_archive(tmp_path):

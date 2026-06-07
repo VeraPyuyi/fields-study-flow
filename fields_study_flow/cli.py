@@ -14,7 +14,7 @@ from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve_paper_metadata
 from fields_study_flow.ranking import rank_resources
-from fields_study_flow.resource_bundle import bundle_study_resources
+from fields_study_flow.resource_bundle import attach_study_bundle, bundle_study_resources
 from fields_study_flow.roadmap import build_roadmap, write_outputs
 from fields_study_flow.sources import SourceRegistry
 
@@ -66,6 +66,8 @@ def build_parser() -> argparse.ArgumentParser:
     roadmap.add_argument("--local-resource", action="append", default=[], help="Explicit local file or folder to analyze as a shortcut candidate.")
     roadmap.add_argument("--output-dir", default="fields-study-flow-output")
     roadmap.add_argument("--resource-dir", help="Copy/download the full study resource library into this private local directory.")
+    roadmap.add_argument("--download-retries", type=int, default=2, help="Retry each downloadable resource this many times after the first failed attempt.")
+    roadmap.add_argument("--quiet-downloads", action="store_true", help="Do not print per-resource bundle progress.")
     roadmap.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
     roadmap.add_argument("--offline", action="store_true", help="Use the bundled deterministic resource catalog and disable live search.")
     roadmap.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
@@ -81,6 +83,8 @@ def build_parser() -> argparse.ArgumentParser:
     paper.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
     paper.add_argument("--output-dir", default="fields-study-flow-paper-output")
     paper.add_argument("--resource-dir", help="Copy/download the full study resource library into this private local directory.")
+    paper.add_argument("--download-retries", type=int, default=2, help="Retry each downloadable resource this many times after the first failed attempt.")
+    paper.add_argument("--quiet-downloads", action="store_true", help="Do not print per-resource bundle progress.")
     paper.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
 
     ingest = subparsers.add_parser("ingest-url", help="Parse a user-provided resource URL at metadata level.")
@@ -164,9 +168,18 @@ def _roadmap(args: argparse.Namespace) -> int:
         resources.extend(analyze_local_resources(args.local_resource, args.goal))
     ranked = rank_resources(resources, profile)
     roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics)
-    write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
+    manifest = None
     if args.resource_dir:
-        manifest = bundle_study_resources(Path(args.resource_dir), ranked, roadmap)
+        manifest = bundle_study_resources(
+            Path(args.resource_dir),
+            ranked,
+            roadmap,
+            retries=max(0, args.download_retries),
+            progress=None if args.quiet_downloads else _print_bundle_progress,
+        )
+        roadmap = attach_study_bundle(roadmap, manifest)
+    write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
+    if manifest is not None:
         print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
         print(f"resources: {manifest['summary']}")
     print(Path(args.output_dir).resolve())
@@ -204,9 +217,18 @@ def _paper(args: argparse.Namespace) -> int:
         resources = [resource for resource in resources if resource.type != "video"]
     ranked = rank_resources(resources, profile)
     roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics)
-    write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
+    manifest = None
     if args.resource_dir:
-        manifest = bundle_study_resources(Path(args.resource_dir), ranked, roadmap)
+        manifest = bundle_study_resources(
+            Path(args.resource_dir),
+            ranked,
+            roadmap,
+            retries=max(0, args.download_retries),
+            progress=None if args.quiet_downloads else _print_bundle_progress,
+        )
+        roadmap = attach_study_bundle(roadmap, manifest)
+    write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
+    if manifest is not None:
         print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
         print(f"resources: {manifest['summary']}")
     print(Path(args.output_dir).resolve())
@@ -214,36 +236,36 @@ def _paper(args: argparse.Namespace) -> int:
 
 
 def _interactive_update_args(args: argparse.Namespace, mode: str) -> None:
-    print("fields-study-flow interactive setup")
-    print("Press Enter to keep the value shown in brackets.")
+    print("fields-study-flow interactive setup / 交互式设置")
+    print("Press Enter to keep the value shown in brackets. / 直接回车保留方括号中的默认值。")
     if mode == "paper":
-        args.url = _prompt_text("Paper URL / DOI / local PDF path", args.url)
-        args.goal = _prompt_text("Learning goal", args.goal)
-        args.with_videos = _prompt_bool("Include video resources as links", args.with_videos)
+        args.url = _prompt_text("Paper URL / DOI / local PDF path / 论文 URL、DOI 或本地 PDF 路径", args.url)
+        args.goal = _prompt_text("Learning goal / 学习目标", args.goal)
+        args.with_videos = _prompt_bool("Include video resources as links / 是否保留视频资源链接", args.with_videos)
     else:
-        args.goal = _prompt_text("Learning goal", args.goal)
-    args.output_language = _prompt_choice("Output language", args.output_language, ["zh-CN", "en", "bilingual"])
-    args.resource_language = _prompt_choice("Resource language preference", args.resource_language, ["zh-first", "en-first", "balanced", "zh-only", "en-only"])
-    args.route_depth = _prompt_choice("Route depth", args.route_depth or "balanced", ["fastest", "balanced", "complete"])
-    args.learning_style = _prompt_choice("Learning style", args.learning_style or "practical", ["practical", "theory", "video", "auto"])
+        args.goal = _prompt_text("Learning goal / 学习目标", args.goal)
+    args.output_language = _prompt_choice("Output language / 输出语言", args.output_language, ["zh-CN", "en", "bilingual"])
+    args.resource_language = _prompt_choice("Resource language preference / 资料语言偏好", args.resource_language, ["zh-first", "en-first", "balanced", "zh-only", "en-only"])
+    args.route_depth = _prompt_choice("Route depth / 路线深度", args.route_depth or "balanced", ["fastest", "balanced", "complete"])
+    args.learning_style = _prompt_choice("Learning style / 学习风格", args.learning_style or "practical", ["practical", "theory", "video", "auto"])
     args.target_kind = _prompt_choice(
-        "Target kind",
+        "Target kind / 目标类型",
         args.target_kind or getattr(args, "default_target_kind", "auto"),
         ["paper", "field", "course", "auto"],
     )
-    local_paths = _prompt_text("Local resource path(s), separated by ;", ";".join(args.local_resource or []), required=False)
+    local_paths = _prompt_text("Local resource path(s), separated by ; / 本地资料路径，多个用 ; 分隔", ";".join(args.local_resource or []), required=False)
     args.local_resource = [path.strip() for path in local_paths.split(";") if path.strip()]
-    args.output_dir = _prompt_text("Report output directory", args.output_dir)
-    want_bundle = _prompt_bool("Copy/download the full study resource library to a private folder", bool(args.resource_dir))
+    args.output_dir = _prompt_text("Report output directory / 报告输出目录", args.output_dir)
+    want_bundle = _prompt_bool("Copy/download the full study resource library to a private folder / 是否复制或下载学习资料包", bool(args.resource_dir))
     if want_bundle:
         default_resource_dir = args.resource_dir or str(Path(args.output_dir) / "study_resources")
-        args.resource_dir = _prompt_text("Resource download/copy directory", default_resource_dir)
+        args.resource_dir = _prompt_text("Resource download/copy directory / 资料下载或复制目录", default_resource_dir)
     else:
         args.resource_dir = None
     if mode == "roadmap":
-        args.offline = _prompt_bool("Use offline deterministic catalog only", args.offline)
+        args.offline = _prompt_bool("Use offline deterministic catalog only / 是否只使用离线内置资源目录", args.offline)
     if not getattr(args, "offline", False):
-        args.no_live_search = not _prompt_bool("Enable live open-source discovery", not args.no_live_search)
+        args.no_live_search = not _prompt_bool("Enable live open-source discovery / 是否启用开放来源实时发现", not args.no_live_search)
 
 
 def _prompt_text(label: str, current: str | None, *, required: bool = True) -> str:
@@ -277,6 +299,24 @@ def _prompt_bool(label: str, current: bool) -> bool:
         if value in {"n", "no", "false", "0"}:
             return False
         print("Choose y or n.")
+
+
+def _print_bundle_progress(event: dict[str, object]) -> None:
+    kind = str(event.get("event", ""))
+    index = event.get("index", "?")
+    total = event.get("total", "?")
+    title = event.get("title", "Resource")
+    if kind == "start":
+        print(f"[{index}/{total}] {title}")
+    elif kind == "attempt":
+        attempt = event.get("attempt", "?")
+        max_attempts = event.get("max_attempts", "?")
+        action = event.get("action", "download")
+        print(f"  {action} attempt {attempt}/{max_attempts}: {event.get('url', '')}")
+    elif kind == "finish":
+        status = event.get("status", "unknown")
+        target = event.get("file") or ("retryable" if event.get("retryable") else "link-only")
+        print(f"  -> {status}: {target}")
 
 
 def _paper_profile_goal(goal: str, target_resource: Resource, original_url: str) -> str:
