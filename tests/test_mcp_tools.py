@@ -223,11 +223,14 @@ def test_export_plan_writes_paper_lens_when_plan_has_target_paper(tmp_path):
         "safety_policy": ["Do not expose private paths."],
     }
 
-    result = exportPlan(plan, str(tmp_path))
+    result = exportPlan(plan, str(tmp_path), paperLensLanguage="zh-CN", paperLensDensity="key")
 
     assert (tmp_path / "paper_lens.html").exists()
     assert result["paper_lens_html"].endswith("paper_lens.html")
-    assert "paper_lens" in json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
+    exported = json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
+    assert "paper_lens" in exported
+    assert exported["paper_lens"]["explanation_summary"]["language"] == "zh-CN"
+    assert exported["paper_lens"]["explanation_summary"]["density"] == "key"
 
 
 def test_export_plan_writes_generated_artifact_template(tmp_path):

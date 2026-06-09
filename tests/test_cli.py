@@ -273,11 +273,41 @@ def test_cli_parsers_expose_bundle_scope_for_paper_and_roadmap():
     from fields_study_flow.cli import build_parser
 
     parser = build_parser()
-    roadmap_args = parser.parse_args(["roadmap", "--goal", "learn planning", "--bundle-scope", "selected", "--no-paper-lens"])
-    paper_args = parser.parse_args(["paper", "--url", "https://arxiv.org/abs/1706.03762", "--bundle-scope", "all", "--no-paper-lens"])
+    roadmap_args = parser.parse_args(
+        [
+            "roadmap",
+            "--goal",
+            "learn planning",
+            "--bundle-scope",
+            "selected",
+            "--paper-lens-language",
+            "auto",
+            "--paper-lens-density",
+            "dense",
+            "--no-paper-lens",
+        ]
+    )
+    paper_args = parser.parse_args(
+        [
+            "paper",
+            "--url",
+            "https://arxiv.org/abs/1706.03762",
+            "--bundle-scope",
+            "all",
+            "--paper-lens-language",
+            "zh-CN",
+            "--paper-lens-density",
+            "key",
+            "--no-paper-lens",
+        ]
+    )
 
     assert roadmap_args.bundle_scope == "selected"
     assert paper_args.bundle_scope == "all"
+    assert roadmap_args.paper_lens_language == "auto"
+    assert roadmap_args.paper_lens_density == "dense"
+    assert paper_args.paper_lens_language == "zh-CN"
+    assert paper_args.paper_lens_density == "key"
     assert roadmap_args.no_paper_lens is True
     assert paper_args.no_paper_lens is True
 

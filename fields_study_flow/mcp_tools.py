@@ -14,7 +14,7 @@ from fields_study_flow.live_search import search_live_resources
 from fields_study_flow.local_resources import analyze_local_resources
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve_paper_metadata
-from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html
+from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html, write_paper_lens_latex
 from fields_study_flow.rag import answer_from_bundle, apply_rag_to_resources, build_rag_index, load_bundle_rag_index, public_rag_evidence, retrieve_evidence
 from fields_study_flow.ranking import rank_resources
 from fields_study_flow.roadmap import build_roadmap, render_html, render_markdown, render_svg, sanitize_roadmap_for_export
@@ -175,6 +175,8 @@ def buildRoadmap(
     targetKind: str = "auto",
     liveSearch: dict[str, Any] | None = None,
     ragMode: str = "auto",
+    paperLensLanguage: str = "auto",
+    paperLensDensity: str = "dense",
 ) -> dict[str, Any]:
     learner = _profile_from_dict(
         {
@@ -192,6 +194,9 @@ def buildRoadmap(
     plan = build_roadmap(learner, resources, live_search=liveSearch, rag_evidence=rag_evidence)
     if rag_evidence:
         plan["rag_evidence"] = rag_evidence
+    plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity}
+    if has_target_paper(plan):
+        plan["paper_lens"] = build_paper_lens(plan, paper_lens_language=paperLensLanguage, paper_lens_density=paperLensDensity)
     return sanitize_roadmap_for_export(plan)
 
 
@@ -244,14 +249,17 @@ def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
     return {"valid": not issues, "issues": issues}
 
 
-def exportPlan(plan: dict[str, Any], outputDir: str) -> dict[str, str]:
+def exportPlan(plan: dict[str, Any], outputDir: str, paperLensLanguage: str = "auto", paperLensDensity: str = "dense") -> dict[str, str]:
     output = Path(outputDir)
     output.mkdir(parents=True, exist_ok=True)
     import json
 
-    public_plan = sanitize_roadmap_for_export(plan)
+    working_plan = dict(plan)
+    if has_target_paper(working_plan):
+        working_plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity}
+        working_plan["paper_lens"] = build_paper_lens(working_plan, paper_lens_language=paperLensLanguage, paper_lens_density=paperLensDensity)
+    public_plan = sanitize_roadmap_for_export(working_plan)
     if has_target_paper(public_plan):
-        public_plan["paper_lens"] = build_paper_lens(public_plan)
         outputs = list(public_plan.get("outputs", []))
         if "paper_lens.html" not in outputs:
             outputs.append("paper_lens.html")
@@ -261,6 +269,16 @@ def exportPlan(plan: dict[str, Any], outputDir: str) -> dict[str, str]:
     svg_target = output / "roadmap.svg"
     html_target = output / "roadmap.html"
     lens_target = output / "paper_lens.html"
+    if public_plan.get("paper_lens"):
+        latex_export = write_paper_lens_latex(output, public_plan)
+        if latex_export:
+            lens = public_plan.get("paper_lens", {}) if isinstance(public_plan.get("paper_lens"), dict) else {}
+            lens["latex_export"] = latex_export
+            public_plan["paper_lens"] = lens
+            for file_key in ("tex_file", "pdf_file"):
+                file_name = latex_export.get(file_key)
+                if file_name and file_name not in public_plan.get("outputs", []):
+                    public_plan.setdefault("outputs", []).append(str(file_name))
     json_target.write_text(json.dumps(public_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     md_target.write_text(render_markdown(public_plan), encoding="utf-8")
     svg_target.write_text(render_svg(public_plan), encoding="utf-8")
@@ -271,6 +289,11 @@ def exportPlan(plan: dict[str, Any], outputDir: str) -> dict[str, str]:
     result = {"roadmap_json": str(json_target), "roadmap_md": str(md_target), "roadmap_svg": str(svg_target), "roadmap_html": str(html_target)}
     if public_plan.get("paper_lens"):
         result["paper_lens_html"] = str(lens_target)
+        latex_export = public_plan.get("paper_lens", {}).get("latex_export", {}) if isinstance(public_plan.get("paper_lens"), dict) else {}
+        if latex_export.get("tex_file"):
+            result["paper_lens_tex"] = str(output / str(latex_export["tex_file"]))
+        if latex_export.get("pdf_file"):
+            result["paper_lens_pdf"] = str(output / str(latex_export["pdf_file"]))
     if public_plan.get("generated_artifacts"):
         result["artifact_template"] = str(output / "artifact_template")
     return result

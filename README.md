@@ -121,6 +121,8 @@ fields-study-flow ask \
 | `--bundle-scope selected\|all` | Choose whether the bundle downloads only selected route resources or all directly obtainable candidates. Default: `all`; unavailable resources remain in `links.md`. |
 | `--rag off\|light\|auto\|embedding` | Control evidence retrieval. `auto` uses lightweight local retrieval; `embedding` uses the optional `rag` extra when installed. |
 | `--no-paper-lens` | Skip the standalone `paper_lens.html` reader even when a target paper is present. |
+| `--paper-lens-language auto\|zh-CN\|en\|bilingual` | Control generated Paper Lens explanation language. `auto` follows the prompt/output language. |
+| `--paper-lens-density key\|section\|dense` | Control how many target-paper segments receive inline explanations. Default: `dense`. |
 | `--interactive` | Ask for goal, language, route depth, learning style, local resources, output directory, and resource directory before executing. |
 | `--no-live-search` / `--offline` | Disable default live discovery and use deterministic local catalog behavior. |
 | `--output-language zh-CN\|en\|bilingual` | Control roadmap language. |

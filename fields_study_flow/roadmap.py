@@ -10,7 +10,7 @@ from typing import Any
 from fields_study_flow.artifact_templates import enforce_artifact_requirements, write_artifact_template
 from fields_study_flow.knowledge_graph import build_knowledge_graph
 from fields_study_flow.models import LearnerProfile, Resource
-from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html
+from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html, write_paper_lens_latex
 
 
 OUTPUT_FILES = [
@@ -763,7 +763,11 @@ def write_outputs(
 ) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     _remove_obsolete_html_reports(output_dir)
-    public_roadmap = _ensure_paper_lens(sanitize_roadmap_for_export(roadmap))
+    public_roadmap = sanitize_roadmap_for_export(roadmap)
+    if not public_roadmap.get("paper_lens"):
+        public_roadmap = _ensure_paper_lens(public_roadmap)
+    if public_roadmap.get("paper_lens"):
+        public_roadmap = _write_paper_lens_latex_export(output_dir, public_roadmap)
     (output_dir / "learner_profile.json").write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "resource_index.json").write_text(
         json.dumps([resource.to_dict() for resource in ranked_resources], ensure_ascii=False, indent=2),
@@ -783,11 +787,33 @@ def write_outputs(
     write_artifact_template(output_dir, public_roadmap)
 
 
+def _write_paper_lens_latex_export(output_dir: Path, roadmap: dict[str, Any]) -> dict[str, Any]:
+    updated = copy.deepcopy(roadmap)
+    export = write_paper_lens_latex(output_dir, updated)
+    if not export:
+        return updated
+    lens = updated.get("paper_lens", {}) if isinstance(updated.get("paper_lens"), dict) else {}
+    lens["latex_export"] = export
+    updated["paper_lens"] = lens
+    outputs = list(updated.get("outputs", []))
+    for file_key in ("tex_file", "pdf_file"):
+        file_name = export.get(file_key)
+        if file_name and file_name not in outputs:
+            outputs.append(str(file_name))
+    updated["outputs"] = outputs
+    return updated
+
+
 def _ensure_paper_lens(roadmap: dict[str, Any]) -> dict[str, Any]:
     if roadmap.get("paper_lens_disabled") or not has_target_paper(roadmap):
         return roadmap
     updated = copy.deepcopy(roadmap)
-    updated["paper_lens"] = build_paper_lens(updated)
+    options = updated.get("paper_lens_options", {}) if isinstance(updated.get("paper_lens_options"), dict) else {}
+    updated["paper_lens"] = build_paper_lens(
+        updated,
+        paper_lens_language=str(options.get("language") or "auto"),
+        paper_lens_density=str(options.get("density") or "dense"),
+    )
     outputs = list(updated.get("outputs", []))
     if updated.get("paper_lens") and PAPER_LENS_FILE not in outputs:
         outputs.append(PAPER_LENS_FILE)

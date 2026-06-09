@@ -4,6 +4,7 @@
 
 - 单篇论文路线现在会额外生成 `paper_lens.html`，这是一个独立的“目标论文增强阅读器”。
 - `paper_lens.html` 会按摘要、背景、方法、公式、实验、局限和相关工作组织阅读卡片，并把资料包中的论文、书籍、代码、网页快照和 RAG 证据片段挂回对应章节。
+- 新版 Paper Lens 还会生成“原文句段精读流”：悬浮或点击关键句段即可查看直白解释、方法说明、相关资料和证据。
 - 使用 `--resource-dir` 时，`roadmap.html`、`paper_lens.html` 和 `roadmap.md` 会优先链接到本地已下载/复制资料；未下载或仅链接资料才保留原始网络入口。
 - 如果只想保留路线报告，可以在 `paper` 或 `roadmap` 命令中加入 `--no-paper-lens`。
 - 共享型 JSON/HTML/MD 仍会隐藏 `C:\...`、`D:\...` 等本地绝对路径，只保留相对本地链接或脱敏标识。
@@ -126,6 +127,8 @@ fields-study-flow ask \
 | `--resource-dir PATH` | 将学习资料库复制/下载到私有资料目录，并写出 `study_bundle_manifest.json`。 |
 | `--bundle-scope selected\|all` | 控制资料包只下载最短路线资料，还是尝试下载全部可直接获取的候选资料。默认是 `all`；不可获取的资料仍会进入 `links.md`。 |
 | `--rag off\|light\|auto\|embedding` | 控制证据检索模式。`auto` 使用轻量本地检索；`embedding` 在安装可选 `rag` extra 后启用。 |
+| `--paper-lens-language auto\|zh-CN\|en\|bilingual` | 控制 Paper Lens 句段解释语言。`auto` 会跟随 prompt / 输出语言。 |
+| `--paper-lens-density key\|section\|dense` | 控制进入句段级解释的论文片段数量。默认是 `dense`。 |
 | `--interactive` | 先询问目标、语言、路线深度、学习风格、本地资源、报告目录和资料目录，再执行。 |
 | `--no-live-search` / `--offline` | 关闭默认实时搜索，使用确定性目录和显式资源。 |
 | `--output-language zh-CN\|en\|bilingual` | 控制路线输出语言。 |

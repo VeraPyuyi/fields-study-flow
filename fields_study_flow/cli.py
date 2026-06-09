@@ -73,6 +73,8 @@ def build_parser() -> argparse.ArgumentParser:
     roadmap.add_argument("--download-retries", type=int, default=2, help="Retry each downloadable resource this many times after the first failed attempt.")
     roadmap.add_argument("--quiet-downloads", action="store_true", help="Do not print per-resource bundle progress.")
     roadmap.add_argument("--no-paper-lens", action="store_true", help="Do not generate the standalone paper_lens.html reader even when a target paper is present.")
+    roadmap.add_argument("--paper-lens-language", choices=["auto", "zh-CN", "en", "bilingual"], default="auto", help="Language for generated Paper Lens explanations.")
+    roadmap.add_argument("--paper-lens-density", choices=["key", "section", "dense"], default="dense", help="How many target-paper segments to explain in paper_lens.html.")
     roadmap.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
     roadmap.add_argument("--offline", action="store_true", help="Use the bundled deterministic resource catalog and disable live search.")
     roadmap.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
@@ -93,6 +95,8 @@ def build_parser() -> argparse.ArgumentParser:
     paper.add_argument("--download-retries", type=int, default=2, help="Retry each downloadable resource this many times after the first failed attempt.")
     paper.add_argument("--quiet-downloads", action="store_true", help="Do not print per-resource bundle progress.")
     paper.add_argument("--no-paper-lens", action="store_true", help="Do not generate the standalone paper_lens.html reader.")
+    paper.add_argument("--paper-lens-language", choices=["auto", "zh-CN", "en", "bilingual"], default="auto", help="Language for generated Paper Lens explanations.")
+    paper.add_argument("--paper-lens-density", choices=["key", "section", "dense"], default="dense", help="How many target-paper segments to explain in paper_lens.html.")
     paper.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
     paper.add_argument("--rag", choices=["off", "light", "auto", "embedding"], default="auto", help="Evidence retrieval mode for ranking and reports.")
 
@@ -305,9 +309,14 @@ def _interactive_update_args(args: argparse.Namespace, mode: str) -> None:
 
 
 def _apply_paper_lens_option(args: argparse.Namespace, roadmap: dict[str, object]) -> dict[str, object]:
-    if not getattr(args, "no_paper_lens", False):
-        return roadmap
     updated = dict(roadmap)
+    if not getattr(args, "no_paper_lens", False):
+        updated["paper_lens_options"] = {
+            "language": getattr(args, "paper_lens_language", "auto"),
+            "density": getattr(args, "paper_lens_density", "dense"),
+        }
+        updated.pop("paper_lens", None)
+        return updated
     updated["paper_lens_disabled"] = True
     updated.pop("paper_lens", None)
     outputs = updated.get("outputs")
