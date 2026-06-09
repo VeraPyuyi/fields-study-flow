@@ -8,9 +8,10 @@ from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve
 
 
 class FakeResponse:
-    def __init__(self, *, text: str = "", payload: dict | None = None, status_code: int = 200) -> None:
+    def __init__(self, *, text: str = "", payload: dict | None = None, content: bytes = b"", status_code: int = 200) -> None:
         self.text = text
         self._payload = payload or {}
+        self.content = content or text.encode("utf-8")
         self.status_code = status_code
 
     def json(self) -> dict:
@@ -63,6 +64,96 @@ def test_resolve_arxiv_metadata_extracts_public_paper_fields() -> None:
     assert "transformer" in metadata["concepts"]
     assert "attention" in metadata["concepts"]
     assert "pdf_url" in metadata
+
+
+def test_resolve_arxiv_metadata_enriches_public_fields_from_pdf_preview() -> None:
+    atom = """<?xml version="1.0"?>
+    <feed xmlns="http://www.w3.org/2005/Atom">
+      <entry>
+        <id>http://arxiv.org/abs/2509.13351v1</id>
+        <title>Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning</title>
+        <summary>We present PDDL-INSTRUCT for symbolic planning.</summary>
+        <author><name>Pulkit Verma</name></author>
+        <category term="cs.AI" />
+      </entry>
+    </feed>
+    """
+    pdf_preview = b"""%PDF-1.4
+Teaching LLMs to Plan: Logical Chain-of-Thought
+Instruction Tuning for Symbolic Planning
+Pulkit Verma
+MIT CSAIL
+Ngoc La
+MIT CSAIL
+Abstract
+Large language models struggle with structured symbolic planning in PDDL. We present PDDL-INSTRUCT, a framework that teaches logical chain-of-thought reasoning with VAL feedback.
+1 Introduction
+LLMs struggle with action applicability and state transitions.
+5 PDDL-INSTRUCT Methodology
+Our approach uses structured instruction tuning and verifier feedback.
+6 Empirical Evaluation
+Experiments evaluate PlanBench domains and plan accuracy.
+8 Conclusion
+Limitations and Future Work include satisficing rather than optimal planning.
+%%EOF"""
+    client = FakeClient(
+        {
+            "https://export.arxiv.org/api/query": FakeResponse(text=atom),
+            "https://arxiv.org/pdf/2509.13351.pdf": FakeResponse(content=pdf_preview),
+        }
+    )
+
+    metadata = resolve_paper_metadata("https://arxiv.org/abs/2509.13351", client=client)
+
+    assert metadata["metadata_status"] == "ok"
+    assert metadata["title"] == "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning"
+    assert {"Introduction", "PDDL-INSTRUCT Methodology", "Empirical Evaluation", "Conclusion"} <= set(metadata["sections"])
+    assert metadata["method_hints"]
+    assert metadata["experiment_hints"]
+    assert metadata["limitations_hints"]
+    assert "pddl" in metadata["concepts"]
+    assert "val verifier" in metadata["concepts"]
+
+
+def test_resolve_arxiv_metadata_falls_back_to_pdf_when_api_fails() -> None:
+    pdf_preview = b"""%PDF-1.4
+Teaching LLMs to Plan: Logical Chain-of-Thought
+Instruction Tuning for Symbolic Planning
+Pulkit Verma
+MIT CSAIL
+Ngoc La
+MIT CSAIL
+Anthony Favier
+MIT CSAIL
+Abstract
+Large language models struggle with formal symbolic planning. PDDL-INSTRUCT teaches action applicability, state transitions, plan validity, and logical chain-of-thought reasoning using VAL feedback.
+1 Introduction
+LLMs struggle with structured symbolic planning.
+5 PDDL-INSTRUCT Methodology
+The method uses CoT instruction tuning and verifier feedback.
+6 Empirical Evaluation
+Experiments on PlanBench compare binary and detailed feedback.
+8 Conclusion
+Limitations and Future Work discuss optimal planning and broader PDDL coverage.
+%%EOF"""
+    client = FakeClient(
+        {
+            "https://export.arxiv.org/api/query": RuntimeError("rate limited"),
+            "https://arxiv.org/pdf/2509.13351.pdf": FakeResponse(content=pdf_preview),
+        }
+    )
+
+    metadata = resolve_paper_metadata("https://arxiv.org/abs/2509.13351", client=client)
+
+    assert metadata["metadata_status"] == "ok"
+    assert metadata["title"] == "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning"
+    assert metadata["authors"][:2] == ["Pulkit Verma", "Ngoc La"]
+    assert metadata["source"] == "arxiv"
+    assert metadata["source_ids"]["arxiv"] == "2509.13351"
+    assert metadata["abstract_snippet"]
+    assert metadata["sections"]
+    assert any("arxiv_unavailable" in warning for warning in metadata["warnings"])
+    assert any("arxiv_pdf_fallback" in warning for warning in metadata["warnings"])
 
 
 def test_resolve_arxiv_metadata_falls_back_when_api_is_unavailable() -> None:

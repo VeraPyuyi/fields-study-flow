@@ -1,6 +1,15 @@
 import json
 
-from fields_study_flow.mcp_tools import analyzeLocalResources, buildRoadmap, exportPlan, ingestUrl, searchResources, validateSources
+from fields_study_flow.mcp_tools import (
+    analyzeLocalResources,
+    answerFromBundle,
+    buildRoadmap,
+    exportPlan,
+    ingestUrl,
+    retrieveEvidence,
+    searchResources,
+    validateSources,
+)
 
 
 def test_search_resources_applies_hard_language_filter_at_tool_boundary():
@@ -165,6 +174,62 @@ def test_export_plan_writes_markdown_svg_and_html(tmp_path):
     assert result["roadmap_html"].endswith("roadmap.html")
 
 
+def test_export_plan_writes_paper_lens_when_plan_has_target_paper(tmp_path):
+    plan = {
+        "title": "Learning Roadmap: Teaching LLMs to Plan",
+        "profile": {"goal": "Teaching LLMs to Plan", "output_language": "zh-CN", "resource_language_preference": "balanced"},
+        "path_strategy": {"mode": "fastest", "estimated_total_time": "2h", "selected_resources": 1, "candidate_resources": 1},
+        "phases": [
+            {
+                "name": "阶段 1",
+                "objective": "阅读目标论文并定位方法证据。",
+                "estimated_time": "2h",
+                "resources": [
+                    {
+                        "title": "Teaching LLMs to Plan",
+                        "url": "local://paper-teaching-llms-to-plan",
+                        "source": "local-library",
+                        "type": "paper",
+                        "language": "en",
+                        "difficulty": "advanced",
+                        "estimated_time": "2h",
+                        "trust_score": 0.9,
+                        "critical_path_role": "core-paper",
+                        "concepts": ["symbolic planning"],
+                        "learning_key_points": ["problem, contribution, and assumptions"],
+                        "focus_areas": ["Method", "Experiments"],
+                        "why_recommended": "Target paper for deep reading.",
+                        "license_or_access_note": "User-provided paper metadata only.",
+                        "translation_note": "",
+                        "metadata": {
+                            "target_paper": True,
+                            "paper_metadata": {
+                                "title": "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning",
+                                "abstract_snippet": "The paper teaches LLMs to plan with logical traces.",
+                                "authors": ["Example Author"],
+                                "concepts": ["symbolic planning"],
+                                "sections": ["Introduction", "Method", "Experiments", "Limitations"],
+                                "method_hints": ["The method builds logical planning traces."],
+                                "experiment_hints": ["Experiments evaluate plan validity."],
+                                "limitations_hints": ["Planning domain coverage is limited."],
+                                "metadata_status": "ok",
+                            },
+                        },
+                    }
+                ],
+            }
+        ],
+        "checkpoints": ["Explain it."],
+        "safety_policy": ["Do not expose private paths."],
+    }
+
+    result = exportPlan(plan, str(tmp_path))
+
+    assert (tmp_path / "paper_lens.html").exists()
+    assert result["paper_lens_html"].endswith("paper_lens.html")
+    assert "paper_lens" in json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
+
+
 def test_export_plan_writes_generated_artifact_template(tmp_path):
     plan = {
         "title": "Learning Roadmap: Diffusion Project",
@@ -324,3 +389,55 @@ def test_search_resources_defaults_to_live_search_but_falls_back(monkeypatch):
     assert result["resources"]
     assert result["live_search"]["enabled"] is True
     assert result["live_search"]["status"] == "fallback"
+
+
+def test_mcp_retrieve_evidence_from_ranked_resources():
+    result = retrieveEvidence(
+        query="PDDL action preconditions",
+        resources=[
+            {
+                "title": "PDDL Notes",
+                "url": "local://pddl",
+                "source": "local-library",
+                "type": "notes",
+                "concepts": ["pddl"],
+                "learning_key_points": ["Action preconditions decide whether planning actions can run."],
+            }
+        ],
+        ragMode="light",
+    )
+
+    assert result["evidence"]
+    assert "Action preconditions" in result["evidence"][0]["snippet"]
+
+
+def test_mcp_answer_from_bundle_uses_local_rag_index(tmp_path):
+    resource_dir = tmp_path / "bundle"
+    (resource_dir / ".rag_index").mkdir(parents=True)
+    (resource_dir / ".rag_index" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "chunks": [
+                    {
+                        "chunk_id": "chunk-1",
+                        "resource_id": "cot",
+                        "resource_title": "CoT Notes",
+                        "source": "local-library",
+                        "type": "notes",
+                        "file_name": "cot.md",
+                        "snippet": "Chain-of-thought exposes intermediate reasoning steps.",
+                        "text": "Chain-of-thought exposes intermediate reasoning steps.",
+                        "private": False,
+                    }
+                ],
+                "summary": {"chunks": 1},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    result = answerFromBundle(question="What does chain-of-thought expose?", resourceDir=str(resource_dir))
+
+    assert result["status"] == "ok"
+    assert "intermediate reasoning" in result["answer"]

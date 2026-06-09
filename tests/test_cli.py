@@ -213,6 +213,7 @@ The method verifies a small local note.
     roadmap = json.loads((output_dir / "roadmap.json").read_text(encoding="utf-8"))
     assert roadmap["study_bundle"]["summary"]["copied"] == 1
     assert roadmap["study_bundle"]["resources"][0]["status"] == "copied"
+    assert roadmap["study_bundle"]["resources"][0]["local_href"].endswith(manifest["resources"][0]["file"])
     dumped = json.dumps(roadmap, ensure_ascii=False)
     assert str(resource_dir) not in dumped
     assert str(pdf) not in dumped
@@ -220,7 +221,123 @@ The method verifies a small local note.
     markdown = (output_dir / "roadmap.md").read_text(encoding="utf-8")
     assert "Study Asset Bundle" in html
     assert "study_bundle_manifest.json" in html
+    assert roadmap["study_bundle"]["resources"][0]["local_href"] in html
+    assert roadmap["study_bundle"]["resources"][0]["local_href"] in markdown
+    assert (resource_dir / "README.md").exists()
     assert "Study Asset Bundle" in markdown
+
+
+def test_cli_roadmap_rag_light_exports_evidence_and_bundle_index(tmp_path):
+    note = tmp_path / "pddl-notes.md"
+    note.write_text("PDDL action preconditions and VAL plan validation are the key blockers.", encoding="utf-8")
+    output_dir = tmp_path / "out"
+    resource_dir = tmp_path / "assets"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "roadmap",
+            "--goal",
+            "master PDDL plan validation",
+            "--output-language",
+            "en",
+            "--resource-language",
+            "en-first",
+            "--local-resource",
+            str(note),
+            "--output-dir",
+            str(output_dir),
+            "--resource-dir",
+            str(resource_dir),
+            "--rag",
+            "light",
+            "--offline",
+            "--quiet-downloads",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    roadmap = json.loads((output_dir / "roadmap.json").read_text(encoding="utf-8"))
+    assert roadmap["rag_evidence"]["summary"]["chunks"] >= 1
+    assert roadmap["rag_evidence"]["top_chunks"]
+    assert (resource_dir / ".rag_index" / "manifest.json").exists()
+    assert "Evidence" in (output_dir / "roadmap.md").read_text(encoding="utf-8")
+
+
+def test_cli_parsers_expose_bundle_scope_for_paper_and_roadmap():
+    from fields_study_flow.cli import build_parser
+
+    parser = build_parser()
+    roadmap_args = parser.parse_args(["roadmap", "--goal", "learn planning", "--bundle-scope", "selected", "--no-paper-lens"])
+    paper_args = parser.parse_args(["paper", "--url", "https://arxiv.org/abs/1706.03762", "--bundle-scope", "all", "--no-paper-lens"])
+
+    assert roadmap_args.bundle_scope == "selected"
+    assert paper_args.bundle_scope == "all"
+    assert roadmap_args.no_paper_lens is True
+    assert paper_args.no_paper_lens is True
+
+
+def test_cli_ask_answers_from_bundle_index(tmp_path):
+    output_dir = tmp_path / "out"
+    resource_dir = tmp_path / "assets"
+    resource_dir.mkdir()
+    (resource_dir / ".rag_index").mkdir()
+    (resource_dir / ".rag_index" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "chunks": [
+                    {
+                        "chunk_id": "chunk-1",
+                        "resource_id": "pddl",
+                        "resource_title": "PDDL Notes",
+                        "source": "local-library",
+                        "type": "notes",
+                        "file_name": "01-pddl-notes.md",
+                        "snippet": "VAL validates whether generated plans satisfy PDDL constraints.",
+                        "text": "VAL validates whether generated plans satisfy PDDL constraints.",
+                        "private": False,
+                    }
+                ],
+                "summary": {"chunks": 1},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    output_dir.mkdir()
+    (output_dir / "roadmap.json").write_text(
+        json.dumps({"title": "PDDL", "study_bundle": {"manifest_file": "study_bundle_manifest.json"}}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "ask",
+            "--roadmap",
+            str(output_dir / "roadmap.json"),
+            "--resource-dir",
+            str(resource_dir),
+            "--question",
+            "What does VAL validate?",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "ok"
+    assert "VAL validates" in payload["answer"]
+    assert payload["sources"][0]["resource_title"] == "PDDL Notes"
 
 
 def test_cli_interactive_collects_learning_language_and_storage_preferences(tmp_path):
@@ -265,6 +382,62 @@ def test_cli_interactive_collects_learning_language_and_storage_preferences(tmp_
     assert "Copy/download the full study resource library" in result.stdout
     assert "是否复制或下载学习资料包" in result.stdout
     assert not resource_dir.exists()
+
+
+def test_interactive_setup_asks_bundle_scope_when_bundle_enabled(monkeypatch, tmp_path):
+    from argparse import Namespace
+
+    from fields_study_flow.cli import _interactive_update_args
+
+    output_dir = tmp_path / "interactive-out"
+    resource_dir = tmp_path / "interactive-resources"
+    args = Namespace(
+        goal="",
+        output_language="zh-CN",
+        resource_language="balanced",
+        route_depth="balanced",
+        learning_style="practical",
+        target_kind="auto",
+        default_target_kind="auto",
+        local_resource=[],
+        output_dir=str(output_dir),
+        resource_dir=None,
+        bundle_scope="all",
+        offline=False,
+        no_live_search=True,
+    )
+    answers = iter(
+        [
+            "learn symbolic planning",
+            "zh-CN",
+            "balanced",
+            "fastest",
+            "practical",
+            "paper",
+            "",
+            str(output_dir),
+            "y",
+            str(resource_dir),
+            "selected",
+            "y",
+        ]
+    )
+    prompts: list[str] = []
+
+    def fake_input(prompt: str = "") -> str:
+        prompts.append(prompt)
+        return next(answers)
+
+    monkeypatch.setattr("builtins.input", fake_input)
+
+    _interactive_update_args(args, "roadmap")
+
+    assert args.resource_dir == str(resource_dir)
+    assert args.bundle_scope == "selected"
+    assert args.offline is True
+    prompt_text = "\n".join(prompts)
+    assert "Bundle scope" in prompt_text
+    assert "资料包范围" in prompt_text
 
 
 def test_cli_paper_resource_uses_resolved_metadata(monkeypatch):
@@ -690,8 +863,15 @@ def test_write_outputs_exports_generated_artifact_template(tmp_path):
     assert (tmp_path / "artifact_template" / "README.md").exists()
     assert (tmp_path / "artifact_template" / "task_checklist.md").exists()
     assert (tmp_path / "artifact_template" / "reproduction_log.md").exists()
+    assert (tmp_path / "artifact_template" / "mastery_evidence.md").exists()
     assert (tmp_path / "artifact_template" / "notebook_skeleton.ipynb").exists()
     assert (tmp_path / "artifact_template" / "src" / "main.py").exists()
+    evidence = (tmp_path / "artifact_template" / "mastery_evidence.md").read_text(encoding="utf-8")
+    assert "Mastery Evidence Contract" in evidence
+    assert "explain" in evidence
+    assert "derive" in evidence
+    assert "reproduce" in evidence
+    assert "critique" in evidence
 
 
 def test_artifact_template_includes_paper_derived_acceptance_targets(tmp_path):

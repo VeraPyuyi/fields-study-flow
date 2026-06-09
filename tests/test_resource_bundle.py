@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from zipfile import ZipFile
 
 from fields_study_flow.models import Resource
 from fields_study_flow.resource_bundle import bundle_study_resources
@@ -178,6 +179,57 @@ def test_bundle_downloads_github_repository_archive(tmp_path):
     assert manifest["resources"][0]["file"].endswith(".zip")
 
 
+def test_bundle_reuses_existing_repository_archive_before_retrying(tmp_path):
+    resource_dir = tmp_path / "bundle"
+    resource_dir.mkdir()
+    existing = resource_dir / "01-val-the-automatic-validation-tool-for-pddl-planning.zip"
+    with ZipFile(existing, "w") as archive:
+        archive.writestr("README.md", "VAL planning validator")
+    repository = Resource(
+        title="VAL: The Automatic Validation Tool for PDDL Planning",
+        url="https://github.com/KCL-Planning/VAL",
+        source="github",
+        type="repository",
+    )
+    client = FlakyClient(failures_before_success=9)
+
+    manifest = bundle_study_resources(resource_dir, [repository], {"phases": []}, client=client, retries=1)
+
+    entry = manifest["resources"][0]
+    assert client.urls == []
+    assert entry["status"] == "downloaded"
+    assert entry["file"] == existing.name
+    assert entry["attempts"] == 0
+    assert entry["reason"] == "existing_bundle_file_reused"
+    assert manifest["summary"]["failed"] == 0
+    assert manifest["summary"]["retryable"] == 0
+
+
+def test_bundle_reuses_existing_downloaded_file_for_link_only_resource(tmp_path):
+    resource_dir = tmp_path / "bundle"
+    resource_dir.mkdir()
+    existing = resource_dir / "01-mathematics-for-machine-learning-official.pdf"
+    existing.write_bytes(b"%PDF-1.4\nmml book\n%%EOF")
+    book = Resource(
+        title="Mathematics for Machine Learning",
+        url="https://mml-book.github.io/",
+        source="book",
+        type="book",
+    )
+    client = FlakyClient(failures_before_success=9)
+
+    manifest = bundle_study_resources(resource_dir, [book], {"phases": []}, client=client, retries=1)
+
+    entry = manifest["resources"][0]
+    assert client.urls == []
+    assert entry["status"] == "downloaded"
+    assert entry["file"] == existing.name
+    assert entry["attempts"] == 0
+    assert entry["reason"] == "existing_bundle_file_reused"
+    assert manifest["summary"]["link-only"] == 0
+    assert manifest["summary"]["retryable"] == 0
+
+
 def test_bundle_snapshots_public_web_pages(tmp_path):
     docs = Resource(
         title="PDDL Reference",
@@ -227,7 +279,7 @@ def test_bundle_keeps_omitted_resources_in_full_library(tmp_path):
     }
     client = FakeClient()
 
-    manifest = bundle_study_resources(tmp_path / "bundle", [selected, omitted_book], roadmap, client=client)
+    manifest = bundle_study_resources(tmp_path / "bundle", [selected, omitted_book], roadmap, client=client, bundle_scope="selected")
 
     assert manifest["summary"]["total"] == 3
     assert [item["title"] for item in manifest["resources"]] == [
@@ -238,5 +290,69 @@ def test_bundle_keeps_omitted_resources_in_full_library(tmp_path):
     assert manifest["resources"][1]["status"] == "link-only"
     assert manifest["resources"][1]["route_status"] == "omitted"
     assert manifest["resources"][2]["route_status"] == "generated"
-    assert manifest["resources"][2]["reason"] == "generated_or_report_only_resource"
+    assert manifest["resources"][2]["status"] == "generated"
+    assert manifest["resources"][2]["reason"] == "generated_report_resource_materialized"
+    generated_file = tmp_path / "bundle" / manifest["resources"][2]["file"]
+    assert generated_file.exists()
+    assert "Focused prerequisite sprint" in generated_file.read_text(encoding="utf-8")
     assert "Automated Planning: Theory and Practice" in (tmp_path / "bundle" / "links.md").read_text(encoding="utf-8")
+
+
+def test_bundle_scope_all_downloads_omitted_direct_resources(tmp_path):
+    selected = Resource(
+        title="Selected paper",
+        url="https://arxiv.org/abs/2509.13351",
+        source="arxiv",
+        type="paper",
+    )
+    omitted = Resource(
+        title="Omitted but downloadable paper",
+        url="https://arxiv.org/abs/1706.03762",
+        source="arxiv",
+        type="paper",
+    )
+    roadmap = {
+        "phases": [{"resources": [selected.to_dict()]}],
+        "resource_library": [
+            {**selected.to_dict(), "route_status": "selected", "selected": True},
+            {**omitted.to_dict(), "route_status": "omitted", "selected": False, "route_reason": "lower-marginal-value"},
+        ],
+    }
+
+    manifest = bundle_study_resources(tmp_path / "bundle", [selected, omitted], roadmap, client=FakeClient())
+    omitted_entry = next(item for item in manifest["resources"] if item["title"] == "Omitted but downloadable paper")
+
+    assert manifest["bundle_scope"] == "all"
+    assert omitted_entry["status"] == "downloaded"
+    assert omitted_entry["route_status"] == "omitted"
+    assert manifest["summary"]["downloaded_omitted"] == 1
+    assert manifest["summary"]["downloaded_selected"] == 1
+
+
+def test_bundle_counts_materialized_generated_resources_as_completed(tmp_path):
+    generated = {
+        "title": "Focused prerequisite sprint",
+        "url": "local://fields-study-flow-prerequisite-sprint",
+        "source": "fields-study-flow",
+        "type": "checklist",
+        "route_status": "generated",
+        "selected": True,
+        "route_reason": "included-in-shortest-path",
+        "learning_key_points": ["review only target blockers", "derive one tiny example"],
+        "focus_areas": ["pddl", "symbolic planning"],
+    }
+    roadmap = {"phases": [], "resource_library": [generated]}
+
+    manifest = bundle_study_resources(tmp_path / "bundle", [], roadmap, client=FakeClient())
+
+    entry = manifest["resources"][0]
+    assert entry["status"] == "generated"
+    assert entry["file"].endswith(".md")
+    assert manifest["summary"]["generated"] == 1
+    assert manifest["summary"]["completed"] == 1
+    assert manifest["summary"]["link-only"] == 0
+    assert (tmp_path / "bundle" / "README.md").exists()
+
+    rerun = bundle_study_resources(tmp_path / "bundle", [], roadmap, client=FakeClient())
+    assert rerun["resources"][0]["file"] == entry["file"]
+    assert not list((tmp_path / "bundle").glob("*focused-prerequisite-sprint-2.md"))

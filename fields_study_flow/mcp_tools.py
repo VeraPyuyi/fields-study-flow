@@ -14,6 +14,8 @@ from fields_study_flow.live_search import search_live_resources
 from fields_study_flow.local_resources import analyze_local_resources
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve_paper_metadata
+from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html
+from fields_study_flow.rag import answer_from_bundle, apply_rag_to_resources, build_rag_index, load_bundle_rag_index, public_rag_evidence, retrieve_evidence
 from fields_study_flow.ranking import rank_resources
 from fields_study_flow.roadmap import build_roadmap, render_html, render_markdown, render_svg, sanitize_roadmap_for_export
 from fields_study_flow.sources import SourceRegistry
@@ -85,6 +87,7 @@ def searchResources(
     languagePreference: str = "balanced",
     localResourcePaths: list[str] | None = None,
     liveSearch: bool = True,
+    ragMode: str = "auto",
 ) -> dict[str, Any]:
     allowed_sources = set(sources or [])
     resources = offline_resources_for_goal(query)
@@ -104,10 +107,12 @@ def searchResources(
         resource_language_preference=normalize_resource_language_preference(languagePreference),
     )
     resources = rank_resources(resources, profile)
+    resources, rag_index = apply_rag_to_resources(profile, resources, mode=ragMode)
     return {
         "queries": build_language_queries(query, languagePreference),
         "filters": filters or {},
         "live_search": live_diagnostics,
+        "rag_evidence": sanitize_roadmap_for_export(public_rag_evidence(rag_index, query)),
         "resources": [resource.to_dict() for resource in resources],
     }
 
@@ -156,7 +161,7 @@ def rankResources(
     profile = _profile_from_dict(learnerProfile)
     if languagePreference:
         profile.resource_language_preference = normalize_resource_language_preference(languagePreference)
-    ranked = rank_resources([Resource(**resource) for resource in resources], profile)
+    ranked = rank_resources([_resource_from_dict(resource) for resource in resources], profile)
     return {"target_outcome": targetOutcome, "resources": [resource.to_dict() for resource in ranked]}
 
 
@@ -169,6 +174,7 @@ def buildRoadmap(
     learningStyle: str = "practical",
     targetKind: str = "auto",
     liveSearch: dict[str, Any] | None = None,
+    ragMode: str = "auto",
 ) -> dict[str, Any]:
     learner = _profile_from_dict(
         {
@@ -180,8 +186,41 @@ def buildRoadmap(
             "target_kind": targetKind,
         }
     )
-    resources = [Resource(**resource) for resource in rankedResources]
-    return build_roadmap(learner, resources, live_search=liveSearch)
+    resources = [_resource_from_dict(resource) for resource in rankedResources]
+    resources, rag_index = apply_rag_to_resources(learner, resources, mode=ragMode)
+    rag_evidence = public_rag_evidence(rag_index, goal)
+    plan = build_roadmap(learner, resources, live_search=liveSearch, rag_evidence=rag_evidence)
+    if rag_evidence:
+        plan["rag_evidence"] = rag_evidence
+    return sanitize_roadmap_for_export(plan)
+
+
+def retrieveEvidence(
+    query: str,
+    resources: list[dict[str, Any]] | None = None,
+    roadmap: dict[str, Any] | None = None,
+    resourceDir: str | None = None,
+    ragMode: str = "auto",
+    limit: int = 5,
+) -> dict[str, Any]:
+    if resourceDir:
+        index = load_bundle_rag_index(Path(resourceDir))
+    else:
+        source_resources = resources
+        if source_resources is None and roadmap:
+            source_resources = roadmap.get("resource_library", [])
+        concrete = [_resource_from_dict(resource) for resource in source_resources or [] if isinstance(resource, dict)]
+        index = build_rag_index(concrete, query=query, mode=ragMode)
+    return {
+        "query": query,
+        "rag_mode": index.get("mode", "light"),
+        "summary": index.get("summary", {}),
+        "evidence": retrieve_evidence(query, index=index, limit=limit),
+    }
+
+
+def answerFromBundle(question: str, resourceDir: str, limit: int = 5) -> dict[str, Any]:
+    return answer_from_bundle(Path(resourceDir), question, limit=limit)
 
 
 def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
@@ -211,16 +250,27 @@ def exportPlan(plan: dict[str, Any], outputDir: str) -> dict[str, str]:
     import json
 
     public_plan = sanitize_roadmap_for_export(plan)
+    if has_target_paper(public_plan):
+        public_plan["paper_lens"] = build_paper_lens(public_plan)
+        outputs = list(public_plan.get("outputs", []))
+        if "paper_lens.html" not in outputs:
+            outputs.append("paper_lens.html")
+        public_plan["outputs"] = outputs
     json_target = output / "roadmap.json"
     md_target = output / "roadmap.md"
     svg_target = output / "roadmap.svg"
     html_target = output / "roadmap.html"
+    lens_target = output / "paper_lens.html"
     json_target.write_text(json.dumps(public_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     md_target.write_text(render_markdown(public_plan), encoding="utf-8")
     svg_target.write_text(render_svg(public_plan), encoding="utf-8")
     html_target.write_text(render_html(public_plan), encoding="utf-8")
+    if public_plan.get("paper_lens"):
+        lens_target.write_text(render_paper_lens_html(public_plan), encoding="utf-8")
     write_artifact_template(output, public_plan)
     result = {"roadmap_json": str(json_target), "roadmap_md": str(md_target), "roadmap_svg": str(svg_target), "roadmap_html": str(html_target)}
+    if public_plan.get("paper_lens"):
+        result["paper_lens_html"] = str(lens_target)
     if public_plan.get("generated_artifacts"):
         result["artifact_template"] = str(output / "artifact_template")
     return result
@@ -242,6 +292,11 @@ def _profile_from_dict(data: dict[str, Any]) -> LearnerProfile:
         route_depth=data.get("route_depth") or data.get("routeDepth") or "balanced",
         learning_style=data.get("learning_style") or data.get("learningStyle") or "practical",
     )
+
+
+def _resource_from_dict(data: dict[str, Any]) -> Resource:
+    allowed = Resource.__dataclass_fields__
+    return Resource(**{key: value for key, value in data.items() if key in allowed})
 
 
 def _public_local_path_summary(resource: Resource) -> dict[str, Any]:

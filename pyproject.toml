@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+rag = ["fastembed", "numpy"]
 
 [project.scripts]
 fields-study-flow = "fields_study_flow.cli:main"

@@ -15,6 +15,8 @@ TOOLS: dict[str, Callable[..., Any]] = {
     "ingestUrl": mcp_tools.ingestUrl,
     "rankResources": mcp_tools.rankResources,
     "buildRoadmap": mcp_tools.buildRoadmap,
+    "retrieveEvidence": mcp_tools.retrieveEvidence,
+    "answerFromBundle": mcp_tools.answerFromBundle,
     "validateSources": mcp_tools.validateSources,
     "exportPlan": mcp_tools.exportPlan,
 }

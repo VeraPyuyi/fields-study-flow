@@ -1,8 +1,10 @@
+import json
+
 from fields_study_flow.language import ResourceLanguagePreference
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.ranking import rank_resources
-from fields_study_flow.roadmap import build_roadmap, render_html, render_markdown, render_svg, sanitize_roadmap_for_export
+from fields_study_flow.roadmap import build_roadmap, render_html, render_markdown, render_svg, sanitize_roadmap_for_export, write_outputs
 
 
 def test_build_roadmap_contains_required_files_and_resource_fields():
@@ -68,6 +70,53 @@ def test_build_roadmap_contains_required_files_and_resource_fields():
         "translation_note",
     ):
         assert field in resource
+
+
+def test_write_outputs_writes_paper_lens_for_target_paper(tmp_path):
+    profile = LearnerProfile(goal="master Teaching LLMs to Plan", output_language="zh-CN", target_kind="paper")
+    target = Resource(
+        title="Teaching LLMs to Plan",
+        url="local://paper-teaching-llms-to-plan",
+        source="local-library",
+        type="paper",
+        concepts=["symbolic planning", "logical chain-of-thought"],
+        estimated_minutes=180,
+        critical_path_role="core-paper",
+        metadata={
+            "target_paper": True,
+            "paper_metadata": {
+                "title": "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning",
+                "abstract_snippet": "The paper teaches LLMs to produce planning traces.",
+                "authors": ["Example Author"],
+                "concepts": ["symbolic planning", "PDDL"],
+                "sections": ["Introduction", "Method", "Experiments", "Limitations"],
+                "method_hints": ["The method creates logical chain-of-thought traces."],
+                "experiment_hints": ["Experiments evaluate planning validity."],
+                "limitations_hints": ["Coverage of planning domains remains limited."],
+                "metadata_status": "ok",
+                "local_path": None,
+            },
+        },
+    )
+    support = Resource(
+        title="PDDL Notes",
+        url="https://planning.wiki/ref/pddl",
+        source="documentation",
+        type="documentation",
+        concepts=["PDDL", "planning"],
+        learning_key_points=["PDDL action preconditions determine applicability."],
+        estimated_minutes=45,
+    )
+
+    roadmap = build_roadmap(profile, [target, support])
+    write_outputs(tmp_path, profile, [target, support], roadmap, {})
+
+    exported = json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
+    assert "paper_lens" in exported
+    assert "paper_lens.html" in exported["outputs"]
+    assert (tmp_path / "paper_lens.html").exists()
+    assert "目标论文增强阅读器" in (tmp_path / "paper_lens.html").read_text(encoding="utf-8")
+    assert "paper_lens.html" in (tmp_path / "roadmap.html").read_text(encoding="utf-8")
 
 
 def test_sanitize_roadmap_keeps_public_https_urls_while_redacting_private_paths():
@@ -333,6 +382,34 @@ def test_paper_roadmap_contains_mastery_tasks_for_explanation_derivation_reprodu
     assert any("Derive" in label for label in task_labels)
     assert any("Reproduce" in label for label in task_labels)
     assert any("Critique" in label for label in task_labels)
+
+
+def test_build_roadmap_includes_lightweight_knowledge_graph_without_rag():
+    roadmap = build_roadmap(
+        LearnerProfile(goal="master PDDL planning", output_language="en", target_kind="field"),
+        [
+            Resource(
+                title="PDDL Notes",
+                url="https://example.com/pddl",
+                source="documentation",
+                type="article",
+                language="en",
+                concepts=["PDDL", "symbolic planning"],
+                learning_key_points=["action preconditions"],
+                focus_areas=["VAL plan validation"],
+                critical_path_role="focused-support",
+                estimated_minutes=90,
+            )
+        ],
+    )
+
+    graph = roadmap["knowledge_graph"]
+    assert graph["summary"]["concepts"] >= 1
+    assert graph["summary"]["resources"] >= 1
+    assert graph["summary"]["tasks"] >= 1
+    assert graph["summary"]["assessments"] == 1
+    assert any(edge["label"] == "covered_by" for edge in graph["edges"])
+    assert any(edge["label"] == "required_for" for edge in graph["edges"])
 
 
 def test_field_roadmap_infers_project_or_survey_artifact_from_goal():
@@ -811,6 +888,51 @@ def test_roadmap_explains_shortest_route_and_exposes_quality_gates():
     assert all(item["level"] == "high" for item in roadmap["quality_report"]["dimensions"].values())
 
 
+def test_roadmap_builds_mastery_evidence_contract_for_verifiable_learning():
+    roadmap = build_roadmap(
+        LearnerProfile(goal="fully master Transformer paper", output_language="en", target_kind="paper", route_depth="fastest"),
+        [
+            Resource(
+                title="Attention Is All You Need",
+                url="https://arxiv.org/abs/1706.03762",
+                source="arxiv",
+                type="paper",
+                language="en",
+                concepts=["transformer", "attention"],
+                estimated_minutes=360,
+                trust_score=0.97,
+                metadata={"target_paper": True},
+                critical_path_role="core-paper",
+            ),
+            Resource(
+                title="Transformer reproduction notebook",
+                url="https://github.com/example/transformer-notebook",
+                source="github",
+                type="notebook",
+                language="en",
+                concepts=["transformer", "python"],
+                estimated_minutes=180,
+                trust_score=0.86,
+                critical_path_role="practice-validation",
+            ),
+        ],
+    )
+
+    evidence = roadmap["mastery_evidence"]
+    task_types = {item["task_type"] for item in evidence["required_evidence"]}
+    markdown = render_markdown(roadmap)
+    html = render_html(roadmap)
+
+    assert evidence["status"] == "ready-for-evidence"
+    assert evidence["claim"] == "Learning is not complete until every evidence item is filled and reviewable."
+    assert {"explain", "derive", "reproduce", "critique"} <= task_types
+    assert all(item["pass_criteria"] for item in evidence["required_evidence"])
+    assert any("Transformer reproduction notebook" in item["resources"] for item in evidence["required_evidence"])
+    assert "## Mastery Evidence" in markdown
+    assert "mastery-evidence-panel" in html
+    assert "Learning is not complete until every evidence item is filled" in html
+
+
 def test_reports_show_quality_route_audit_and_next_actions():
     roadmap = build_roadmap(
         LearnerProfile(goal="build a diffusion model project", output_language="en", target_kind="field", route_depth="balanced"),
@@ -843,6 +965,318 @@ def test_reports_show_quality_route_audit_and_next_actions():
     assert "resource-library-panel" in html
     assert "library-grid" in html
     assert "Plan Quality" in svg
+
+
+def test_reports_show_rag_evidence_panel_and_task_sources():
+    roadmap = {
+        "title": "Learning Roadmap: PDDL",
+        "profile": {"goal": "master PDDL planning", "output_language": "en", "resource_language_preference": "balanced"},
+        "path_strategy": {"mode": "fastest", "estimated_total_time": "1h", "selected_resources": 1, "candidate_resources": 1},
+        "rag_evidence": {
+            "mode": "light",
+            "summary": {"chunks": 2, "resources": 1},
+            "top_chunks": [
+                {
+                    "resource_title": "PDDL Notes",
+                    "file_name": "01-pddl-notes.md",
+                    "snippet": "Action preconditions decide whether a plan step can run.",
+                    "score": 2.5,
+                }
+            ],
+        },
+        "mastery_evidence": {
+            "status": "ready-for-evidence",
+            "claim": "Evidence required.",
+            "final_artifact": "paper-mastery",
+            "required_evidence": [
+                {
+                    "task_type": "explain",
+                    "evidence": "Explain it.",
+                    "pass_criteria": "Grounded in evidence.",
+                    "resources": ["PDDL Notes"],
+                    "evidence_chunks": [
+                        {
+                            "resource_title": "PDDL Notes",
+                            "file_name": "01-pddl-notes.md",
+                            "snippet": "Action preconditions decide whether a plan step can run.",
+                        }
+                    ],
+                    "review_status": "open",
+                }
+            ],
+        },
+        "knowledge_graph": {
+            "summary": {"concepts": 1, "resources": 1, "tasks": 1, "assessments": 1, "edges": 3, "evidence_backed_edges": 1},
+            "nodes": [
+                {"id": "concept-1", "kind": "concept", "label": "Action preconditions"},
+                {"id": "resource-1", "kind": "resource", "label": "PDDL Notes"},
+                {"id": "task-1-explain", "kind": "task", "label": "Explain PDDL action preconditions"},
+                {"id": "assessment-1", "kind": "assessment", "label": "paper-mastery"},
+            ],
+            "edges": [
+                {"from": "concept-1", "to": "resource-1", "label": "covered_by"},
+                {
+                    "from": "resource-1",
+                    "to": "task-1-explain",
+                    "label": "supports",
+                    "evidence_chunks": [
+                        {
+                            "resource_title": "PDDL Notes",
+                            "file_name": "01-pddl-notes.md",
+                            "snippet": "Action preconditions decide whether a plan step can run.",
+                        }
+                    ],
+                },
+                {"from": "task-1-explain", "to": "assessment-1", "label": "required_for"},
+            ],
+        },
+        "phases": [],
+        "checkpoints": [],
+        "safety_policy": [],
+    }
+
+    markdown = render_markdown(roadmap)
+    html = render_html(roadmap)
+
+    assert "## Evidence" in markdown
+    assert "Action preconditions decide" in markdown
+    assert "rag-evidence-panel" in html
+    assert "01-pddl-notes.md" in html
+    assert "knowledge-graph-panel" in html
+    assert "kg-flow" in html
+    assert "kg-column" in html
+    assert "kg-node" in html
+    assert "kg-edge-chip" in html
+
+
+def test_zh_report_localizes_generated_labels_fonts_and_interactions():
+    roadmap = build_roadmap(
+        LearnerProfile(goal="掌握 PDDL 规划论文", output_language="zh-CN", target_kind="paper"),
+        [
+            Resource(
+                title="PDDL Planning Paper",
+                url="https://arxiv.org/abs/2509.13351",
+                source="arxiv",
+                type="paper",
+                language="en",
+                concepts=["PDDL", "symbolic planning"],
+                learning_key_points=["action preconditions"],
+                focus_areas=["VAL plan validation"],
+                critical_path_role="core-paper",
+                metadata={"target_paper": True},
+                estimated_minutes=180,
+            )
+        ],
+    )
+    html = render_html(roadmap)
+    svg = render_svg(roadmap)
+
+    assert 'class="interactive-roadmap"' in html
+    assert "font-family:\"Microsoft YaHei UI\"" in html
+    assert "font-family:'Microsoft YaHei UI'" in svg
+    assert "解释问题、贡献和假设" in html
+    assert "准备填写证据" in html
+    assert "论文掌握" in html
+    assert "Explain the problem" not in html
+    assert "ready-for-evidence" not in html
+    assert "paper-mastery" not in html
+    assert "kg-node-button" in html
+    assert "resource-library-filter" in html
+    assert "evidence-toggle" in html
+    assert "phase-collapse-button" in html
+    assert "kg-edge-active" in html
+    assert "addEventListener" in html
+    assert roadmap["resource_library"][0]["localized"]["route_status"] in {"已选择", "已生成"}
+    assert all("localized_label" in edge for edge in roadmap["knowledge_graph"]["edges"])
+
+
+def test_zh_interactive_learning_console_network_filters_and_copy_are_localized():
+    roadmap = build_roadmap(
+        LearnerProfile(goal="掌握符号规划论文", output_language="zh-CN", target_kind="paper"),
+        [
+            Resource(
+                title="PDDL Planning Paper",
+                url="https://arxiv.org/abs/2509.13351",
+                source="arxiv",
+                type="paper",
+                language="en",
+                concepts=["PDDL", "symbolic planning"],
+                learning_key_points=["action preconditions"],
+                focus_areas=["VAL plan validation"],
+                critical_path_role="core-paper",
+                estimated_minutes=180,
+            ),
+            Resource(
+                title="VAL Plan Validator",
+                url="https://github.com/KCL-Planning/VAL",
+                source="github",
+                type="repository",
+                language="en",
+                concepts=["VAL", "plan validation"],
+                learning_key_points=["validation workflow"],
+                focus_areas=["runnable checks"],
+                critical_path_role="practice-validation",
+                estimated_minutes=120,
+            ),
+        ],
+    )
+    roadmap["rag_evidence"] = {
+        "mode": "light",
+        "summary": {"chunks": 4, "resources": 2},
+        "top_chunks": [
+            {
+                "resource_title": "PDDL Planning Paper",
+                "file_name": "paper.pdf",
+                "snippet": "Action preconditions decide whether a plan step can run.",
+                "score": 2.5,
+            }
+        ],
+    }
+    roadmap["study_bundle"] = {
+        "bundle_scope": "all",
+        "summary": {
+            "total": 2,
+            "downloaded": 1,
+            "link-only": 1,
+            "failed": 0,
+            "retryable": 0,
+            "downloaded_selected": 1,
+            "downloaded_omitted": 0,
+        },
+        "resources": [
+            {
+                "index": 1,
+                "title": "PDDL Planning Paper",
+                "source": "arxiv",
+                "type": "paper",
+                "status": "downloaded",
+                "route_status": "selected",
+                "selected": True,
+                "file": "01-pddl-planning-paper.pdf",
+                "download_url": "https://arxiv.org/pdf/2509.13351",
+                "retryable": False,
+                "attempts": 1,
+            },
+            {
+                "index": 2,
+                "title": "VAL Plan Validator",
+                "source": "github",
+                "type": "repository",
+                "status": "link-only",
+                "route_status": "omitted",
+                "selected": False,
+                "file": "",
+                "download_url": "https://github.com/KCL-Planning/VAL",
+                "retryable": False,
+                "attempts": 0,
+                "reason": "manual link only",
+            },
+        ],
+    }
+    roadmap["mastery_evidence"]["status"] = "ready-for-evidence"
+    roadmap["mastery_evidence"]["final_artifact"] = "paper-mastery"
+    roadmap["final_artifact"]["type"] = "paper-mastery"
+    if roadmap["mastery_evidence"].get("required_evidence"):
+        roadmap["mastery_evidence"]["required_evidence"][0]["task_type"] = "explain"
+        roadmap["mastery_evidence"]["required_evidence"][0]["review_status"] = "open"
+
+    html = render_html(roadmap)
+    markdown = render_markdown(roadmap)
+
+    for marker in (
+        "learning-console",
+        "kg-network-panel",
+        "kg-network-node",
+        "kg-network-edge",
+        "kg-network-canvas",
+        "data-kg-reset",
+        "data-kg-fit",
+        "task-guide-rail",
+        "task-progress-checkbox",
+        "resource-filter-chip",
+        "current-task-filter",
+        "data-local-only-filter",
+        "bundle-summary-hero",
+    ):
+        assert marker in html
+    for forbidden in (
+        "ready-for-evidence",
+        "paper-mastery",
+        "Explain the problem",
+        "score ",
+        "chunks=",
+        "resources=",
+        "retryable=no",
+        ">light<",
+        ">ev<",
+        "бд",
+    ):
+        assert forbidden not in html
+    assert "分数" in html
+    assert "片段" in html
+    assert "资料数" in html
+    assert "轻量检索" in html
+    assert 'data-filter-group="download"' in html
+    assert 'data-filter-value="downloaded"' in html
+    assert 'data-filter-group="type"' in html
+    assert 'data-filter-value="paper"' in html
+    assert 'data-filter-group="source"' in html
+    assert 'data-filter-value="arxiv"' in html
+    assert 'data-download="downloaded"' in html
+    assert 'data-route="omitted"' in html
+    assert 'data-type="repository"' in html
+    assert "localStorage" in html
+    assert "matchesCurrentTask" in html
+    for forbidden in (
+        "- mode:",
+        "chunks:",
+        "resources:",
+        "score=",
+        "ready-for-evidence",
+        "paper-mastery",
+        "| explain |",
+        "| open |",
+    ):
+        assert forbidden not in markdown
+    assert "检索模式" in markdown
+    assert "分数" in markdown
+    assert "准备填写证据" in markdown
+    assert "论文掌握" in markdown
+
+
+def test_html_uses_short_display_title_for_long_paper_goal():
+    long_title = "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning"
+    roadmap = build_roadmap(
+        LearnerProfile(
+            goal=f"掌握 {long_title}，能中文汇报、解释关键方法、完成最小复现任务",
+            output_language="zh-CN",
+            target_kind="paper",
+        ),
+        [
+            Resource(
+                title=long_title,
+                url="local://paper",
+                source="local-library",
+                type="paper",
+                language="en",
+                concepts=["symbolic planning"],
+                critical_path_role="core-paper",
+                metadata={
+                    "target_paper": True,
+                    "paper_metadata": {
+                        "title": long_title,
+                        "abstract_snippet": "Planning paper.",
+                        "metadata_status": "local_pdf",
+                    },
+                },
+            )
+        ],
+    )
+
+    html = render_html(roadmap)
+
+    assert "<h1>Teaching LLMs to Plan 学习路线</h1>" in html
+    assert f"<h1>{roadmap['title']}</h1>" not in html
 
 
 def test_reports_render_full_download_manager_table_for_large_study_bundles():
@@ -909,6 +1343,47 @@ def test_reports_render_full_download_manager_table_for_large_study_bundles():
     assert "Long Resource 18 With Enough Words" in html
     assert ".bundle-table" in html
     assert "table-layout:fixed" in html
+
+
+def test_download_manager_hides_absent_status_filters_and_labels_reused_files():
+    roadmap = {
+        "profile": {"output_language": "zh-CN"},
+        "study_bundle": {
+            "manifest_file": "study_bundle_manifest.json",
+            "links_file": "links.md",
+            "download_manager": {
+                "download_queue_file": "download_queue.json",
+                "retry_file": "retry_failed.md",
+                "completed": 1,
+                "retryable": 0,
+            },
+            "summary": {"downloaded": 1, "link-only": 0, "failed": 0, "retryable": 0, "completed": 1, "total": 1},
+            "policy": "Test bundle policy.",
+            "resources": [
+                {
+                    "index": 1,
+                    "title": "Existing Paper",
+                    "source": "arxiv",
+                    "type": "paper",
+                    "status": "downloaded",
+                    "route_status": "selected",
+                    "selected": True,
+                    "file": "01-existing-paper.pdf",
+                    "retryable": False,
+                    "attempts": 0,
+                    "reason": "existing_bundle_file_reused",
+                }
+            ],
+        },
+    }
+
+    html = render_html(roadmap)
+
+    assert 'data-bundle-filter="downloaded"' in html
+    assert 'data-bundle-filter="link-only"' not in html
+    assert 'data-bundle-filter="failed"' not in html
+    assert "已复用已有文件" in html
+    assert "existing_bundle_file_reused" not in html
 
 
 def test_planning_paper_route_exposes_books_papers_and_validation_tools():

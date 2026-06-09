@@ -13,6 +13,7 @@ TEMPLATE_ARTIFACT_PATHS = [
     "artifact_template/README.md",
     "artifact_template/task_checklist.md",
     "artifact_template/reproduction_log.md",
+    "artifact_template/mastery_evidence.md",
     "artifact_template/notebook_skeleton.ipynb",
     "artifact_template/src/main.py",
 ]
@@ -138,6 +139,7 @@ def write_artifact_template(output_dir: Path, roadmap: dict[str, Any]) -> None:
     (template_dir / "README.md").write_text(_readme(roadmap), encoding="utf-8")
     (template_dir / "task_checklist.md").write_text(_task_checklist(roadmap), encoding="utf-8")
     (template_dir / "reproduction_log.md").write_text(_reproduction_log(roadmap), encoding="utf-8")
+    (template_dir / "mastery_evidence.md").write_text(_mastery_evidence_doc(roadmap), encoding="utf-8")
     (template_dir / "notebook_skeleton.ipynb").write_text(json.dumps(_notebook(roadmap), ensure_ascii=False, indent=2), encoding="utf-8")
     (src_dir / "main.py").write_text(_main_py(), encoding="utf-8")
 
@@ -387,7 +389,7 @@ def _readme(roadmap: dict[str, Any]) -> str:
             f"{_template_text(roadmap, 'Final artifact', '最终产物')}: {artifact.get('type', 'unknown')}",
             "",
             _template_text(roadmap, "This template is a generated study scaffold, not a completed reproduction.", "这个模板是生成的学习验收骨架，不代表已经完成复现。"),
-            _template_text(roadmap, "Fill in the checklist, run the minimal code path, and record evidence in reproduction_log.md.", "请填写验收清单，运行最小代码路径，并在 reproduction_log.md 中记录证据。"),
+            _template_text(roadmap, "Fill in the checklist, run the minimal code path, and record evidence in reproduction_log.md and mastery_evidence.md.", "请填写验收清单，运行最小代码路径，并在 reproduction_log.md 和 mastery_evidence.md 中记录证据。"),
             "",
             _template_text(roadmap, "Expected evidence:", "预期证据："),
             f"- {_template_text(roadmap, 'Explain the target idea without notes.', '不看笔记讲清目标思想。')}",
@@ -410,6 +412,7 @@ def _task_checklist(roadmap: dict[str, Any]) -> str:
     lines.extend(
         [
             f"- [ ] {_template_text(roadmap, 'Record commands, results, and blockers in reproduction_log.md', '在 reproduction_log.md 中记录命令、结果和阻塞点')}",
+            f"- [ ] {_template_text(roadmap, 'Fill the explain, derive, reproduce, and critique evidence table in mastery_evidence.md', '在 mastery_evidence.md 中填写讲解、推导、复现和批判证据表')}",
             f"- [ ] {_template_text(roadmap, 'Link each code step back to a concept, section, or paper claim', '把每个代码步骤对应回概念、章节或论文主张')}",
             "",
         ]
@@ -447,6 +450,82 @@ def _reproduction_log(roadmap: dict[str, Any]) -> str:
             "",
         ]
     )
+
+
+def _mastery_evidence_doc(roadmap: dict[str, Any]) -> str:
+    evidence = roadmap.get("mastery_evidence", {})
+    required = [item for item in evidence.get("required_evidence", []) if isinstance(item, dict)]
+    if _template_language(roadmap) == "en":
+        title = "Mastery Evidence Contract"
+        intro = evidence.get("claim") or "Learning is not complete until every evidence item is filled and reviewable."
+        header = "| Task type | Evidence to produce | Pass criteria | Resources | Review status | Notes |"
+        placeholder = "open"
+        no_resources = "not specified"
+    else:
+        title = _template_text(roadmap, "Mastery Evidence Contract", "掌握证据契约")
+        intro = evidence.get("claim") or _template_text(
+            roadmap,
+            "Learning is not complete until every evidence item is filled and reviewable.",
+            "只有每项证据都填写并可复查，才算完成学习。",
+        )
+        header = _template_text(
+            roadmap,
+            "| Task type | Evidence to produce | Pass criteria | Resources | Review status | Notes |",
+            "| 任务类型 | 需要产出的证据 | 通过标准 | 关联资源 | 复查状态 | 备注 |",
+        )
+        placeholder = _template_text(roadmap, "open", "待复查")
+        no_resources = _template_text(roadmap, "not specified", "未指定")
+    lines = [
+        f"# {title}",
+        "",
+        str(intro),
+        "",
+        header,
+        "| --- | --- | --- | --- | --- | --- |",
+    ]
+    if not required:
+        required = [
+            {
+                "task_type": task_type,
+                "evidence": "",
+                "pass_criteria": "",
+                "resources": [],
+                "review_status": placeholder,
+            }
+            for task_type in ("explain", "derive", "reproduce", "critique")
+        ]
+    for item in required:
+        resources = ", ".join(str(resource) for resource in item.get("resources", []) if resource) or no_resources
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    _table_cell(item.get("task_type", "task")),
+                    _table_cell(item.get("evidence", "")),
+                    _table_cell(item.get("pass_criteria", "")),
+                    _table_cell(resources),
+                    _table_cell(item.get("review_status", placeholder)),
+                    "",
+                ]
+            )
+            + " |"
+        )
+    lines.extend(
+        [
+            "",
+            _template_text(
+                roadmap,
+                "Fill the result links, command output, screenshots, notebook cells, or explanation notes before marking a task reviewed.",
+                "在标记复查前，请填写结果链接、命令输出、截图、Notebook 单元或讲解笔记。",
+            ),
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _table_cell(value: Any) -> str:
+    return str(value).replace("|", "\\|").replace("\n", "<br>")
 
 
 def _notebook(roadmap: dict[str, Any]) -> dict[str, Any]:

@@ -13,6 +13,7 @@ from fields_study_flow.mcp_tools import ingestUrl
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve_paper_metadata
+from fields_study_flow.rag import answer_from_bundle, apply_rag_to_resources, public_rag_evidence, write_bundle_rag_index
 from fields_study_flow.ranking import rank_resources
 from fields_study_flow.resource_bundle import attach_study_bundle, bundle_study_resources
 from fields_study_flow.roadmap import build_roadmap, write_outputs
@@ -45,6 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         return _discover_sources(args)
     if args.command == "export":
         return _export(args)
+    if args.command == "ask":
+        return _ask(args)
     parser.print_help()
     return 1
 
@@ -66,11 +69,14 @@ def build_parser() -> argparse.ArgumentParser:
     roadmap.add_argument("--local-resource", action="append", default=[], help="Explicit local file or folder to analyze as a shortcut candidate.")
     roadmap.add_argument("--output-dir", default="fields-study-flow-output")
     roadmap.add_argument("--resource-dir", help="Copy/download the full study resource library into this private local directory.")
+    roadmap.add_argument("--bundle-scope", choices=["selected", "all"], default="all", help="Download/copy only selected route resources or all candidate resources.")
     roadmap.add_argument("--download-retries", type=int, default=2, help="Retry each downloadable resource this many times after the first failed attempt.")
     roadmap.add_argument("--quiet-downloads", action="store_true", help="Do not print per-resource bundle progress.")
+    roadmap.add_argument("--no-paper-lens", action="store_true", help="Do not generate the standalone paper_lens.html reader even when a target paper is present.")
     roadmap.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
     roadmap.add_argument("--offline", action="store_true", help="Use the bundled deterministic resource catalog and disable live search.")
     roadmap.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
+    roadmap.add_argument("--rag", choices=["off", "light", "auto", "embedding"], default="auto", help="Evidence retrieval mode for ranking and reports.")
 
     paper = subparsers.add_parser("paper", help="Generate a paper deep-reading roadmap.")
     paper.add_argument("--url")
@@ -83,9 +89,12 @@ def build_parser() -> argparse.ArgumentParser:
     paper.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
     paper.add_argument("--output-dir", default="fields-study-flow-paper-output")
     paper.add_argument("--resource-dir", help="Copy/download the full study resource library into this private local directory.")
+    paper.add_argument("--bundle-scope", choices=["selected", "all"], default="all", help="Download/copy only selected route resources or all candidate resources.")
     paper.add_argument("--download-retries", type=int, default=2, help="Retry each downloadable resource this many times after the first failed attempt.")
     paper.add_argument("--quiet-downloads", action="store_true", help="Do not print per-resource bundle progress.")
+    paper.add_argument("--no-paper-lens", action="store_true", help="Do not generate the standalone paper_lens.html reader.")
     paper.add_argument("--interactive", action="store_true", help="Ask for language, storage, and learning preferences before generating the plan.")
+    paper.add_argument("--rag", choices=["off", "light", "auto", "embedding"], default="auto", help="Evidence retrieval mode for ranking and reports.")
 
     ingest = subparsers.add_parser("ingest-url", help="Parse a user-provided resource URL at metadata level.")
     ingest.add_argument("url")
@@ -106,6 +115,12 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--input", default="fields-study-flow-output/roadmap.json")
     export.add_argument("--format", choices=["markdown", "json", "svg", "html", "anki", "all"], default="json")
     export.add_argument("--output-dir", default="fields-study-flow-export")
+
+    ask = subparsers.add_parser("ask", help="Answer a question from a generated local study bundle.")
+    ask.add_argument("--roadmap", required=True, help="Path to a generated roadmap.json.")
+    ask.add_argument("--question", required=True)
+    ask.add_argument("--resource-dir", help="Directory containing the downloaded/copied study bundle.")
+    ask.add_argument("--limit", type=int, default=5)
 
     return parser
 
@@ -167,17 +182,25 @@ def _roadmap(args: argparse.Namespace) -> int:
     if args.local_resource:
         resources.extend(analyze_local_resources(args.local_resource, args.goal))
     ranked = rank_resources(resources, profile)
-    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics)
+    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode=args.rag)
+    rag_evidence = public_rag_evidence(rag_index, profile.goal)
+    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics, rag_evidence=rag_evidence)
+    if rag_evidence:
+        roadmap["rag_evidence"] = rag_evidence
     manifest = None
     if args.resource_dir:
         manifest = bundle_study_resources(
             Path(args.resource_dir),
             ranked,
             roadmap,
+            bundle_scope=args.bundle_scope,
             retries=max(0, args.download_retries),
             progress=None if args.quiet_downloads else _print_bundle_progress,
         )
-        roadmap = attach_study_bundle(roadmap, manifest)
+        if args.rag != "off":
+            write_bundle_rag_index(Path(args.resource_dir), manifest, query=profile.goal, mode=args.rag)
+        roadmap = attach_study_bundle(roadmap, manifest, report_dir=Path(args.output_dir))
+    roadmap = _apply_paper_lens_option(args, roadmap)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
     if manifest is not None:
         print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
@@ -216,17 +239,25 @@ def _paper(args: argparse.Namespace) -> int:
     if not args.with_videos:
         resources = [resource for resource in resources if resource.type != "video"]
     ranked = rank_resources(resources, profile)
-    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics)
+    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode=args.rag)
+    rag_evidence = public_rag_evidence(rag_index, profile.goal)
+    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics, rag_evidence=rag_evidence)
+    if rag_evidence:
+        roadmap["rag_evidence"] = rag_evidence
     manifest = None
     if args.resource_dir:
         manifest = bundle_study_resources(
             Path(args.resource_dir),
             ranked,
             roadmap,
+            bundle_scope=args.bundle_scope,
             retries=max(0, args.download_retries),
             progress=None if args.quiet_downloads else _print_bundle_progress,
         )
-        roadmap = attach_study_bundle(roadmap, manifest)
+        if args.rag != "off":
+            write_bundle_rag_index(Path(args.resource_dir), manifest, query=profile.goal, mode=args.rag)
+        roadmap = attach_study_bundle(roadmap, manifest, report_dir=Path(args.output_dir))
+    roadmap = _apply_paper_lens_option(args, roadmap)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
     if manifest is not None:
         print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
@@ -260,12 +291,29 @@ def _interactive_update_args(args: argparse.Namespace, mode: str) -> None:
     if want_bundle:
         default_resource_dir = args.resource_dir or str(Path(args.output_dir) / "study_resources")
         args.resource_dir = _prompt_text("Resource download/copy directory / 资料下载或复制目录", default_resource_dir)
+        args.bundle_scope = _prompt_choice(
+            "Bundle scope: all downloads every directly available candidate; selected only bundles the shortest route / 资料包范围：all 尽量下载全部可获取候选资料，selected 只打包最短路线资料",
+            args.bundle_scope or "all",
+            ["all", "selected"],
+        )
     else:
         args.resource_dir = None
     if mode == "roadmap":
         args.offline = _prompt_bool("Use offline deterministic catalog only / 是否只使用离线内置资源目录", args.offline)
     if not getattr(args, "offline", False):
         args.no_live_search = not _prompt_bool("Enable live open-source discovery / 是否启用开放来源实时发现", not args.no_live_search)
+
+
+def _apply_paper_lens_option(args: argparse.Namespace, roadmap: dict[str, object]) -> dict[str, object]:
+    if not getattr(args, "no_paper_lens", False):
+        return roadmap
+    updated = dict(roadmap)
+    updated["paper_lens_disabled"] = True
+    updated.pop("paper_lens", None)
+    outputs = updated.get("outputs")
+    if isinstance(outputs, list):
+        updated["outputs"] = [item for item in outputs if item != "paper_lens.html"]
+    return updated
 
 
 def _prompt_text(label: str, current: str | None, *, required: bool = True) -> str:
@@ -366,6 +414,36 @@ def _discover_sources(args: argparse.Namespace) -> int:
     sources = registry.discover(language_preference=args.language, source_policy=args.source_policy)
     print(json.dumps([source.to_dict() for source in sources], ensure_ascii=False, indent=2))
     return 0
+
+
+def _ask(args: argparse.Namespace) -> int:
+    roadmap_path = Path(args.roadmap)
+    resource_dir = Path(args.resource_dir) if args.resource_dir else _infer_resource_dir_from_roadmap(roadmap_path)
+    if resource_dir is None:
+        print("error: --resource-dir is required when the bundle directory cannot be inferred from --roadmap", file=sys.stderr)
+        return 2
+    result = answer_from_bundle(resource_dir, args.question, limit=max(1, args.limit))
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
+def _infer_resource_dir_from_roadmap(roadmap_path: Path) -> Path | None:
+    if not roadmap_path.exists():
+        return None
+    parent = roadmap_path.parent
+    candidates = [
+        parent / "study_resources",
+        parent / "study-assets",
+        parent.parent / "study-assets" / parent.name,
+    ]
+    parts = list(parent.parts)
+    if "study-reports" in parts:
+        index = parts.index("study-reports")
+        candidates.append(Path(*parts[:index], "study-assets", *parts[index + 1 :]))
+    for candidate in candidates:
+        if (candidate / ".rag_index" / "manifest.json").exists():
+            return candidate
+    return None
 
 
 def _export(args: argparse.Namespace) -> int:
