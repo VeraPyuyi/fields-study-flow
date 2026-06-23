@@ -49,7 +49,46 @@ def test_cli_roadmap_generates_expected_artifacts(tmp_path):
     assert roadmap["path_strategy"]["route_depth"] == "balanced"
     assert "Transformer" in (output_dir / "roadmap.md").read_text(encoding="utf-8")
     assert "模式" in (output_dir / "roadmap.svg").read_text(encoding="utf-8")
-    assert "roadmap-grid" in (output_dir / "roadmap.html").read_text(encoding="utf-8")
+    roadmap_html = (output_dir / "roadmap.html").read_text(encoding="utf-8")
+    assert 'id="root"' in roadmap_html
+    assert 'data-report-kind="roadmap"' in roadmap_html
+    assert "fields-study-flow-data" in roadmap_html
+    assert "<style>" in roadmap_html
+    assert "<script>" in roadmap_html
+    assert "assets/study-flow-app/assets/" not in roadmap_html
+
+
+def test_cli_demo_generates_zero_setup_single_paper_report(tmp_path):
+    output_dir = tmp_path / "demo"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "demo",
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (output_dir / "index.html").exists()
+    assert (output_dir / "paper_map.html").exists()
+    assert (output_dir / "paper_lens.html").exists()
+    assert (output_dir / "roadmap.html").exists()
+    roadmap = json.loads((output_dir / "roadmap.json").read_text(encoding="utf-8"))
+    assert roadmap["profile"]["target_kind"] == "paper"
+    assert roadmap["profile"]["route_depth"] == "fastest"
+    assert roadmap["paper_map"]["layout"]["kind"] == "xmind-flow"
+    assert roadmap["paper_lens"]["explanation_summary"]["granularity"] == "paragraph"
+    index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+    assert "从这里开始" in index_html
+    assert "paper_map.html" in index_html
+    assert "Attention Is All You Need" in index_html
 
 
 def test_cli_discover_sources_outputs_language_filtered_sources():
@@ -197,6 +236,8 @@ The method verifies a small local note.
             str(output_dir),
             "--resource-dir",
             str(resource_dir),
+            "--bundle-scope",
+            "selected",
         ],
         check=False,
         capture_output=True,
@@ -219,7 +260,9 @@ The method verifies a small local note.
     assert str(pdf) not in dumped
     html = (output_dir / "roadmap.html").read_text(encoding="utf-8")
     markdown = (output_dir / "roadmap.md").read_text(encoding="utf-8")
-    assert "Study Asset Bundle" in html
+    assert 'data-report-kind="roadmap"' in html
+    assert "fields-study-flow-data" in html
+    assert "study_bundle" in html
     assert "study_bundle_manifest.json" in html
     assert roadmap["study_bundle"]["resources"][0]["local_href"] in html
     assert roadmap["study_bundle"]["resources"][0]["local_href"] in markdown
@@ -251,6 +294,8 @@ def test_cli_roadmap_rag_light_exports_evidence_and_bundle_index(tmp_path):
             str(output_dir),
             "--resource-dir",
             str(resource_dir),
+            "--bundle-scope",
+            "selected",
             "--rag",
             "light",
             "--offline",
@@ -284,7 +329,14 @@ def test_cli_parsers_expose_bundle_scope_for_paper_and_roadmap():
             "auto",
             "--paper-lens-density",
             "dense",
+            "--paper-lens-granularity",
+            "paragraph",
             "--no-paper-lens",
+            "--paper-map-language",
+            "bilingual",
+            "--paper-map-depth",
+            "complete",
+            "--no-paper-map",
         ]
     )
     paper_args = parser.parse_args(
@@ -298,7 +350,18 @@ def test_cli_parsers_expose_bundle_scope_for_paper_and_roadmap():
             "zh-CN",
             "--paper-lens-density",
             "key",
+            "--paper-lens-granularity",
+            "sentence",
             "--no-paper-lens",
+            "--paper-map-language",
+            "zh-CN",
+            "--paper-map-depth",
+            "quick",
+            "--paper-map-layout",
+            "xmind-flow",
+            "--paper-map-provider",
+            "local",
+            "--no-paper-map",
         ]
     )
 
@@ -306,10 +369,35 @@ def test_cli_parsers_expose_bundle_scope_for_paper_and_roadmap():
     assert paper_args.bundle_scope == "all"
     assert roadmap_args.paper_lens_language == "auto"
     assert roadmap_args.paper_lens_density == "dense"
+    assert roadmap_args.paper_lens_granularity == "paragraph"
     assert paper_args.paper_lens_language == "zh-CN"
     assert paper_args.paper_lens_density == "key"
+    assert paper_args.paper_lens_granularity == "sentence"
     assert roadmap_args.no_paper_lens is True
     assert paper_args.no_paper_lens is True
+    assert roadmap_args.paper_map_language == "bilingual"
+    assert roadmap_args.paper_map_depth == "complete"
+    assert paper_args.paper_map_language == "zh-CN"
+    assert paper_args.paper_map_depth == "quick"
+    assert roadmap_args.paper_map_layout == "xmind-flow"
+    assert paper_args.paper_map_layout == "xmind-flow"
+    assert roadmap_args.paper_map_provider == "auto"
+    assert paper_args.paper_map_provider == "local"
+    assert roadmap_args.no_paper_map is True
+    assert paper_args.no_paper_map is True
+
+
+def test_paper_profile_goal_does_not_repeat_existing_target_title():
+    from fields_study_flow.cli import _paper_profile_goal
+    from fields_study_flow.models import Resource
+
+    title = "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning"
+    target = Resource(title=title, url="local://paper", source="local-library", type="paper")
+
+    goal = _paper_profile_goal(f"快速理解并能够中文汇报 {title}", target, "")
+
+    assert goal == f"快速理解并能够中文汇报 {title}"
+    assert goal.count(title) == 1
 
 
 def test_cli_ask_answers_from_bundle_index(tmp_path):
@@ -754,6 +842,7 @@ def test_cli_export_writes_svg_and_html(tmp_path):
     assert (export_dir / "roadmap.json").exists()
     assert (export_dir / "roadmap.md").exists()
     assert (export_dir / "roadmap.svg").exists()
+    assert (export_dir / "index.html").exists()
     assert (export_dir / "roadmap.html").exists()
 
 
@@ -832,8 +921,9 @@ def test_cli_export_all_sanitizes_private_paths_and_lists_outputs(tmp_path):
     assert "roadmap.json" in result.stdout
     assert "roadmap.md" in result.stdout
     assert "roadmap.svg" in result.stdout
+    assert "index.html" in result.stdout
     assert "roadmap.html" in result.stdout
-    for target in ("roadmap.json", "roadmap.md", "roadmap.svg", "roadmap.html"):
+    for target in ("roadmap.json", "roadmap.md", "roadmap.svg", "index.html", "roadmap.html"):
         exported = (export_dir / target).read_text(encoding="utf-8")
         assert "C:/Users/example/private" not in exported
         assert "file:///C:/Users/example/private" not in exported

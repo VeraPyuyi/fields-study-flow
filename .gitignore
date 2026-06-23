@@ -11,4 +11,6 @@ tmp-review-output/
 dist/
 build/
 *.egg-info/
+frontend/node_modules/
+frontend/*.tsbuildinfo
 docs/assets/*.preview.png

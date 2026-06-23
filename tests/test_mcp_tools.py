@@ -169,12 +169,16 @@ def test_export_plan_writes_markdown_svg_and_html(tmp_path):
     assert (tmp_path / "roadmap.json").exists()
     assert (tmp_path / "roadmap.md").exists()
     assert (tmp_path / "roadmap.svg").exists()
+    assert (tmp_path / "index.html").exists()
+    assert (tmp_path / "report_audit.json").exists()
     assert (tmp_path / "roadmap.html").exists()
+    assert result["index_html"].endswith("index.html")
+    assert result["report_audit_json"].endswith("report_audit.json")
     assert result["roadmap_svg"].endswith("roadmap.svg")
     assert result["roadmap_html"].endswith("roadmap.html")
 
 
-def test_export_plan_writes_paper_lens_when_plan_has_target_paper(tmp_path):
+def test_export_plan_writes_paper_lens_and_map_when_plan_has_target_paper(tmp_path):
     plan = {
         "title": "Learning Roadmap: Teaching LLMs to Plan",
         "profile": {"goal": "Teaching LLMs to Plan", "output_language": "zh-CN", "resource_language_preference": "balanced"},
@@ -223,14 +227,40 @@ def test_export_plan_writes_paper_lens_when_plan_has_target_paper(tmp_path):
         "safety_policy": ["Do not expose private paths."],
     }
 
-    result = exportPlan(plan, str(tmp_path), paperLensLanguage="zh-CN", paperLensDensity="key")
+    result = exportPlan(
+        plan,
+        str(tmp_path),
+        paperLensLanguage="zh-CN",
+        paperLensDensity="key",
+        paperLensGranularity="sentence",
+        paperMapLanguage="zh-CN",
+        paperMapDepth="quick",
+        paperMapLayout="xmind-flow",
+        paperMapProvider="local",
+    )
 
+    assert (tmp_path / "index.html").exists()
+    assert (tmp_path / "report_audit.json").exists()
     assert (tmp_path / "paper_lens.html").exists()
+    assert (tmp_path / "paper_map.html").exists()
+    assert result["index_html"].endswith("index.html")
+    assert result["report_audit_json"].endswith("report_audit.json")
     assert result["paper_lens_html"].endswith("paper_lens.html")
+    assert result["paper_map_html"].endswith("paper_map.html")
+    report_audit = json.loads((tmp_path / "report_audit.json").read_text(encoding="utf-8"))
+    assert report_audit["recommended_first_action"]["href"] == "paper_map.html"
+    index_html = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert "paper_map.html" in index_html
+    assert "paper_lens.html" in index_html
     exported = json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
     assert "paper_lens" in exported
+    assert "paper_map" in exported
     assert exported["paper_lens"]["explanation_summary"]["language"] == "zh-CN"
     assert exported["paper_lens"]["explanation_summary"]["density"] == "key"
+    assert exported["paper_lens"]["explanation_summary"]["granularity"] == "sentence"
+    assert exported["paper_map"]["output_language"] == "zh-CN"
+    assert exported["paper_map"]["depth"] == "quick"
+    assert exported["paper_map"]["layout"]["kind"] == "xmind-flow"
 
 
 def test_export_plan_writes_generated_artifact_template(tmp_path):

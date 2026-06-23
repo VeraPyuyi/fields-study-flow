@@ -38,6 +38,31 @@ class FakeClient:
         return result
 
 
+def test_metadata_clipping_does_not_add_visible_ellipsis() -> None:
+    long_abstract = " ".join(
+        ["Planning traces explain preconditions effects state transitions and validation"] * 80
+    )
+    client = FakeClient(
+        {
+            "https://api.semanticscholar.org/graph/v1/paper/DOI:10.5555/ellipsis": FakeResponse(
+                payload={
+                    "title": "Long Planning Paper",
+                    "abstract": long_abstract,
+                    "authors": [{"name": "Example Author"}],
+                    "fieldsOfStudy": ["Artificial Intelligence"],
+                    "url": "https://example.com/long-planning-paper",
+                }
+            )
+        }
+    )
+
+    metadata = resolve_paper_metadata("https://doi.org/10.5555/ellipsis", client=client)
+
+    assert metadata["abstract_snippet"]
+    assert "..." not in metadata["abstract_snippet"]
+    assert "\u2026" not in metadata["abstract_snippet"]
+
+
 def test_resolve_arxiv_metadata_extracts_public_paper_fields() -> None:
     atom = """<?xml version="1.0"?>
     <feed xmlns="http://www.w3.org/2005/Atom">

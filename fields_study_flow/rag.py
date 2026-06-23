@@ -428,7 +428,7 @@ def _clip(value: str, limit: int) -> str:
     value = _clean_text(value)
     if len(value) <= limit:
         return value
-    return value[: limit - 1].rstrip() + "..."
+    return value[:limit].rstrip()
 
 
 def _embedding_status(mode: str) -> tuple[bool, str]:

@@ -35,7 +35,9 @@ def test_build_roadmap_contains_required_files_and_resource_fields():
     roadmap = build_roadmap(profile, resources)
 
     assert roadmap["profile"]["goal"] == profile.goal
-    assert roadmap["outputs"][:8] == [
+    assert roadmap["outputs"][:10] == [
+        "index.html",
+        "report_audit.json",
         "learner_profile.json",
         "resource_index.json",
         "local_resource_analysis.json",
@@ -70,6 +72,90 @@ def test_build_roadmap_contains_required_files_and_resource_fields():
         "translation_note",
     ):
         assert field in resource
+
+
+def test_multi_paper_roadmap_builds_paper_set_synthesis_view():
+    profile = LearnerProfile(
+        goal="compare diffusion model papers: DDPM, score SDE, and classifier-free guidance",
+        output_language="en",
+        target_kind="field",
+        route_depth="balanced",
+        learning_style="theory",
+    )
+    resources = [
+        Resource(
+            title="Denoising Diffusion Probabilistic Models",
+            url="https://example.com/ddpm",
+            source="arxiv",
+            type="paper",
+            concepts=["diffusion models", "denoising", "variational inference"],
+            learning_key_points=["forward noising and reverse denoising process"],
+            focus_areas=["methodology", "sampling"],
+            estimated_minutes=180,
+            trust_score=0.96,
+            critical_path_role="core-paper",
+            metadata={
+                "paper_metadata": {
+                    "title": "Denoising Diffusion Probabilistic Models",
+                    "abstract_snippet": "A discrete-time denoising diffusion model.",
+                    "concepts": ["diffusion models", "denoising"],
+                }
+            },
+        ),
+        Resource(
+            title="Score-Based Generative Modeling through Stochastic Differential Equations",
+            url="https://example.com/score-sde",
+            source="arxiv",
+            type="paper",
+            concepts=["diffusion models", "score matching", "stochastic differential equations"],
+            learning_key_points=["continuous-time score model and sampler"],
+            focus_areas=["methodology", "sampling"],
+            estimated_minutes=210,
+            trust_score=0.94,
+            critical_path_role="focused-support",
+            metadata={
+                "paper_metadata": {
+                    "title": "Score-Based Generative Modeling through Stochastic Differential Equations",
+                    "abstract_snippet": "A continuous-time score-based generative modeling framework.",
+                    "concepts": ["diffusion models", "score matching"],
+                }
+            },
+        ),
+        Resource(
+            title="Classifier-Free Diffusion Guidance",
+            url="https://example.com/cfg",
+            source="arxiv",
+            type="paper",
+            concepts=["diffusion models", "classifier-free guidance", "conditional generation"],
+            learning_key_points=["guidance trades diversity for sample quality"],
+            focus_areas=["methodology", "evaluation"],
+            estimated_minutes=150,
+            trust_score=0.91,
+            critical_path_role="support",
+            metadata={
+                "paper_metadata": {
+                    "title": "Classifier-Free Diffusion Guidance",
+                    "abstract_snippet": "A classifier-free guidance method for conditional generation.",
+                    "concepts": ["diffusion models", "conditional generation"],
+                }
+            },
+        ),
+    ]
+
+    roadmap = build_roadmap(profile, resources)
+
+    paper_set = roadmap["paper_set"]
+    assert paper_set["mode"] == "paper-set"
+    assert len(paper_set["papers"]) == 3
+    assert any(concept["label"] == "diffusion models" and concept["paper_count"] == 3 for concept in paper_set["shared_concepts"])
+    assert [item["position"] for item in paper_set["reading_order"]] == [1, 2, 3]
+    assert paper_set["reading_order"][0]["paper_id"] == paper_set["papers"][0]["id"]
+    axis_labels = {axis["label"] for axis in paper_set["comparison_axes"]}
+    assert {"Problem / gap", "Method", "Evaluation evidence", "Contribution", "Limitation"}.issubset(axis_labels)
+    assert {task["type"] for task in paper_set["synthesis_tasks"]} >= {"compare", "synthesize", "critique"}
+    serialized = json.dumps(paper_set)
+    assert "C:/" not in serialized
+    assert "D:/" not in serialized
 
 
 def test_write_outputs_writes_paper_lens_for_target_paper(tmp_path):
@@ -113,8 +199,23 @@ def test_write_outputs_writes_paper_lens_for_target_paper(tmp_path):
 
     exported = json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
     assert "paper_lens" in exported
+    assert "index.html" in exported["outputs"]
+    assert "report_audit.json" in exported["outputs"]
     assert "paper_lens.html" in exported["outputs"]
+    assert (tmp_path / "index.html").exists()
+    assert (tmp_path / "report_audit.json").exists()
     assert (tmp_path / "paper_lens.html").exists()
+    report_audit = json.loads((tmp_path / "report_audit.json").read_text(encoding="utf-8"))
+    assert report_audit["visual_audit"]["status"] == "pass"
+    assert report_audit["recommended_first_action"]["href"] == "paper_map.html"
+    assert "paper_lens.html" in report_audit["surfaces"]
+    index_html = (tmp_path / "index.html").read_text(encoding="utf-8")
+    assert "从这里开始" in index_html
+    assert "paper_map.html" in index_html
+    assert "paper_lens.html" in index_html
+    assert "roadmap.html" in index_html
+    assert "C:/" not in index_html
+    assert "D:/" not in index_html
     assert "目标论文增强阅读器" in (tmp_path / "paper_lens.html").read_text(encoding="utf-8")
     assert "paper_lens.html" in (tmp_path / "roadmap.html").read_text(encoding="utf-8")
 
@@ -188,6 +289,34 @@ def test_report_labels_follow_output_language_selection():
     assert "## Mastery Path Strategy" in en_md
     assert "## Mastery Path Strategy / 掌握路径策略" in bilingual_md
     assert "Goal / 目标" in bilingual_html
+
+
+def test_svg_snapshot_does_not_add_visible_ellipsis_to_clipped_text():
+    resource = Resource(
+        title="A Very Long Resource Title About Planning Preconditions Effects State Transitions Validation Benchmarks and Reproduction",
+        url="https://example.com/planning",
+        source="paper",
+        type="paper",
+        language="en",
+        concepts=["symbolic planning", "logical chain of thought", "PDDL action preconditions", "VAL validation"],
+        learning_key_points=[
+            "Understand why action preconditions and effects determine whether a generated plan is executable",
+        ],
+        focus_areas=[
+            "Connect background motivation methodology experiments contributions and limitations without hiding text behind ellipses",
+        ],
+        estimated_minutes=90,
+        trust_score=0.8,
+    )
+    profile = LearnerProfile(
+        goal="Master a long planning paper title without adding decorative ellipses to report snapshots",
+        output_language="en",
+    )
+
+    svg = render_svg(build_roadmap(profile, [resource]))
+
+    assert "..." not in svg
+    assert "\u2026" not in svg
 
 
 def test_build_roadmap_keeps_shortest_mastery_path_not_every_candidate():
@@ -446,6 +575,31 @@ def test_field_roadmap_infers_project_or_survey_artifact_from_goal():
 
     assert engineering["final_artifact"]["type"] == "project"
     assert research["final_artifact"]["type"] == "survey"
+
+
+def test_field_roadmap_focus_areas_do_not_expose_internal_artifact_labels():
+    roadmap = build_roadmap(
+        LearnerProfile(goal="learn diffusion models", output_language="en", target_kind="field", route_depth="balanced", learning_style="practical"),
+        [
+            Resource(
+                title="Diffusion Models Beat GANs",
+                url="https://example.com/diffusion-paper",
+                source="arxiv",
+                type="paper",
+                language="en",
+                concepts=["diffusion models", "score matching", "image synthesis"],
+                estimated_minutes=180,
+                trust_score=0.9,
+                critical_path_role="core-paper",
+            )
+        ],
+    )
+
+    focus = {item.lower() for item in roadmap["focus_areas"]}
+
+    assert "project+survey" not in focus
+    assert "field" not in focus
+    assert any("practice" in item or "project" in item for item in focus)
 
 
 def test_project_roadmap_injects_generated_template_when_no_runnable_resource():
@@ -1557,3 +1711,7 @@ def test_deep_learning_course_gets_books_courses_and_practice_resources():
     assert any(title in selected_titles for title in {"Dive into Deep Learning", "PyTorch Tutorials", "Practical Deep Learning for Coders"})
     assert any(resource["type"] == "book" for resource in roadmap["resource_library"])
     assert any(resource["critical_path_role"] == "practice-validation" for resource in roadmap["resource_library"])
+    assert len(roadmap["learning_key_points"]) >= 4
+    assert len(roadmap["focus_areas"]) >= 4
+    assert any("deep learning" in item.lower() for item in roadmap["learning_key_points"])
+    assert any("project" in item.lower() or "practice" in item.lower() for item in roadmap["focus_areas"])

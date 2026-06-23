@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>fields-study-flow preview</title>
+    <script type="module" crossorigin src="./assets/index-BI-PstlP.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-zhGImAU3.css">
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="application/json" id="fields-study-flow-data">
+      {"reportKind":"paper_map","roadmap":{"title":"fields-study-flow preview","profile":{"output_language":"zh-CN"},"paper_map":{"target":{"title":"Preview Paper"},"nodes":[{"id":"target-paper","kind":"target","role":"target","label":"Preview Paper","plain_explanation":"目标论文","why_it_matters":"帮助快速理解论文主线","connection":"主链围绕它展开","talking_point":"先讲论文主线，再讲证据。"},{"id":"core-background","kind":"background","role":"core","label":"Background","plain_explanation":"背景","why_it_matters":"说明问题从哪里来","connection":"引出动机","talking_point":"背景是读懂论文的入口。"},{"id":"core-methodology","kind":"methodology","role":"core","label":"Methodology","plain_explanation":"方法","why_it_matters":"说明作者如何解决问题","connection":"被实验验证","talking_point":"方法是论文的发动机。"}],"edges":[{"id":"e1","from":"target-paper","to":"core-background","label":"requires_background"},{"id":"e2","from":"core-background","to":"core-methodology","label":"motivates"}]}}}
+    </script>
+  </body>
+</html>

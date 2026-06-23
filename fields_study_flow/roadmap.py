@@ -8,12 +8,17 @@ from pathlib import Path
 from typing import Any
 
 from fields_study_flow.artifact_templates import enforce_artifact_requirements, write_artifact_template
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index
 from fields_study_flow.knowledge_graph import build_knowledge_graph
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html, write_paper_lens_latex
+from fields_study_flow.paper_map import PAPER_MAP_FILE, build_paper_map, render_paper_map_html
+from fields_study_flow.visual_audit import write_report_audit
 
 
 OUTPUT_FILES = [
+    "index.html",
+    "report_audit.json",
     "learner_profile.json",
     "resource_index.json",
     "local_resource_analysis.json",
@@ -709,6 +714,7 @@ def build_roadmap(
     next_actions = _next_actions(profile, study_tasks)
     mastery_evidence = _mastery_evidence(profile, study_tasks, final_artifact, route_audit, generated_artifacts)
     knowledge_graph = build_knowledge_graph(profile, selected_resources, study_tasks, mastery_evidence, rag_evidence or {})
+    paper_set = _paper_set_overview(profile, resources, selected_resources)
     generated_selected_count = sum(
         1
         for resource in selected_resources
@@ -736,6 +742,8 @@ def build_roadmap(
         "mastery_graph": mastery_graph,
         "knowledge_graph": knowledge_graph,
         "study_tasks": study_tasks,
+        "learning_key_points": _roadmap_learning_key_points(profile, target_kind, selected_resources, study_tasks),
+        "focus_areas": _roadmap_focus_areas(profile, target_kind, selected_resources, study_tasks, final_artifact),
         "next_actions": next_actions,
         "mastery_evidence": mastery_evidence,
         "resource_library": resource_library,
@@ -750,7 +758,10 @@ def build_roadmap(
         "checkpoints": _checkpoints(profile),
         "safety_policy": _safety_policy(profile),
     }
+    if paper_set:
+        roadmap["paper_set"] = paper_set
     roadmap = _ensure_paper_lens(roadmap)
+    roadmap = _ensure_paper_map(roadmap)
     return sanitize_roadmap_for_export(roadmap)
 
 
@@ -764,10 +775,20 @@ def write_outputs(
     output_dir.mkdir(parents=True, exist_ok=True)
     _remove_obsolete_html_reports(output_dir)
     public_roadmap = sanitize_roadmap_for_export(roadmap)
+    outputs = list(public_roadmap.get("outputs", []))
+    if "index.html" not in outputs:
+        outputs.insert(0, "index.html")
+    if "report_audit.json" not in outputs:
+        insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
+        outputs.insert(insert_at, "report_audit.json")
+    public_roadmap["outputs"] = outputs
     if not public_roadmap.get("paper_lens"):
         public_roadmap = _ensure_paper_lens(public_roadmap)
+    if not public_roadmap.get("paper_map"):
+        public_roadmap = _ensure_paper_map(public_roadmap)
     if public_roadmap.get("paper_lens"):
         public_roadmap = _write_paper_lens_latex_export(output_dir, public_roadmap)
+    frontend_asset_base = copy_frontend_assets(output_dir)
     (output_dir / "learner_profile.json").write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "resource_index.json").write_text(
         json.dumps([resource.to_dict() for resource in ranked_resources], ensure_ascii=False, indent=2),
@@ -781,10 +802,23 @@ def write_outputs(
     (output_dir / "roadmap.json").write_text(json.dumps(public_roadmap, ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "roadmap.md").write_text(render_markdown(public_roadmap), encoding="utf-8")
     (output_dir / "roadmap.svg").write_text(render_svg(public_roadmap), encoding="utf-8")
-    (output_dir / "roadmap.html").write_text(render_html(public_roadmap), encoding="utf-8")
+    (output_dir / "index.html").write_text(render_report_index(public_roadmap), encoding="utf-8")
+    (output_dir / "roadmap.html").write_text(
+        render_frontend_report("roadmap", public_roadmap, asset_base=frontend_asset_base) if frontend_asset_base else render_html(public_roadmap),
+        encoding="utf-8",
+    )
+    if public_roadmap.get("paper_map"):
+        (output_dir / PAPER_MAP_FILE).write_text(
+            render_frontend_report("paper_map", public_roadmap, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_map_html(public_roadmap),
+            encoding="utf-8",
+        )
     if public_roadmap.get("paper_lens"):
-        (output_dir / PAPER_LENS_FILE).write_text(render_paper_lens_html(public_roadmap), encoding="utf-8")
+        (output_dir / PAPER_LENS_FILE).write_text(
+            render_frontend_report("paper_lens", public_roadmap, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_lens_html(public_roadmap),
+            encoding="utf-8",
+        )
     write_artifact_template(output_dir, public_roadmap)
+    write_report_audit(output_dir, public_roadmap)
 
 
 def _write_paper_lens_latex_export(output_dir: Path, roadmap: dict[str, Any]) -> dict[str, Any]:
@@ -813,10 +847,30 @@ def _ensure_paper_lens(roadmap: dict[str, Any]) -> dict[str, Any]:
         updated,
         paper_lens_language=str(options.get("language") or "auto"),
         paper_lens_density=str(options.get("density") or "dense"),
+        paper_lens_granularity=str(options.get("granularity") or "paragraph"),
     )
     outputs = list(updated.get("outputs", []))
     if updated.get("paper_lens") and PAPER_LENS_FILE not in outputs:
         outputs.append(PAPER_LENS_FILE)
+    updated["outputs"] = outputs
+    return updated
+
+
+def _ensure_paper_map(roadmap: dict[str, Any]) -> dict[str, Any]:
+    if roadmap.get("paper_map_disabled") or not has_target_paper(roadmap):
+        return roadmap
+    updated = copy.deepcopy(roadmap)
+    options = updated.get("paper_map_options", {}) if isinstance(updated.get("paper_map_options"), dict) else {}
+    updated["paper_map"] = build_paper_map(
+        updated,
+        paper_map_language=str(options.get("language") or "auto"),
+        paper_map_depth=str(options.get("depth") or "standard"),
+        paper_map_layout=str(options.get("layout") or "xmind-flow"),
+        paper_map_provider=str(options.get("provider") or "auto"),
+    )
+    outputs = list(updated.get("outputs", []))
+    if updated.get("paper_map") and PAPER_MAP_FILE not in outputs:
+        outputs.append(PAPER_MAP_FILE)
     updated["outputs"] = outputs
     return updated
 
@@ -1687,6 +1741,29 @@ def render_html(roadmap: dict[str, Any]) -> str:
           <p class="meta"><strong>{escape(_label(language, 'keywords'))}:</strong> {escape(_join_or_unknown(paper_metadata.get('keywords', []), language))}</p>
           <p class="meta"><strong>{escape(_label(language, 'formula_candidates'))}:</strong> {escape(_join_or_unknown(paper_metadata.get('formula_candidates', []), language))}</p>
           <p class="meta"><strong>{escape(_label(language, 'code_links'))}:</strong> {escape(_join_or_unknown(paper_metadata.get('code_links', []), language))}</p>
+        </section>
+        """
+    paper_map_panel = ""
+    if roadmap.get("paper_map"):
+        if language == "en":
+            map_title = "Paper Logic Map"
+            map_text = "Open the Xmind-style causal map that connects background, motivation, method, experiments, contributions, and limitations."
+            map_button = "Open Paper Map"
+        elif language == "bilingual":
+            map_title = "Paper Logic Map / 论文逻辑图"
+            map_text = "Open the Xmind-style causal map that connects background, motivation, method, experiments, contributions, and limitations. / 打开 Xmind 式论文逻辑图，串起背景、动机、方法、实验、贡献和局限。"
+            map_button = "Open Paper Map / 进入论文逻辑图"
+        else:
+            map_title = "论文逻辑图"
+            map_text = "打开 Xmind 式论文逻辑图，先看清论文在什么背景下、为什么做、怎么做、如何验证、贡献是什么以及边界在哪里。"
+            map_button = "进入论文逻辑图"
+        paper_map_panel = f"""
+        <section class="graph-panel paper-map-entry-panel">
+          <div class="phase-title-row">
+            <h2>{escape(map_title)}</h2>
+            <a class="resource-action local-action" href="{escape(PAPER_MAP_FILE)}">{escape(map_button)}</a>
+          </div>
+          <p class="meta">{escape(map_text)}</p>
         </section>
         """
     paper_lens_panel = ""
@@ -2718,6 +2795,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
       <div class="summary-card"><b>{escape(_label(language, 'resources'))}</b><span>{escape(str(strategy.get('selected_resources', 0)))} / {escape(str(strategy.get('candidate_resources', 0)))}</span></div>
     </div>
   </header>
+  {paper_map_panel}
   {paper_lens_panel}
   {paper_panel}
   {artifact_panel}
@@ -2789,6 +2867,342 @@ def _build_phases(profile: LearnerProfile, resources: list[Resource]) -> list[di
             }
         )
     return phases
+
+
+def _roadmap_learning_key_points(
+    profile: LearnerProfile,
+    target_kind: str,
+    resources: list[Resource],
+    study_tasks: list[dict[str, Any]],
+) -> list[str]:
+    concepts = _top_route_concepts(profile, resources, limit=4)
+    topic = _route_topic_label(profile, concepts)
+    concept_text = ", ".join(concepts[:3]) if concepts else topic
+    task_types = {str(task.get("type") or "") for task in study_tasks if isinstance(task, dict)}
+    points = [
+        _localized(
+            profile,
+            f"Anchor the {target_kind} route around {topic}: {concept_text}.",
+            f"\u56f4\u7ed5 {topic} \u6293\u4f4f\u4e3b\u7ebf\uff1a{concept_text}\u3002",
+        ),
+        _localized(
+            profile,
+            "Learn prerequisites only when they unlock the next core concept or resource.",
+            "\u53ea\u8865\u80fd\u89e3\u9501\u4e0b\u4e00\u4e2a\u6838\u5fc3\u6982\u5ff5\u6216\u8d44\u6599\u7684\u524d\u7f6e\u77e5\u8bc6\u3002",
+        ),
+        _localized(
+            profile,
+            "Connect each selected resource to an explain, derive, reproduce, or critique checkpoint.",
+            "\u628a\u6bcf\u4efd\u5165\u9009\u8d44\u6599\u90fd\u8fde\u5230\u89e3\u91ca\u3001\u63a8\u5bfc\u3001\u590d\u73b0\u6216\u6279\u5224\u68c0\u67e5\u70b9\u4e0a\u3002",
+        ),
+    ]
+    if "reproduce" in task_types:
+        points.append(
+            _localized(
+                profile,
+                "Turn understanding into a minimal runnable example or project artifact.",
+                "\u7528\u6700\u5c0f\u53ef\u8fd0\u884c\u4f8b\u5b50\u6216\u9879\u76ee\u4ea7\u7269\u628a\u7406\u89e3\u843d\u5730\u3002",
+            )
+        )
+    else:
+        points.append(
+            _localized(
+                profile,
+                "Turn understanding into a concise synthesis note with evidence-backed claims.",
+                "\u7528\u4e00\u4efd\u7b80\u6d01\u7efc\u8ff0\u7b14\u8bb0\u628a\u7406\u89e3\u56fa\u5316\u4e3a\u6709\u8bc1\u636e\u7684\u7ed3\u8bba\u3002",
+            )
+        )
+    points.append(
+        _localized(
+            profile,
+            "Stop when the final artifact proves explanation, mechanism tracing, practice, and critique.",
+            "\u5f53\u6700\u7ec8\u4ea7\u7269\u80fd\u8bc1\u660e\u89e3\u91ca\u3001\u673a\u5236\u8ffd\u8e2a\u3001\u5b9e\u8df5\u548c\u6279\u5224\u65f6\u5c31\u505c\u4e0b\u3002",
+        )
+    )
+    return _unique_route_texts(points, limit=6)
+
+
+def _roadmap_focus_areas(
+    profile: LearnerProfile,
+    target_kind: str,
+    resources: list[Resource],
+    study_tasks: list[dict[str, Any]],
+    final_artifact: dict[str, str],
+) -> list[str]:
+    task_types = {str(task.get("type") or "") for task in study_tasks if isinstance(task, dict)}
+    focus: list[str] = []
+    for resource in resources:
+        focus.extend(resource.focus_areas[:3])
+        focus.extend(resource.concepts[:2])
+    focus.extend(_top_route_concepts(profile, resources, limit=3))
+    focus.append(_localized(profile, "prerequisite chain", "\u524d\u7f6e\u94fe\u6761"))
+    focus.append(_localized(profile, "core mechanism", "\u6838\u5fc3\u673a\u5236"))
+    if "reproduce" in task_types or str(final_artifact.get("type") or "") in {"project", "project+survey", "course-portfolio"}:
+        focus.append(_localized(profile, "practice checkpoint", "\u5b9e\u8df5\u68c0\u67e5\u70b9"))
+        focus.append(_localized(profile, "project evidence", "\u9879\u76ee\u8bc1\u636e"))
+    if target_kind in {"field", "course"}:
+        focus.append(_localized(profile, "synthesis and critique", "\u7efc\u5408\u4e0e\u6279\u5224"))
+    return _unique_route_texts(focus, limit=7)
+
+
+def _paper_set_overview(profile: LearnerProfile, candidate_resources: list[Resource], selected_resources: list[Resource]) -> dict[str, Any] | None:
+    papers = _paper_set_candidates(candidate_resources)
+    if len(papers) < 2:
+        return None
+    selected_ids = {id(resource) for resource in selected_resources}
+    ordered = _ordered_paper_set_resources(papers)
+    paper_summaries = [_paper_set_paper_summary(profile, resource, index, id(resource) in selected_ids) for index, resource in enumerate(ordered, start=1)]
+    shared_concepts = _paper_set_shared_concepts(ordered, paper_summaries)
+    reading_order = [
+        {
+            "position": index,
+            "paper_id": paper["id"],
+            "title": paper["title"],
+            "role": paper["role"],
+            "reason": _paper_set_reading_reason(profile, paper, index),
+        }
+        for index, paper in enumerate(paper_summaries, start=1)
+    ]
+    return {
+        "mode": "paper-set",
+        "summary": {
+            "paper_count": len(paper_summaries),
+            "selected_paper_count": sum(1 for paper in paper_summaries if paper["selected"]),
+            "shared_concept_count": len(shared_concepts),
+            "purpose": _localized(
+                profile,
+                "Compare the papers as one evidence-backed reading set instead of treating them as unrelated links.",
+                "\u628a\u591a\u7bc7\u8bba\u6587\u5f53\u6210\u4e00\u4e2a\u6709\u8bc1\u636e\u7684\u9605\u8bfb\u7ec4\uff0c\u800c\u4e0d\u662f\u96f6\u6563\u94fe\u63a5\u3002",
+            ),
+        },
+        "papers": paper_summaries,
+        "shared_concepts": shared_concepts,
+        "reading_order": reading_order,
+        "comparison_axes": _paper_set_comparison_axes(profile),
+        "synthesis_tasks": _paper_set_synthesis_tasks(profile, shared_concepts, paper_summaries),
+    }
+
+
+def _paper_set_candidates(resources: list[Resource]) -> list[Resource]:
+    output: list[Resource] = []
+    seen: set[tuple[str, str]] = set()
+    for resource in resources:
+        if _is_generated_resource(resource):
+            continue
+        if resource.type != "paper" and not resource.metadata.get("paper_metadata") and not resource.metadata.get("target_paper"):
+            continue
+        key = (resource.title.strip().lower(), resource.url.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(resource)
+    return output
+
+
+def _ordered_paper_set_resources(resources: list[Resource]) -> list[Resource]:
+    indexed = list(enumerate(resources))
+    return [
+        resource
+        for _index, resource in sorted(
+            indexed,
+            key=lambda item: (
+                -_paper_set_role_priority(item[1]),
+                -float(item[1].trust_score or 0),
+                item[0],
+            ),
+        )
+    ]
+
+
+def _paper_set_role_priority(resource: Resource) -> int:
+    if resource.metadata.get("target_paper") or resource.critical_path_role == "core-paper":
+        return 4
+    if resource.critical_path_role == "focused-support":
+        return 3
+    if resource.critical_path_role == "support":
+        return 2
+    return 1
+
+
+def _paper_set_paper_summary(profile: LearnerProfile, resource: Resource, index: int, selected: bool) -> dict[str, Any]:
+    metadata = resource.metadata.get("paper_metadata") if isinstance(resource.metadata.get("paper_metadata"), dict) else {}
+    title = str(metadata.get("title") or resource.title)
+    public = resource.to_dict()
+    concepts = _unique_route_texts(
+        [
+            *(metadata.get("concepts", []) if isinstance(metadata.get("concepts"), list) else []),
+            *resource.concepts,
+            *resource.focus_areas,
+        ],
+        limit=8,
+    )
+    abstract = str(metadata.get("abstract_snippet") or resource.why_recommended or "").strip()
+    return {
+        "id": _paper_set_id(index, title),
+        "title": title,
+        "url": public.get("url"),
+        "source": public.get("source"),
+        "type": public.get("type"),
+        "selected": selected,
+        "role": _paper_set_role_label(profile, resource),
+        "critical_path_role": resource.critical_path_role,
+        "concepts": concepts,
+        "abstract_snippet": abstract[:360].rstrip(),
+        "estimated_minutes": _resource_minutes(resource),
+        "trust_score": resource.trust_score,
+    }
+
+
+def _paper_set_id(index: int, title: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:48]
+    return f"paper-{index}-{slug or 'untitled'}"
+
+
+def _paper_set_role_label(profile: LearnerProfile, resource: Resource) -> str:
+    if resource.metadata.get("target_paper") or resource.critical_path_role == "core-paper":
+        return _localized(profile, "anchor", "\u4e3b\u8bba\u6587")
+    if resource.critical_path_role == "focused-support":
+        return _localized(profile, "bridge", "\u6865\u63a5\u8bba\u6587")
+    if resource.critical_path_role == "support":
+        return _localized(profile, "comparison", "\u5bf9\u6bd4\u8bba\u6587")
+    return _localized(profile, "context", "\u80cc\u666f\u8bba\u6587")
+
+
+def _paper_set_shared_concepts(resources: list[Resource], papers: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    concept_to_papers: dict[str, dict[str, Any]] = {}
+    for paper, resource in zip(papers, resources):
+        values = [*paper.get("concepts", []), *resource.learning_key_points]
+        for value in values:
+            cleaned = _clean_route_phrase(value)
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            entry = concept_to_papers.setdefault(key, {"label": cleaned, "paper_ids": set()})
+            entry["paper_ids"].add(paper["id"])
+    ranked: list[dict[str, Any]] = []
+    for entry in concept_to_papers.values():
+        paper_ids = sorted(entry["paper_ids"])
+        if len(paper_ids) < 2:
+            continue
+        ranked.append({"label": entry["label"], "paper_count": len(paper_ids), "paper_ids": paper_ids})
+    ranked.sort(key=lambda item: (-int(item["paper_count"]), str(item["label"]).lower()))
+    return ranked[:8]
+
+
+def _paper_set_reading_reason(profile: LearnerProfile, paper: dict[str, Any], position: int) -> str:
+    if position == 1:
+        return _localized(profile, "Start here to establish the baseline problem and method.", "\u5148\u8bfb\u5b83\uff0c\u5efa\u7acb\u95ee\u9898\u548c\u65b9\u6cd5\u57fa\u7ebf\u3002")
+    if paper.get("selected"):
+        return _localized(profile, "Read next because it is on the selected shortest mastery path.", "\u63a5\u7740\u8bfb\u5b83\uff0c\u56e0\u4e3a\u5b83\u5728\u5df2\u9009\u6700\u77ed\u638c\u63e1\u8def\u5f84\u4e2d\u3002")
+    return _localized(profile, "Use it as a comparison point for method, evidence, and limitations.", "\u628a\u5b83\u4f5c\u4e3a\u65b9\u6cd5\u3001\u8bc1\u636e\u548c\u5c40\u9650\u7684\u5bf9\u6bd4\u70b9\u3002")
+
+
+def _paper_set_comparison_axes(profile: LearnerProfile) -> list[dict[str, str]]:
+    axes = [
+        ("problem", "Problem / gap", "\u95ee\u9898 / \u7f3a\u53e3", "What question does this paper make urgent?"),
+        ("method", "Method", "\u65b9\u6cd5", "What mechanism or design choice solves the problem?"),
+        ("evaluation", "Evaluation evidence", "\u5b9e\u9a8c\u8bc1\u636e", "What experiments prove the claim, and what do they miss?"),
+        ("contribution", "Contribution", "\u8d21\u732e", "What reusable idea should be remembered after reading?"),
+        ("limitation", "Limitation", "\u5c40\u9650", "Where does the claim stop being reliable?"),
+    ]
+    return [
+        {
+            "id": axis_id,
+            "label": _localized(profile, en, zh),
+            "prompt": _localized(profile, prompt, zh),
+        }
+        for axis_id, en, zh, prompt in axes
+    ]
+
+
+def _paper_set_synthesis_tasks(
+    profile: LearnerProfile,
+    shared_concepts: list[dict[str, Any]],
+    papers: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    concept = str(shared_concepts[0]["label"]) if shared_concepts else _localized(profile, "the shared idea", "\u5171\u540c\u4e3b\u7ebf")
+    paper_titles = [str(paper.get("title")) for paper in papers[:3]]
+    return [
+        {
+            "type": "compare",
+            "title": _localized(profile, f"Compare how each paper frames {concept}.", f"\u6bd4\u8f83\u6bcf\u7bc7\u8bba\u6587\u5982\u4f55\u5b9a\u4e49 {concept}\u3002"),
+            "evidence": paper_titles,
+        },
+        {
+            "type": "synthesize",
+            "title": _localized(profile, "Write one paragraph that connects problem, method, evidence, and contribution across the set.", "\u5199\u4e00\u6bb5\u8bdd\u628a\u6574\u7ec4\u8bba\u6587\u7684\u95ee\u9898\u3001\u65b9\u6cd5\u3001\u8bc1\u636e\u548c\u8d21\u732e\u4e32\u8d77\u6765\u3002"),
+            "evidence": paper_titles,
+        },
+        {
+            "type": "critique",
+            "title": _localized(profile, "List the boundary where one paper's conclusion does not transfer to another.", "\u5217\u51fa\u4e00\u7bc7\u8bba\u6587\u7ed3\u8bba\u65e0\u6cd5\u8fc1\u79fb\u5230\u53e6\u4e00\u7bc7\u7684\u8fb9\u754c\u3002"),
+            "evidence": paper_titles,
+        },
+    ]
+
+
+def _top_route_concepts(profile: LearnerProfile, resources: list[Resource], limit: int = 4) -> list[str]:
+    weighted: dict[str, tuple[int, str]] = {}
+    for resource in resources:
+        values = [*resource.concepts, *resource.focus_areas, *resource.learning_key_points]
+        for index, value in enumerate(values):
+            cleaned = _clean_route_phrase(value)
+            if not cleaned:
+                continue
+            key = cleaned.lower()
+            score = weighted.get(key, (0, cleaned))[0]
+            role_bonus = 3 if resource.critical_path_role in {"core-paper", "focused-support", "practice-validation"} else 1
+            weighted[key] = (score + max(1, 8 - index) + role_bonus, cleaned)
+    for term in sorted(_terms(profile.goal)):
+        cleaned = _clean_route_phrase(term)
+        if cleaned:
+            key = cleaned.lower()
+            weighted.setdefault(key, (2, cleaned))
+    ranked = [label for _score, label in sorted(weighted.values(), key=lambda item: (-item[0], item[1].lower()))]
+    return ranked[:limit]
+
+
+def _route_topic_label(profile: LearnerProfile, concepts: list[str]) -> str:
+    goal = re.sub(r"\s+", " ", profile.goal).strip()
+    for concept in concepts:
+        if concept and concept.lower() in goal.lower():
+            return concept
+    if concepts:
+        return concepts[0]
+    return goal or "target topic"
+
+
+def _clean_route_phrase(value: Any) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip(" \t\r\n-:;,.")
+    internal_labels = {
+        "unknown",
+        "resource",
+        "support",
+        "field",
+        "course",
+        "project+survey",
+        "course-portfolio",
+        "paper-mastery",
+        "resource-discovery-plan",
+    }
+    if not text or text.lower() in internal_labels:
+        return ""
+    return text[:120].rstrip()
+
+
+def _unique_route_texts(values: list[str], limit: int) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        cleaned = _clean_route_phrase(value)
+        key = cleaned.lower()
+        if not cleaned or key in seen:
+            continue
+        seen.add(key)
+        result.append(cleaned)
+        if len(result) >= limit:
+            break
+    return result
 
 
 def _title(profile: LearnerProfile) -> str:
@@ -4002,4 +4416,4 @@ def _truncate(value: object, limit: int) -> str:
     text = str(value)
     if len(text) <= limit:
         return text
-    return text[: max(0, limit - 3)].rstrip() + "..."
+    return text[: max(0, limit)].rstrip()

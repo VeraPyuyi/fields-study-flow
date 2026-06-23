@@ -872,4 +872,4 @@ def _clean_text(value: str) -> str:
 def _clip(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
-    return value[: limit - 1].rstrip() + "…"
+    return value[:limit].rstrip()

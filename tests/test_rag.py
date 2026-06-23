@@ -31,6 +31,23 @@ def test_rag_index_chunks_local_markdown_without_private_paths(tmp_path):
     assert index["chunks"][0]["private"] is True
 
 
+def test_rag_index_does_not_add_visible_ellipsis_to_clipped_chunks():
+    long_note = " ".join(["PDDL preconditions and effects explain symbolic planning state transitions"] * 80)
+    resource = Resource(
+        title="Long Planning Notes",
+        url="https://example.com/long-planning",
+        source="documentation",
+        type="article",
+        learning_key_points=[long_note],
+    )
+
+    index = build_rag_index([resource], query="PDDL state transitions", mode="light")
+
+    assert index["chunks"]
+    assert not index["chunks"][0]["snippet"].endswith("...")
+    assert not index["chunks"][0]["snippet"].endswith("…")
+
+
 def test_retrieve_evidence_returns_ranked_snippets():
     resource = Resource(
         title="Planning Note",

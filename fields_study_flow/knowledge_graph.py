@@ -253,7 +253,7 @@ def _unique_labels(labels: list[str], limit: int) -> list[str]:
 def _clean_label(label: str) -> str:
     clean = re.sub(r"\s+", " ", str(label)).strip(" .,:;")
     if len(clean) > 72:
-        return clean[:69].rstrip() + "..."
+        return clean[:72].rstrip()
     return clean
 
 

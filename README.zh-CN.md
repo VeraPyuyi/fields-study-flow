@@ -2,12 +2,13 @@
 
 ## 最新功能快速说明
 
-- 单篇论文路线现在会额外生成 `paper_lens.html`，这是一个独立的“目标论文增强阅读器”。
+- 单篇论文路线现在会额外生成 `paper_map.html`，这是一个离线可打开的 Xmind-flow 图形画布：支持节点拖拽、缩放、SVG 因果连线、分支展开/收起，以及右侧证据和汇报话术详情。
+- 单篇论文路线也会生成 `paper_lens.html`，这是一个独立的“目标论文增强阅读器”。
 - `paper_lens.html` 会按摘要、背景、方法、公式、实验、局限和相关工作组织阅读卡片，并把资料包中的论文、书籍、代码、网页快照和 RAG 证据片段挂回对应章节。
-- 新版 Paper Lens 还会生成“原文句段精读流”：悬浮或点击关键句段即可查看直白解释、方法说明、相关资料和证据。
-- 使用 `--resource-dir` 时，`roadmap.html`、`paper_lens.html` 和 `roadmap.md` 会优先链接到本地已下载/复制资料；未下载或仅链接资料才保留原始网络入口。
+- 新版 Paper Lens 默认生成“原文段落精读流”：悬浮或点击核心段落即可查看直白解释、方法说明、相关资料和证据；如需旧体验可使用 `--paper-lens-granularity sentence`。
+- 使用 `--resource-dir` 时，`roadmap.html`、`paper_map.html`、`paper_lens.html` 和 `roadmap.md` 会优先链接到本地已下载/复制资料；未下载或仅链接资料才保留原始网络入口。
 - 如果只想保留路线报告，可以在 `paper` 或 `roadmap` 命令中加入 `--no-paper-lens`。
-- 共享型 JSON/HTML/MD 仍会隐藏 `C:\...`、`D:\...` 等本地绝对路径，只保留相对本地链接或脱敏标识。
+- 共享型 JSON/HTML/MD 仍会隐藏 `C:\private-path`、`D:\private-path` 等本地绝对路径，只保留相对本地链接或脱敏标识。
 
 简体中文 | [English](README.md)
 
@@ -34,12 +35,93 @@ fields-study-flow 可以把“掌握这篇论文”“学习 diffusion models”
 - 实时搜索：默认搜索开放官方 API；需要凭证或只适合手动链接的平台不会被自动抓取。
 - 路线审计：每条路线都会说明覆盖度、省略资源、节省耗时，以及为什么这是当前候选和路线深度下的最短可行路径。
 - 可执行任务：报告包含学习任务、下一步行动、质量门、最终证据和可运行产物验收。
-- 交互式学习中控台：`roadmap.html` 是主报告入口，提供可拖动/缩放的 KG 学习路径网络、右侧任务向导、本地进度勾选、本地优先资料链接、多维资料筛选 chips、证据展开/收起和阶段折叠。
+- 文件夹入口：导出后优先打开 `index.html`，它会根据当前计划引导用户进入 Paper Map、Paper Lens 或路线验收清单。
+- 交互式学习中控台：`roadmap.html` 提供学习路线、可拖动/缩放的 KG 学习路径网络、右侧任务向导、本地进度勾选、本地优先资料链接、多维资料筛选 chips、证据展开/收起和阶段折叠。
 
 ## 快速开始
 
+先用零准备 demo 试跑一遍：
+
 ```bash
 python -m pip install -e .
+fields-study-flow demo --output-dir ./fields-study-flow-demo
+```
+
+然后打开 `fields-study-flow-demo/index.html`。这个 demo 使用内置 Transformer 论文样例，用户不需要先准备 PDF，就能评估 Paper Map、Paper Lens、本地报告结构和掌握验收清单是否有用。
+入口页里也会直接给出“换成自己的论文”的 URL 和本地 PDF 命令模板。
+
+检查导出的 HTML 是否存在常见排版和隐私风险：
+
+```bash
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo
+```
+
+如果本机安装了 Python Playwright 和浏览器运行时，也可以打开真实桌面/移动端截图捕获：
+
+```bash
+python -m pip install -e ".[visual]"
+python -m playwright install chromium
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo --capture-screenshots
+```
+
+截图和相对路径 manifest 会写入 `visual-snapshots/`；如果没有安装可选浏览器运行时，命令会明确显示截图检查被跳过，不影响基础静态审查。
+
+当你确认某次导出的页面足够好看，并且截图捕获已经产生真实 `pass` 截图后，可以把 manifest 保存成黄金基线，后续导出用它做 UI 回归比较：
+
+```bash
+copy fields-study-flow-demo\visual-snapshots\manifest.json docs\visual-baselines\demo.manifest.json
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo --snapshot-baseline docs/visual-baselines/demo.manifest.json
+```
+
+基线检查会比较页面、桌面/移动端视口、尺寸和截图哈希；如果漏掉页面或截图变化，命令会返回失败，适合放进发布前检查。
+
+想验证上手速度时，可以让一位第一次使用的学习者从打开 `index.html` 开始计时，到进入第一项掌握验收任务为止，然后记录耗时：
+
+```bash
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo --write-fresh-user-worksheet
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo --fresh-user-minutes 8.5
+```
+
+worksheet 会让评审者记录每一步、卡点和修复想法。默认目标是 10 分钟；如果你的发布门槛不同，可以用 `--fresh-user-target-minutes N` 调整。超过目标时间时命令会返回失败。
+
+做完多轮新用户测试后，可以把填好的 worksheet 聚合成按频次排序的产品改进 backlog：
+
+```bash
+fields-study-flow audit-report \
+  --report-dir ./fields-study-flow-demo \
+  --fresh-user-worksheet-input ./fields-study-flow-demo/fresh_user_test.md \
+  --write-fresh-user-backlog
+```
+
+生成的 `fresh_user_backlog.md` 会把重复出现的卡点排在前面，并继续避免泄露本地绝对路径。
+
+跨多个版本或多份报告时，还可以把多个 backlog 聚合成趋势报告：
+
+```bash
+fields-study-flow audit-report \
+  --report-dir ./fields-study-flow-demo \
+  --fresh-user-backlog-input ./fields-study-flow-demo/fresh_user_backlog.md \
+  --write-fresh-user-trend-report
+```
+
+生成的 `fresh_user_trends.md` 会突出跨报告反复出现的卡点，方便把可用性测试变成持续产品改进闭环。
+
+发布前可以再生成一个给人看的发布决策面板：
+
+```bash
+fields-study-flow audit-report \
+  --report-dir ./fields-study-flow-demo \
+  --fresh-user-backlog-input ./fields-study-flow-demo/fresh_user_backlog.md \
+  --write-fresh-user-trend-report \
+  --write-release-readiness \
+  --write-release-history
+```
+
+生成的 `release_readiness.md` 和 `release_readiness.html` 会把 `report_audit.json`、视觉检查、截图基线、新用户耗时和反复出现的卡点合成一个 `ship` / `needs_work` / `do_not_ship` 决策。HTML 版本是单文件离线页面，更适合非技术评审直接打开；`index.html` 也会自动出现一个不重复的发布决策入口，直接链接到这个面板。它的门槛明确对齐 Elicit/SciSpace 的证据透明、NotebookLM 式可带走学习产物、ResearchRabbit/roadmap.sh 的可视化导航、React Flow 的画布交互、本地优先资料包，以及可验收掌握证据。
+加上 `--write-release-history` 后，还会生成 `release_readiness_history.jsonl`、`release_readiness_history.md` 和 `release_readiness_history.html`，用脱敏的跨版本发布决策记录、趋势摘要、分数变化和反复卡点变化来判断报告质量是否真的在持续变好。报告首页和发布准备度面板都会自动出现一个不重复的质量趋势入口，直接链接到 HTML 面板。
+当命令写出这些发布面板时，JSON 输出还会包含 `generated_artifact_audit`，同一次运行就会重新检查刚生成的 HTML 页面，避免新面板没有被视觉和隐私规则覆盖。
+
+```bash
 fields-study-flow roadmap \
   --goal "学习 diffusion models 并做一个小项目" \
   --preset field-project \
@@ -77,10 +159,13 @@ fields-study-flow paper --interactive
 fields-study-flow roadmap --interactive
 ```
 
+生成完成后优先打开 `index.html`。它会按当前目标给出最清晰的入口：单篇论文通常先进入 Paper Map，再进入 Paper Lens，最后按路线清单验收。
+
 生成文件：
 
 ```text
 fields-study-flow-output/
+  index.html              # 从这里开始：按当前目标推荐最合适的报告入口
   learner_profile.json
   resource_index.json
   local_resource_analysis.json
@@ -88,7 +173,9 @@ fields-study-flow-output/
   roadmap.md
   roadmap.json
   roadmap.svg
-  roadmap.html            # 主交互式学习报告
+  roadmap.html            # 交互式学习路线和掌握验收清单
+  paper_map.html          # 离线 Xmind-flow 目标论文图形画布
+  paper_lens.html         # 目标论文增强阅读器
   artifact_template/        # 仅在需要可运行项目或复现验收时生成
     README.md
     task_checklist.md
@@ -104,7 +191,7 @@ study-assets/
   01-selected-local-or-open-resource.pdf
 ```
 
-使用 `--resource-dir` 时，`roadmap.html` 和 `roadmap.md` 中已下载/复制的资料会优先链接到本地资料包。原始网页链接仍作为来源或兜底入口展示，共享型输出仍不会暴露本地绝对路径。
+使用 `--resource-dir` 时，`roadmap.html`、`paper_map.html`、`paper_lens.html` 和 `roadmap.md` 中已下载/复制的资料会优先链接到本地资料包。原始网页链接仍作为来源或兜底入口展示，共享型输出仍不会暴露本地绝对路径。
 
 只基于已经下载/复制的资料包提问：
 
@@ -127,8 +214,14 @@ fields-study-flow ask \
 | `--resource-dir PATH` | 将学习资料库复制/下载到私有资料目录，并写出 `study_bundle_manifest.json`。 |
 | `--bundle-scope selected\|all` | 控制资料包只下载最短路线资料，还是尝试下载全部可直接获取的候选资料。默认是 `all`；不可获取的资料仍会进入 `links.md`。 |
 | `--rag off\|light\|auto\|embedding` | 控制证据检索模式。`auto` 使用轻量本地检索；`embedding` 在安装可选 `rag` extra 后启用。 |
+| `--no-paper-map` | 即使存在目标论文，也跳过独立的 `paper_map.html` 论文逻辑图。 |
+| `--paper-map-language auto\|zh-CN\|en\|bilingual` | 控制 Paper Map 解释语言。`auto` 会跟随 prompt / 输出语言。 |
+| `--paper-map-depth quick\|standard\|complete` | 控制论文逻辑图挂接多少公式、资料、任务和证据支线。默认是 `standard`。 |
+| `--paper-map-layout xmind-flow` | 使用 Xmind + 因果流程融合的图形化画布布局，默认就是该布局。 |
+| `--paper-map-provider local\|auto\|llm` | 控制 Paper Map 抽取策略。`auto` 默认走本地规则，配置扩展 provider 后可增强。 |
 | `--paper-lens-language auto\|zh-CN\|en\|bilingual` | 控制 Paper Lens 句段解释语言。`auto` 会跟随 prompt / 输出语言。 |
 | `--paper-lens-density key\|section\|dense` | 控制进入句段级解释的论文片段数量。默认是 `dense`。 |
+| `--paper-lens-granularity paragraph\|sentence` | 控制 Paper Lens 默认按段落解释，或切回旧的句子粒度。默认是 `paragraph`。 |
 | `--interactive` | 先询问目标、语言、路线深度、学习风格、本地资源、报告目录和资料目录，再执行。 |
 | `--no-live-search` / `--offline` | 关闭默认实时搜索，使用确定性目录和显式资源。 |
 | `--output-language zh-CN\|en\|bilingual` | 控制路线输出语言。 |
@@ -202,6 +295,8 @@ fields_study_flow/
   live_search.py      # 开放 API 搜索与凭证安全降级
   local_resources.py  # 显式本地路径分析
   paper_metadata.py   # arXiv/DOI/本地 PDF 元数据与降级解析
+  paper_map.py        # Xmind-flow 单篇论文图模型与离线 HTML 渲染
+  paper_lens.py       # 目标论文精读层、章节证据和本地优先链接
   artifact_templates.py # 缺少可运行资源时生成验收模板
   rag.py              # 本地证据片段、资料包索引、检索和资料包问答
   knowledge_graph.py  # 本地概念/资源/任务/验收学习图谱

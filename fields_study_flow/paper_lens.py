@@ -82,10 +82,12 @@ ANNOTATION_TYPE_LABELS = {
 }
 
 PAPER_LENS_DENSITY_LIMITS = {
-    "key": 8,
+    "key": 4,
     "section": 48,
     "dense": 120,
 }
+
+PAPER_LENS_GRANULARITIES = {"paragraph", "sentence"}
 
 SECTION_KIND_TERMS = {
     "abstract": {"abstract", "overview", "contribution", "problem", "summary"},
@@ -109,6 +111,7 @@ def build_paper_lens(
     *,
     paper_lens_language: str = "auto",
     paper_lens_density: str = "dense",
+    paper_lens_granularity: str = "paragraph",
 ) -> dict[str, Any]:
     private_roadmap = copy.deepcopy(roadmap)
     private_target = _target_resource(private_roadmap)
@@ -118,6 +121,7 @@ def build_paper_lens(
         return {}
     language = _resolve_lens_language(paper_lens_language, safe_roadmap)
     density = _normalize_density(paper_lens_density)
+    granularity = _normalize_granularity(paper_lens_granularity)
     paper_metadata = _paper_metadata(target)
     private_metadata = _paper_metadata(private_target)
     bundle_lookup = _bundle_lookup(safe_roadmap.get("study_bundle", {}))
@@ -152,7 +156,7 @@ def build_paper_lens(
             section["no_evidence_note"] = _label(language, "no_evidence")
         sections.append(section)
     reading_recommendations = _reading_recommendations(sections, language)
-    segments = _paper_segments(private_target or target, private_metadata or paper_metadata, sections, language, density)
+    segments = _paper_segments(private_target or target, private_metadata or paper_metadata, sections, language, density, granularity)
     inline_explanations = _inline_explanations(segments, sections, language)
     annotation_count = sum(len(section["annotations"]) for section in sections)
     local_link_count = sum(1 for section in sections for item in section["annotations"] if item.get("local_href"))
@@ -174,6 +178,7 @@ def build_paper_lens(
             "explanation_summary": {
                 "language": language,
                 "density": density,
+                "granularity": granularity,
                 "segments": len(segments),
                 "inline_explanations": len(inline_explanations),
                 "fallback": not bool(_paper_source_text(private_target or target, private_metadata or paper_metadata)),
@@ -628,11 +633,15 @@ def _latex_quick_overview(sections: list[dict[str, Any]], language: str) -> str:
 
 def _latex_key_segments(segments: list[dict[str, Any]], explanation_lookup: dict[str, dict[str, Any]], language: str) -> str:
     lines = [rf"\section*{{{_latex_escape(_label(language, 'key_sentence_flow'))}}}", r"\begin{enumerate}"]
+    item_count = 0
     for segment in segments:
         explanation = explanation_lookup.get(str(segment.get("id")), {})
         original = _clip(str(segment.get("original_text") or ""), 360)
         plain = _clip(str(explanation.get("plain_meaning") or ""), 360)
         method = _clip(str(explanation.get("method_note") or ""), 300)
+        if not (original or plain or method):
+            continue
+        item_count += 1
         lines.extend(
             [
                 rf"\item {_latex_escape(original)}",
@@ -642,6 +651,8 @@ def _latex_key_segments(segments: list[dict[str, Any]], explanation_lookup: dict
                 rf"\end{{itemize}}",
             ]
         )
+    if item_count == 0:
+        lines.append(rf"\item {_latex_escape(_label(language, 'not_available'))}")
     lines.append(r"\end{enumerate}")
     return "\n".join(lines)
 
@@ -791,19 +802,26 @@ def _normalize_density(value: str) -> str:
     return density if density in PAPER_LENS_DENSITY_LIMITS else "dense"
 
 
+def _normalize_granularity(value: str) -> str:
+    granularity = str(value or "paragraph").strip().lower()
+    return granularity if granularity in PAPER_LENS_GRANULARITIES else "paragraph"
+
+
 def _paper_segments(
     target: dict[str, Any],
     metadata: dict[str, Any],
     sections: list[dict[str, Any]],
     language: str,
     density: str,
+    granularity: str,
 ) -> list[dict[str, Any]]:
     text = _paper_source_text(target, metadata)
     if not text:
         text = _metadata_fallback_text(metadata, language)
-    raw_segments = _split_paper_segments(text)
+    granularity = _normalize_granularity(granularity)
+    raw_segments = _split_paper_segments(text, granularity)
     if not raw_segments:
-        raw_segments = _split_paper_segments(_metadata_fallback_text(metadata, language))
+        raw_segments = _split_paper_segments(_metadata_fallback_text(metadata, language), granularity)
     section_titles = {str(section.get("kind")): str(section.get("title") or "") for section in sections}
     segments: list[dict[str, Any]] = []
     for order, item in enumerate(raw_segments, start=1):
@@ -819,6 +837,9 @@ def _paper_segments(
             "original_text": original_text,
             "source_language": _detect_text_language(original_text),
             "importance_score": _segment_importance(original_text, section_kind),
+            "unit": item.get("unit") or granularity,
+            "paragraph_index": item.get("paragraph_index") or order,
+            "sentence_count": item.get("sentence_count") or _sentence_count(original_text),
         }
         if item.get("page"):
             segment["page"] = item["page"]
@@ -896,7 +917,13 @@ def _metadata_fallback_text(metadata: dict[str, Any], language: str) -> str:
     return "\n\n".join(parts)
 
 
-def _split_paper_segments(text: str) -> list[dict[str, Any]]:
+def _split_paper_segments(text: str, granularity: str = "paragraph") -> list[dict[str, Any]]:
+    if _normalize_granularity(granularity) == "sentence":
+        return _split_sentence_segments(text)
+    return _split_paragraph_segments(text)
+
+
+def _split_sentence_segments(text: str) -> list[dict[str, Any]]:
     current_kind = "abstract"
     current_page: int | None = None
     output: list[dict[str, Any]] = []
@@ -926,6 +953,85 @@ def _split_paper_segments(text: str) -> list[dict[str, Any]]:
     return output
 
 
+def _split_paragraph_segments(text: str) -> list[dict[str, Any]]:
+    current_kind = "abstract"
+    current_page: int | None = None
+    paragraph_blocks: list[str] = []
+    paragraph_page: int | None = None
+    paragraph_index = 0
+    output: list[dict[str, Any]] = []
+
+    def flush() -> None:
+        nonlocal paragraph_blocks, paragraph_page, paragraph_index
+        if not paragraph_blocks:
+            return
+        paragraph = _clean_segment_text(" ".join(paragraph_blocks))
+        paragraph_blocks = []
+        if not _looks_like_readable_segment(paragraph):
+            return
+        for chunk in _split_paragraph_units(paragraph):
+            cleaned = _clean_segment_text(chunk)
+            if not _looks_like_readable_segment(cleaned):
+                continue
+            paragraph_index += 1
+            kind = current_kind if current_kind else _section_kind_for_text(cleaned)
+            if _looks_like_formula_segment(cleaned):
+                kind = "formula"
+            item: dict[str, Any] = {
+                "section_kind": kind,
+                "text": cleaned,
+                "unit": "paragraph",
+                "paragraph_index": paragraph_index,
+                "sentence_count": _sentence_count(cleaned),
+            }
+            if paragraph_page:
+                item["page"] = paragraph_page
+            output.append(item)
+        paragraph_page = None
+
+    for raw_block in re.split(r"\n{1,}", text):
+        block = _clean_segment_text(raw_block)
+        if not block:
+            continue
+        page_match = re.match(r"^\[page\s+(\d+)\]$", block, flags=re.I)
+        if page_match:
+            flush()
+            current_page = int(page_match.group(1))
+            continue
+        heading_kind = _section_kind_from_heading(block)
+        if heading_kind:
+            flush()
+            current_kind = heading_kind
+            continue
+        if not paragraph_blocks:
+            paragraph_page = current_page
+        paragraph_blocks.append(block)
+    flush()
+    return output
+
+
+def _split_paragraph_units(paragraph: str) -> list[str]:
+    if len(paragraph) <= 900 or _looks_like_formula_segment(paragraph):
+        return [paragraph]
+    chunks: list[str] = []
+    buffer = ""
+    for sentence in _split_sentence_units(paragraph):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if not buffer:
+            buffer = sentence
+            continue
+        if len(buffer) + len(sentence) + 1 <= 780:
+            buffer = f"{buffer} {sentence}".strip()
+            continue
+        chunks.append(buffer)
+        buffer = sentence
+    if buffer:
+        chunks.append(buffer)
+    return chunks or [paragraph]
+
+
 def _split_sentence_units(block: str) -> list[str]:
     if len(block) <= 360 or _looks_like_formula_segment(block):
         return [block]
@@ -945,6 +1051,11 @@ def _split_sentence_units(block: str) -> list[str]:
     if buffer:
         merged.append(buffer)
     return merged or [block]
+
+
+def _sentence_count(text: str) -> int:
+    units = [item for item in _split_sentence_units(text) if item.strip()]
+    return max(1, len(units))
 
 
 def _clean_segment_text(value: str) -> str:
@@ -1205,9 +1316,9 @@ def _plain_meaning(segment: dict[str, Any], language: str) -> str:
         return _append_explanation_note(_english_plain_note(text, kind), _english_focus_note(text, kind))
     if language == "bilingual":
         en_note = _append_explanation_note(_english_plain_note(text, kind), _english_focus_note(text, kind))
-        zh_note = _append_explanation_note(_chinese_plain_note(text, kind), _chinese_focus_note(text, kind))
+        zh_note = _chinese_segment_plain_note(text, kind)
         return f"{en_note} / {zh_note}"
-    return _append_explanation_note(_chinese_plain_note(text, kind), _chinese_focus_note(text, kind))
+    return _chinese_segment_plain_note(text, kind)
 
 
 def _why_it_matters(segment: dict[str, Any], language: str) -> str:
@@ -1217,9 +1328,9 @@ def _why_it_matters(segment: dict[str, Any], language: str) -> str:
         return _append_explanation_note(_english_importance_note(kind), _english_importance_focus(text, kind))
     if language == "bilingual":
         en_note = _append_explanation_note(_english_importance_note(kind), _english_importance_focus(text, kind))
-        zh_note = _append_explanation_note(_chinese_importance_note(kind), _chinese_importance_focus(text, kind))
+        zh_note = _chinese_segment_importance_note(text, kind)
         return f"{en_note} / {zh_note}"
-    return _append_explanation_note(_chinese_importance_note(kind), _chinese_importance_focus(text, kind))
+    return _chinese_segment_importance_note(text, kind)
 
 
 def _method_note(segment: dict[str, Any], language: str) -> str:
@@ -1228,9 +1339,178 @@ def _method_note(segment: dict[str, Any], language: str) -> str:
         return _append_explanation_note(_english_method_note(text), _english_method_focus(text))
     if language == "bilingual":
         en_note = _append_explanation_note(_english_method_note(text), _english_method_focus(text))
-        zh_note = _append_explanation_note(_chinese_method_note(text), _chinese_method_focus(text))
+        zh_note = _chinese_segment_method_note(text)
         return f"{en_note} / {zh_note}"
+    return _chinese_segment_method_note(text)
+
+
+def _chinese_segment_plain_note(text: str, kind: str) -> str:
+    lowered = text.lower()
+    combined_method = _chinese_combined_method_note(lowered, "plain")
+    if combined_method:
+        return combined_method
+    if _keyword_like_segment(text):
+        return f"这段更像论文的关键词地图：{_zh_terms_phrase(text)}。它不是结论本身，而是在告诉你后面会反复用哪些概念来搭建论证。"
+    if "only final answers" in lowered or _instruction_tuning_trace_signal(lowered):
+        return "这段点出训练信号的关键变化：模型不是只背最终答案，而是学习中间的逻辑轨迹。换句话说，作者想让模型知道每一步为什么能走，而不只是最后该输出什么。"
+    if "large language models" in lowered and "symbolic planning" in lowered:
+        return "这段在搭论文的问题入口：LLM 很会生成文字，但符号规划要求每一步都满足规则，所以“说得像”不等于“计划真的合法”。"
+    if "open-ended text generation" in lowered:
+        return "这段把普通文本生成和符号规划区分开：规划不是自由发挥，而是在动作、状态和目标约束里一步步走。"
+    if "figure" in lowered and "pddl-instruct" in lowered:
+        return "这段是在介绍整套方法框架：先构造带逻辑轨迹的规划数据，再用这些轨迹去微调模型，让模型学会边计划边检查。"
+    if "pddl-instruct" in lowered:
+        return "这段聚焦数据构造：把自然语言任务、PDDL 领域文件和逐步推理轨迹绑在一起，形成模型可以模仿的训练样例。"
+    if "current state" in lowered and ("precondition" in lowered or "facts required" in lowered):
+        return "这段在讲动作能不能执行的第一道门槛：当前状态里必须先有动作需要的事实，否则这一步计划就是非法的。"
+    if "state transition" in lowered or "s_{t+1}" in lowered or "apply(a_t" in lowered or _looks_like_formula_segment(text):
+        return "这段把方法压缩成状态更新规则：先判断动作合法，再把删除效果和新增效果写进新状态，像按规则改写一张事实表。"
+    if "planbench" in lowered and ("val" in lowered or "validation" in lowered):
+        return "这段把实验验证拆成两层：PlanBench 提供规划任务和约束场景，VAL 式验证器再检查动作序列是否真的合法、是否能到达目标。"
+    if "planbench" in lowered:
+        return "这段在说明实验基准：PlanBench 不是看回答漂不漂亮，而是看生成的计划能不能在规划任务里真正执行。"
+    if "val" in lowered or "validation" in lowered:
+        return "这段把评测变成可验收检查：验证器逐步审查动作序列，确认每一步合法且最后真的到达目标。"
+    if "results show" in lowered or "logical traces help" in lowered:
+        return "这段是在收束实验结论：逻辑轨迹不是装饰性的解释，它能帮助模型生成更符合符号约束的计划。"
+    if "quality and coverage" in lowered or "unseen" in lowered or "long-horizon" in lowered:
+        return "这段在给方法划边界：轨迹质量、领域覆盖和长链条任务都会影响效果，不能把结论无限外推。"
+    if kind == "limitation":
+        return "这段的作用是提醒你看清适用范围：方法有效不代表所有领域、所有长度、所有规划错误都能被解决。"
+    if kind == "experiment":
+        return f"这段在讲论文如何验证主张，重点抓住评测对象和证据形式：{_zh_terms_phrase(text)}。"
+    if kind == "method":
+        return f"这段在解释方法链条中的一个环节，读的时候要问它怎样把输入变成可检查输出：{_zh_terms_phrase(text)}。"
+    return _append_explanation_note(_chinese_plain_note(text, kind), _zh_segment_cue(text))
+
+
+def _chinese_segment_importance_note(text: str, kind: str) -> str:
+    lowered = text.lower()
+    combined_method = _chinese_combined_method_note(lowered, "importance")
+    if combined_method:
+        return combined_method
+    if _keyword_like_segment(text):
+        return f"它像一张速查索引，帮你先锁定这段附近会用到的概念：{_zh_terms_phrase(text)}。读后文时看到这些词，要主动把它们连回论文主线。"
+    if "only final answers" in lowered or _instruction_tuning_trace_signal(lowered):
+        return "它解释了为什么这篇论文不是普通微调：监督信号从“最终答案”扩展到“逻辑轨迹”，模型才有机会学到前提检查、状态更新和错误定位。"
+    if "large language models" in lowered and "symbolic planning" in lowered:
+        return "它决定了整篇论文为什么成立：如果问题只是写得流畅，就不需要 PDDL、轨迹和验证器；难点恰恰是规则合法性。"
+    if kind == "experiment":
+        return "它决定论文证据是否可信：你需要看清作者用什么任务、什么指标、什么验证方式来证明方法确实有效。"
+    if "pddl-instruct" in lowered:
+        return "它是复现和汇报时最该讲清楚的桥：作者不是只换提示词，而是把训练数据改造成可检查的推理过程。"
+    if "precondition" in lowered or "effect" in lowered or "current state" in lowered:
+        return "它让你能诊断模型错在哪里：是前提没满足、效果更新错了，还是后续状态被带偏了。"
+    if "planbench" in lowered and ("val" in lowered or "validation" in lowered):
+        return "它把论文结论从主观感觉拉回客观证据：PlanBench 负责给出规划任务，VAL 负责判定动作序列是否可执行，二者合起来才支撑“会规划”的主张。"
+    if "planbench" in lowered or "val" in lowered or "validation" in lowered:
+        return "它把论文结论从主观感觉拉回客观证据：计划是否有效，要靠任务基准和验证日志说话。"
+    if "results show" in lowered or "logical traces help" in lowered:
+        return "它是贡献能否站住脚的证据点：方法必须带来更高的可执行性，而不只是生成更长的解释。"
+    if "quality and coverage" in lowered or "unseen" in lowered or "long-horizon" in lowered:
+        return "它提醒你汇报时要克制：这类方法依赖轨迹覆盖和验证环境，跨领域或长任务仍可能失效。"
+    if kind == "formula":
+        return "它把直觉变成可推导、可实现的规则，是从“理解思想”走向“能复现”的关键。"
+    return _append_explanation_note(_chinese_importance_note(kind), _chinese_importance_focus(text, kind))
+
+
+def _chinese_segment_method_note(text: str) -> str:
+    lowered = text.lower()
+    combined_method = _chinese_combined_method_note(lowered, "method")
+    if combined_method:
+        return combined_method
+    if "only final answers" in lowered or _instruction_tuning_trace_signal(lowered):
+        return "复现或汇报时不要只准备输入-输出答案，要保留每一步逻辑轨迹：当前状态是什么、动作为什么合法、执行后状态怎样变化。"
+    if "pddl-instruct" in lowered:
+        return "可以按三步理解：准备规划任务和 PDDL 规则，生成逐步逻辑轨迹，再用这些样例做指令微调。"
+    if "precondition" in lowered and "effect" in lowered:
+        return "实操时把每个动作拆成两列：执行前必须满足哪些事实，执行后会新增或删除哪些事实。"
+    if "current state" in lowered:
+        return "读这段时把 current state 当成事实清单，逐项核对下一步动作需要的条件是否已经存在。"
+    if "state transition" in lowered or "s_{t+1}" in lowered or "apply(a_t" in lowered or _looks_like_formula_segment(text):
+        return "把它想成一台状态更新机：输入当前状态和动作，先过合法性检查，再输出下一状态。"
+    if "planbench" in lowered and ("val" in lowered or "validation" in lowered):
+        return "复现实验时把 PlanBench 当成题库，把 VAL 当成裁判：每条计划都要留下验证记录，说明失败是前提错、效果错，还是目标没达成。"
+    if "planbench" in lowered or "val" in lowered or "validation" in lowered:
+        return "复现实验时要保留每条计划的验证记录，最好能说明失败是前提错、效果错，还是目标没达成。"
+    if "quality and coverage" in lowered or "unseen" in lowered or "long-horizon" in lowered:
+        return "分析局限时不要只写“效果下降”，要追问是训练轨迹覆盖不够、规则更复杂，还是长链条误差累积。"
     return _append_explanation_note(_chinese_method_note(text), _chinese_method_focus(text))
+
+
+def _chinese_combined_method_note(lowered: str, field: str) -> str:
+    has_pddl_instruct = "pddl-instruct" in lowered
+    has_pddl_training_pipeline = has_pddl_instruct and (
+        "tuning" in lowered
+        or "training phase" in lowered
+        or "training phases" in lowered
+        or "three phase" in lowered
+        or "three phases" in lowered
+    )
+    has_worked_example = "worked example" in lowered or (
+        "trace" in lowered and "precondition" in lowered and "effect" in lowered
+    )
+    has_instruction_tuning = (
+        "instruction tuned" in lowered
+        or "instruction tuning" in lowered
+        or "only final answers" in lowered
+        or _instruction_tuning_trace_signal(lowered)
+        or has_pddl_training_pipeline
+    )
+    if sum([has_pddl_instruct, has_worked_example, has_instruction_tuning]) < 2:
+        return ""
+    if field == "plain":
+        parts: list[str] = []
+        if has_pddl_instruct:
+            parts.append("先用 PDDL-Instruct 把自然语言任务、PDDL 规则和逻辑推理轨迹配成训练样例")
+        if has_worked_example:
+            parts.append("再把 trace 做成像老师板书一样的 worked example，写清当前状态、前提检查、效果应用和下一状态")
+        if has_instruction_tuning:
+            parts.append("最后用这些轨迹做指令微调，让模型学会过程，而不是只背最终答案")
+        return "这段其实在讲完整的方法链条：" + "；".join(parts) + "。"
+    if field == "importance":
+        return (
+            "它重要在于把“训练数据、推理过程、模型微调”连成一条可复现链："
+            "PDDL-Instruct 负责提供结构化样例，板书式 trace 负责暴露每一步为什么合法，"
+            "指令微调负责把这种检查习惯灌进模型里。"
+        )
+    return (
+        "复现或汇报时可以按三层讲：第一层说明 PDDL-Instruct 怎么构造样例；"
+        "第二层把 trace 当成板书，逐步核对 precondition、effect 和 state transition；"
+        "第三层说明 instruction tuning 训练的是这套逻辑轨迹格式，而不是只训练最终答案。"
+    )
+
+
+def _instruction_tuning_trace_signal(lowered: str) -> bool:
+    has_instruction_tuning = "instruction tuning" in lowered or "instruction tuned" in lowered or "pddl-instruct" in lowered
+    has_trace_signal = "chain-of-thought" in lowered or "cot" in lowered or "logical trace" in lowered or "logical reasoning trace" in lowered
+    return has_instruction_tuning and has_trace_signal
+
+
+def _keyword_like_segment(text: str) -> bool:
+    compact = _compact_inline_text(text)
+    if not compact:
+        return False
+    sentence_marks = len(re.findall(r"[.!?。！？]", compact))
+    words = re.findall(r"[A-Za-z][A-Za-z0-9_-]+", compact)
+    return sentence_marks <= 1 and len(words) >= 8 and len(compact.split()) <= 28
+
+
+def _zh_terms_phrase(text: str) -> str:
+    terms = _dedupe(
+        [
+            token
+            for token in re.findall(r"[A-Za-z][A-Za-z0-9_-]{2,}", text)
+            if token.lower() not in {"the", "and", "for", "with", "that", "this", "from", "into", "are", "can"}
+        ],
+        limit=5,
+    )
+    return "、".join(terms) if terms else _clip(_compact_inline_text(text), 48)
+
+
+def _zh_segment_cue(text: str) -> str:
+    cue = _clip(_compact_inline_text(text), 64)
+    return f"这一段的具体落点是：“{cue}”。" if cue else ""
 
 
 def _related_resources_note(annotations: list[dict[str, Any]], language: str) -> str:
@@ -1266,8 +1546,8 @@ def _segment_specific_cue(text: str, language: str) -> str:
     if language == "en":
         return f"Specific cue: \"{cue}\"."
     if language == "bilingual":
-        return f"Specific cue: \"{cue}\". / 本句具体落在：“{cue}”。"
-    return f"本句具体落在：“{cue}”。"
+        return f"Specific cue: \"{cue}\". / 本段具体落在：“{cue}”。"
+    return f"本段具体落在：“{cue}”。"
 
 
 def _chinese_focus_note(text: str, kind: str) -> str:
@@ -1496,9 +1776,38 @@ def _english_method_note(text: str) -> str:
 
 
 def _explanation_confidence(segment: dict[str, Any], evidence_refs: list[dict[str, Any]]) -> float:
-    score = float(segment.get("importance_score") or 0)
-    value = 0.45 + min(score, 12) / 30 + min(len(evidence_refs), 3) * 0.06
-    return round(min(value, 0.95), 2)
+    importance = min(max(float(segment.get("importance_score") or 0), 0.0), 20.0) / 20.0
+    text = str(segment.get("original_text") or "")
+    words = re.findall(r"[A-Za-z][A-Za-z-]{2,}|[\u4e00-\u9fff]", text)
+    unique_words = {word.lower() for word in words}
+    text_specificity = min(len(unique_words), 70) / 70.0
+    paragraph_length = min(len(text), 900) / 900.0
+
+    snippets = [str(ref.get("snippet") or "") for ref in evidence_refs if isinstance(ref, dict)]
+    evidence_count = min(len(evidence_refs), 3) / 3.0
+    evidence_detail = min(sum(len(snippet) for snippet in snippets), 900) / 900.0
+    local_support = 1.0 if any(isinstance(ref, dict) and ref.get("local_href") for ref in evidence_refs) else 0.0
+    section_bonus = {
+        "method": 0.03,
+        "experiment": 0.03,
+        "formula": 0.02,
+        "limitation": 0.02,
+        "abstract": 0.01,
+        "background": 0.01,
+    }.get(str(segment.get("section_kind") or ""), 0.0)
+
+    value = (
+        0.46
+        + importance * 0.16
+        + text_specificity * 0.10
+        + paragraph_length * 0.05
+        + evidence_count * 0.09
+        + evidence_detail * 0.06
+        + local_support * 0.03
+        + section_bonus
+    )
+    evidence_ceiling = 0.82 + evidence_count * 0.08 + local_support * 0.02
+    return round(max(0.45, min(value, evidence_ceiling, 0.92)), 2)
 
 
 def _section_summary(spec: dict[str, Any], metadata: dict[str, Any], language: str) -> str:
@@ -2259,40 +2568,40 @@ def _label(language: str, key: str) -> str:
         "reading_flow": ("Paper reading flow", "论文阅读流"),
         "section_navigation": ("Section navigation", "章节导航"),
         "context_panel": ("Context, evidence, and resources", "上下文资料、证据与任务"),
-        "key_sentence_flow": ("Key sentence quick read", "关键句速读"),
+        "key_sentence_flow": ("Key paragraph quick read", "核心段落速读"),
         "key_sentence_note": (
-            "Only the highest-value sentences are shown here. Click one sentence to pin its explanation on the right.",
-            "这里只显示最值得先看的关键句。点击句段后，右侧会固定对应解释。",
+            "Only the highest-value paragraphs are shown here. Click one paragraph to pin its explanation on the right.",
+            "这里只显示最值得先看的核心段落。点击段落后，右侧会固定对应解释。",
         ),
-        "source_reading_flow": ("Source sentence reading flow", "原文句段精读流"),
+        "source_reading_flow": ("Source paragraph reading flow", "原文段落精读流"),
         "source_reading_note": (
-            "Hover or click a highlighted sentence to see what it means, why it matters, and how to understand the method.",
-            "悬浮或点击句段，查看它在说什么、为什么重要，以及方法怎么理解。",
+            "Hover or click a highlighted paragraph to see what it means, why it matters, and how to understand the method.",
+            "悬浮或点击段落，查看它在说什么、为什么重要，以及方法怎么理解。",
         ),
         "reading_recommendations": ("Recommended reading for the sections above", "以上内容推荐阅读"),
         "reading_recommendations_note": (
-            "Read these resources after a group of sentences instead of interrupting every sentence with a separate reading prompt.",
-            "读完一组句段后，再集中查看这些资料；不在每句话下面反复打断阅读。",
+            "Read these resources after a group of paragraphs instead of interrupting every paragraph with a separate reading prompt.",
+            "读完一组段落后，再集中查看这些资料；不在每段下面反复打断阅读。",
         ),
         "more_resources": ("More resources", "展开更多资料"),
         "no_reading_recommendations": ("No grouped reading recommendation is available yet.", "暂未生成集中推荐阅读。"),
         "recommended_resource": ("Recommended resource", "推荐资料"),
-        "inline_explanation": ("Inline explanation", "句段解释卡"),
+        "inline_explanation": ("Inline explanation", "段落解释卡"),
         "inline_explanation_note": (
-            "Click a sentence on the left to pin its explanation here.",
-            "点击左侧句段后，这里会固定显示对应解释。",
+            "Click a paragraph on the left to pin its explanation here.",
+            "点击左侧段落后，这里会固定显示对应解释。",
         ),
-        "detail_explanations": ("Detailed explanations", "句段详解区"),
+        "detail_explanations": ("Detailed explanations", "段落详解区"),
         "detail_explanations_note": (
-            "Detailed cards keep the original sentence, plain explanation, method note, and supporting evidence together.",
-            "详解卡会把原句、直白解释、方法说明和支撑证据放在一起。",
+            "Detailed cards keep the original paragraph, plain explanation, method note, and supporting evidence together.",
+            "详解卡会把原文段落、直白解释、方法说明和支撑证据放在一起。",
         ),
-        "plain_meaning": ("What this says", "这句话在说什么"),
+        "plain_meaning": ("What this paragraph says", "这段在说什么"),
         "why_it_matters": ("Why it matters", "为什么重要"),
         "method_note": ("How to understand the method", "方法怎么理解"),
         "expand_detail": ("Expand details", "展开详解"),
         "importance": ("importance", "重要度"),
-        "no_segments": ("No readable paper segments were found.", "暂未找到可用于句段精读的论文片段。"),
+        "no_segments": ("No readable paper paragraphs were found.", "暂未找到可用于段落精读的论文片段。"),
         "based_on_available_fragments": (
             "This reader is based on available metadata and evidence fragments.",
             "当前阅读器基于可用的论文元数据和证据片段生成。",
@@ -2353,7 +2662,7 @@ def _clip(value: str, limit: int) -> str:
     text = re.sub(r"\s+", " ", str(value)).strip()
     if len(text) <= limit:
         return text
-    return text[: max(0, limit - 1)].rstrip() + "..."
+    return text[: max(0, limit)].rstrip()
 
 
 def _sanitize(value: Any) -> Any:

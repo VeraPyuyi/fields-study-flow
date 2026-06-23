@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
-from fields_study_flow.models import Resource
+from fields_study_flow.models import PRIVATE_PATH_RE, Resource
 
 
 DOWNLOADABLE_EXTENSIONS = {
@@ -98,6 +98,9 @@ def bundle_study_resources(
                     max(0, retries),
                     progress,
                 )
+            metadata = _public_resource_metadata(resource.metadata)
+            if metadata:
+                entry["metadata"] = metadata
             entry.update(route_meta)
             if entry.get("status") == "link-only":
                 entry["link_only_reason"] = entry.get("reason", "")
@@ -197,8 +200,9 @@ def _public_bundle_entry(entry: dict[str, Any], *, resource_dir: Path | None = N
         "attempts",
         "size_bytes",
         "content_type",
+        "metadata",
     }
-    public = {key: value for key, value in entry.items() if key in allowed and value not in {None, ""}}
+    public = {key: value for key, value in entry.items() if key in allowed and value is not None and value != ""}
     local_href = _local_href(entry, resource_dir=resource_dir, report_dir=report_dir)
     if local_href:
         public["local_href"] = local_href
@@ -253,6 +257,9 @@ def _library_metadata_by_key(roadmap: dict[str, Any]) -> dict[tuple[str, str], d
             "selected_phase": item.get("selected_phase"),
             "route_reason": item.get("route_reason"),
         }
+        public_metadata = _public_resource_metadata(item.get("metadata"))
+        if public_metadata:
+            metadata[key]["metadata"] = public_metadata
     return metadata
 
 
@@ -327,6 +334,7 @@ def _library_only_entries(
                     "selected": item.get("selected", False),
                     "selected_phase": item.get("selected_phase"),
                     "route_reason": item.get("route_reason"),
+                    **({"metadata": public_metadata} if (public_metadata := _public_resource_metadata(item.get("metadata"))) else {}),
                 }
             )
             continue
@@ -345,9 +353,52 @@ def _library_only_entries(
                 "selected": item.get("selected", False),
                 "selected_phase": item.get("selected_phase"),
                 "route_reason": item.get("route_reason"),
+                **({"metadata": public_metadata} if (public_metadata := _public_resource_metadata(item.get("metadata"))) else {}),
             }
         )
     return entries
+
+
+def _public_resource_metadata(metadata: Any) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    rag = metadata.get("rag")
+    if not isinstance(rag, dict):
+        return {}
+    public_rag: dict[str, Any] = {}
+    if rag.get("mode"):
+        public_rag["mode"] = str(rag.get("mode"))
+    if rag.get("evidence_score") is not None:
+        public_rag["evidence_score"] = rag.get("evidence_score")
+    for key in ("top_chunks", "evidence_chunks"):
+        chunks = _public_evidence_chunks(rag.get(key))
+        if chunks:
+            public_rag[key] = chunks
+    return {"rag": public_rag} if public_rag else {}
+
+
+def _public_evidence_chunks(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    chunks: list[dict[str, Any]] = []
+    for item in value[:3]:
+        if not isinstance(item, dict):
+            continue
+        public = {
+            key: item.get(key)
+            for key in ("resource_title", "file_name", "snippet", "score", "local_href", "url")
+            if item.get(key) not in {None, ""}
+        }
+        if public.get("snippet"):
+            chunks.append(_redact_private_paths_in_mapping(public))
+    return chunks
+
+
+def _redact_private_paths_in_mapping(value: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: PRIVATE_PATH_RE.sub("[private local path]", item) if isinstance(item, str) else item
+        for key, item in value.items()
+    }
 
 
 def _existing_generated_resource_entry(
@@ -973,8 +1024,8 @@ def _render_bundle_readme(manifest: dict[str, Any]) -> str:
         "",
         "## 如何开始",
         "",
-        "1. 先打开报告目录中的 `roadmap.html`。",
-        "2. 按学习中控台右侧任务向导完成解释、推导、复现和批判任务。",
+        "1. 先打开报告目录中的 `index.html`，按推荐顺序进入论文逻辑图、段落精读或学习路线。",
+        "2. 按学习路线中的验收清单完成解释、推导、复现和批判任务。",
         "3. 在报告的资料库中优先点击“打开本地资料”。",
         "4. 如果有失败项，查看 `retry_failed.md` 后重新运行同一条 fields-study-flow 命令。",
         "",

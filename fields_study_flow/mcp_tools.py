@@ -9,16 +9,19 @@ from fields_study_flow.language import (
     normalize_resource_language_preference,
 )
 from fields_study_flow.artifact_templates import write_artifact_template
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.live_search import search_live_resources
 from fields_study_flow.local_resources import analyze_local_resources
 from fields_study_flow.offline_catalog import offline_resources_for_goal
 from fields_study_flow.paper_metadata import paper_metadata_to_resource, resolve_paper_metadata
 from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html, write_paper_lens_latex
+from fields_study_flow.paper_map import build_paper_map, render_paper_map_html
 from fields_study_flow.rag import answer_from_bundle, apply_rag_to_resources, build_rag_index, load_bundle_rag_index, public_rag_evidence, retrieve_evidence
 from fields_study_flow.ranking import rank_resources
 from fields_study_flow.roadmap import build_roadmap, render_html, render_markdown, render_svg, sanitize_roadmap_for_export
 from fields_study_flow.sources import SourceRegistry
+from fields_study_flow.visual_audit import write_report_audit
 
 DISALLOWED_URL_TERMS = (
     "z-lib",
@@ -177,6 +180,11 @@ def buildRoadmap(
     ragMode: str = "auto",
     paperLensLanguage: str = "auto",
     paperLensDensity: str = "dense",
+    paperLensGranularity: str = "paragraph",
+    paperMapLanguage: str = "auto",
+    paperMapDepth: str = "standard",
+    paperMapLayout: str = "xmind-flow",
+    paperMapProvider: str = "auto",
 ) -> dict[str, Any]:
     learner = _profile_from_dict(
         {
@@ -194,9 +202,22 @@ def buildRoadmap(
     plan = build_roadmap(learner, resources, live_search=liveSearch, rag_evidence=rag_evidence)
     if rag_evidence:
         plan["rag_evidence"] = rag_evidence
-    plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity}
+    plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity, "granularity": paperLensGranularity}
+    plan["paper_map_options"] = {"language": paperMapLanguage, "depth": paperMapDepth, "layout": paperMapLayout, "provider": paperMapProvider}
     if has_target_paper(plan):
-        plan["paper_lens"] = build_paper_lens(plan, paper_lens_language=paperLensLanguage, paper_lens_density=paperLensDensity)
+        plan["paper_lens"] = build_paper_lens(
+            plan,
+            paper_lens_language=paperLensLanguage,
+            paper_lens_density=paperLensDensity,
+            paper_lens_granularity=paperLensGranularity,
+        )
+        plan["paper_map"] = build_paper_map(
+            plan,
+            paper_map_language=paperMapLanguage,
+            paper_map_depth=paperMapDepth,
+            paper_map_layout=paperMapLayout,
+            paper_map_provider=paperMapProvider,
+        )
     return sanitize_roadmap_for_export(plan)
 
 
@@ -249,25 +270,59 @@ def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
     return {"valid": not issues, "issues": issues}
 
 
-def exportPlan(plan: dict[str, Any], outputDir: str, paperLensLanguage: str = "auto", paperLensDensity: str = "dense") -> dict[str, str]:
+def exportPlan(
+    plan: dict[str, Any],
+    outputDir: str,
+    paperLensLanguage: str = "auto",
+    paperLensDensity: str = "dense",
+    paperLensGranularity: str = "paragraph",
+    paperMapLanguage: str = "auto",
+    paperMapDepth: str = "standard",
+    paperMapLayout: str = "xmind-flow",
+    paperMapProvider: str = "auto",
+) -> dict[str, str]:
     output = Path(outputDir)
     output.mkdir(parents=True, exist_ok=True)
     import json
 
     working_plan = dict(plan)
     if has_target_paper(working_plan):
-        working_plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity}
-        working_plan["paper_lens"] = build_paper_lens(working_plan, paper_lens_language=paperLensLanguage, paper_lens_density=paperLensDensity)
+        working_plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity, "granularity": paperLensGranularity}
+        working_plan["paper_map_options"] = {"language": paperMapLanguage, "depth": paperMapDepth, "layout": paperMapLayout, "provider": paperMapProvider}
+        working_plan["paper_lens"] = build_paper_lens(
+            working_plan,
+            paper_lens_language=paperLensLanguage,
+            paper_lens_density=paperLensDensity,
+            paper_lens_granularity=paperLensGranularity,
+        )
+        working_plan["paper_map"] = build_paper_map(
+            working_plan,
+            paper_map_language=paperMapLanguage,
+            paper_map_depth=paperMapDepth,
+            paper_map_layout=paperMapLayout,
+            paper_map_provider=paperMapProvider,
+        )
     public_plan = sanitize_roadmap_for_export(working_plan)
+    outputs = list(public_plan.get("outputs", []))
+    if "index.html" not in outputs:
+        outputs.insert(0, "index.html")
+    if "report_audit.json" not in outputs:
+        insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
+        outputs.insert(insert_at, "report_audit.json")
+    public_plan["outputs"] = outputs
     if has_target_paper(public_plan):
-        outputs = list(public_plan.get("outputs", []))
+        if "paper_map.html" not in outputs:
+            outputs.append("paper_map.html")
         if "paper_lens.html" not in outputs:
             outputs.append("paper_lens.html")
         public_plan["outputs"] = outputs
     json_target = output / "roadmap.json"
     md_target = output / "roadmap.md"
     svg_target = output / "roadmap.svg"
+    index_target = output / "index.html"
+    audit_target = output / "report_audit.json"
     html_target = output / "roadmap.html"
+    map_target = output / "paper_map.html"
     lens_target = output / "paper_lens.html"
     if public_plan.get("paper_lens"):
         latex_export = write_paper_lens_latex(output, public_plan)
@@ -279,14 +334,37 @@ def exportPlan(plan: dict[str, Any], outputDir: str, paperLensLanguage: str = "a
                 file_name = latex_export.get(file_key)
                 if file_name and file_name not in public_plan.get("outputs", []):
                     public_plan.setdefault("outputs", []).append(str(file_name))
+    frontend_asset_base = copy_frontend_assets(output)
     json_target.write_text(json.dumps(public_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     md_target.write_text(render_markdown(public_plan), encoding="utf-8")
     svg_target.write_text(render_svg(public_plan), encoding="utf-8")
-    html_target.write_text(render_html(public_plan), encoding="utf-8")
+    index_target.write_text(render_report_index(public_plan), encoding="utf-8")
+    html_target.write_text(
+        render_frontend_report("roadmap", public_plan, asset_base=frontend_asset_base) if frontend_asset_base else render_html(public_plan),
+        encoding="utf-8",
+    )
+    if public_plan.get("paper_map"):
+        map_target.write_text(
+            render_frontend_report("paper_map", public_plan, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_map_html(public_plan),
+            encoding="utf-8",
+        )
     if public_plan.get("paper_lens"):
-        lens_target.write_text(render_paper_lens_html(public_plan), encoding="utf-8")
+        lens_target.write_text(
+            render_frontend_report("paper_lens", public_plan, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_lens_html(public_plan),
+            encoding="utf-8",
+        )
     write_artifact_template(output, public_plan)
-    result = {"roadmap_json": str(json_target), "roadmap_md": str(md_target), "roadmap_svg": str(svg_target), "roadmap_html": str(html_target)}
+    write_report_audit(output, public_plan)
+    result = {
+        "index_html": str(index_target),
+        "report_audit_json": str(audit_target),
+        "roadmap_json": str(json_target),
+        "roadmap_md": str(md_target),
+        "roadmap_svg": str(svg_target),
+        "roadmap_html": str(html_target),
+    }
+    if public_plan.get("paper_map"):
+        result["paper_map_html"] = str(map_target)
     if public_plan.get("paper_lens"):
         result["paper_lens_html"] = str(lens_target)
         latex_export = public_plan.get("paper_lens", {}).get("latex_export", {}) if isinstance(public_plan.get("paper_lens"), dict) else {}

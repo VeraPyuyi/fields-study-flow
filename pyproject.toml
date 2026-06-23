@@ -24,6 +24,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 rag = ["fastembed", "numpy"]
+visual = ["playwright>=1.44"]
 
 [project.scripts]
 fields-study-flow = "fields_study_flow.cli:main"
@@ -33,7 +34,7 @@ git4study = "git4study.cli:main"
 include = ["fields_study_flow*", "git4study*"]
 
 [tool.setuptools.package-data]
-fields_study_flow = ["source-registry.yaml"]
+fields_study_flow = ["source-registry.yaml", "frontend_dist/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

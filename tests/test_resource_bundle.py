@@ -4,7 +4,7 @@ import json
 from zipfile import ZipFile
 
 from fields_study_flow.models import Resource
-from fields_study_flow.resource_bundle import bundle_study_resources
+from fields_study_flow.resource_bundle import bundle_study_resources, public_bundle_summary
 
 
 class FakeStream:
@@ -104,6 +104,41 @@ def test_bundle_downloads_arxiv_pdf_and_keeps_video_as_link(tmp_path):
     assert any(item.get("reason") == "video_resources_are_not_downloaded" for item in manifest["resources"])
     dumped = json.dumps(manifest, ensure_ascii=False)
     assert "Attention Is All You Need" in dumped
+
+
+def test_public_bundle_summary_keeps_public_rag_evidence_without_private_text(tmp_path):
+    paper = Resource(
+        title="Evidence-backed Planning Paper",
+        url="https://arxiv.org/abs/2601.00001",
+        source="arxiv",
+        type="paper",
+        metadata={
+            "rag": {
+                "mode": "light",
+                "evidence_score": 2.5,
+                "top_chunks": [
+                    {
+                        "resource_title": "Evidence-backed Planning Paper",
+                        "snippet": "PDDL preconditions and VAL validation support the planning claim.",
+                        "score": 2.5,
+                        "text": "private full text should not be exported",
+                        "local_path": "C:/Users/example/private.pdf",
+                    }
+                ],
+            }
+        },
+    )
+    manifest = bundle_study_resources(tmp_path / "bundle", [paper], {"phases": []}, client=FakeClient())
+
+    summary = public_bundle_summary(manifest, report_dir=tmp_path / "report")
+
+    rag = summary["resources"][0]["metadata"]["rag"]
+    assert rag["evidence_score"] == 2.5
+    assert rag["top_chunks"][0]["snippet"].startswith("PDDL preconditions")
+    assert "text" not in rag["top_chunks"][0]
+    dumped = json.dumps(summary, ensure_ascii=False)
+    assert "C:/Users/example" not in dumped
+    assert "private full text" not in dumped
 
 
 def test_bundle_retries_transient_download_failures_and_records_progress(tmp_path):

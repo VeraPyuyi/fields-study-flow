@@ -1,0 +1,1008 @@
+from __future__ import annotations
+
+import copy
+import json
+import re
+import shutil
+from html import escape
+from pathlib import Path
+from typing import Any
+
+
+FRONTEND_DIST_DIR = Path(__file__).with_name("frontend_dist")
+FRONTEND_ASSET_DIR = "assets/study-flow-app"
+PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+
+
+def frontend_assets_available() -> bool:
+    return _manifest_file(FRONTEND_DIST_DIR).exists()
+
+
+def copy_frontend_assets(output_dir: Path) -> str | None:
+    dist_dir = _dist_dir()
+    if not dist_dir or not _manifest_file(dist_dir).exists():
+        return None
+    target = output_dir / FRONTEND_ASSET_DIR
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(dist_dir, target, dirs_exist_ok=True)
+    return FRONTEND_ASSET_DIR
+
+
+def render_frontend_report(report_kind: str, roadmap: dict[str, Any], *, asset_base: str | None = None) -> str:
+    dist_dir = _dist_dir()
+    if not dist_dir:
+        raise FileNotFoundError("frontend build assets are not available")
+    manifest = _load_manifest(dist_dir)
+    entry = manifest.get("index.html") or next(iter(manifest.values()), {})
+    script_file = str(entry.get("file") or "")
+    css_files = [str(item) for item in entry.get("css", []) if item]
+    if not script_file:
+        raise FileNotFoundError("frontend manifest does not contain an entry script")
+    asset_prefix = (asset_base or FRONTEND_ASSET_DIR).strip("/")
+    safe_roadmap = _sanitize_private_values(copy.deepcopy(roadmap))
+    payload = {
+        "reportKind": report_kind,
+        "roadmap": safe_roadmap,
+    }
+    json_payload = _script_json(json.dumps(payload, ensure_ascii=False))
+    css_tags = "\n".join(f"  <style>{_style_text(_asset_text(dist_dir, css_file))}</style>" for css_file in css_files)
+    fallback_style = _frontend_static_fallback_style()
+    script_text = _inline_script_text(_asset_text(dist_dir, script_file))
+    title = _report_title(report_kind, safe_roadmap)
+    lang = _html_lang(safe_roadmap)
+    fallback_html = _frontend_static_fallback_html(report_kind, safe_roadmap, lang)
+    noscript_note = (
+        "浏览器禁用了 JavaScript；上方静态入口仍可用于打开资料和辅助报告。"
+        if lang != "en"
+        else "JavaScript is disabled; the static entry above still links to the companion reports."
+    )
+    return f"""<!doctype html>
+<html lang="{escape(lang)}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(title)}</title>
+{css_tags}
+  <style>{fallback_style}</style>
+</head>
+<body>
+  <div id="root" data-report-kind="{escape(report_kind)}">{fallback_html}</div>
+  <noscript><p class="static-report-noscript">{escape(noscript_note)}</p></noscript>
+  <script type="application/json" id="fields-study-flow-data">{json_payload}</script>
+  <script>{script_text}</script>
+</body>
+</html>"""
+
+
+def render_report_index(roadmap: dict[str, Any]) -> str:
+    safe_roadmap = _sanitize_private_values(copy.deepcopy(roadmap))
+    lang = _html_lang(safe_roadmap)
+    is_zh = lang != "en"
+    title = _display_report_base_title(safe_roadmap)
+    path_strategy = safe_roadmap.get("path_strategy", {}) if isinstance(safe_roadmap.get("path_strategy"), dict) else {}
+    profile = safe_roadmap.get("profile", {}) if isinstance(safe_roadmap.get("profile"), dict) else {}
+    estimated_time = str(path_strategy.get("estimated_total_time") or ("待估计" if is_zh else "not estimated"))
+    route_depth = str(path_strategy.get("mode") or profile.get("route_depth") or "balanced")
+    selected_resources = str(path_strategy.get("selected_resources") or "-")
+    goal = str(profile.get("goal") or safe_roadmap.get("title") or title)
+    cards = _index_cards(safe_roadmap, is_zh)
+    cards_html = "\n".join(_index_card_html(card) for card in cards)
+    health_html = _report_health_panel_html(safe_roadmap, is_zh)
+    scenario_html = _scenario_panel_html(is_zh)
+    heading = "从这里开始" if is_zh else "Start Here"
+    subtitle = (
+        "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
+        if is_zh
+        else "Open the paper map first, then read focused paragraphs, then finish the mastery checklist."
+    )
+    goal_label = "学习目标" if is_zh else "Goal"
+    time_label = "预计耗时" if is_zh else "Estimated Time"
+    mode_label = "路线模式" if is_zh else "Route Mode"
+    resource_label = "核心资料" if is_zh else "Core Resources"
+    quickstart_html = _quickstart_panel_html(is_zh, bool(safe_roadmap.get("paper_map")), bool(safe_roadmap.get("paper_lens")))
+    next_panel_html = _next_paper_panel_html(is_zh)
+    technical_label = "辅助文件" if is_zh else "Support Files"
+    technical_note = (
+        "JSON、Markdown 和 SVG 是给复查、分享或二次处理用的；普通学习优先打开上面的入口。"
+        if is_zh
+        else "JSON, Markdown, and SVG are support artifacts; learners should start with the cards above."
+    )
+    return f"""<!doctype html>
+<html lang="{escape(lang)}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(title)} - {escape(heading)}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f6f3ed;
+      --ink: #21201d;
+      --muted: #6f6a61;
+      --line: rgba(52, 47, 40, 0.14);
+      --panel: rgba(255, 255, 255, 0.86);
+      --accent: #2f6f73;
+      --accent-2: #9b5a39;
+      --shadow: 0 20px 60px rgba(47, 42, 35, 0.12);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", "Source Han Sans SC", Arial, sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(135deg, rgba(47, 111, 115, 0.10), transparent 34%),
+        linear-gradient(315deg, rgba(155, 90, 57, 0.10), transparent 34%),
+        var(--bg);
+      line-height: 1.65;
+    }}
+    main {{
+      width: min(1120px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 48px 0;
+    }}
+    .hero {{
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
+      gap: 20px;
+      align-items: stretch;
+      margin-bottom: 22px;
+    }}
+    .hero-copy, .metric-panel, .start-card, .next-paper-panel, .scenario-panel, .support-panel {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }}
+    .hero-copy {{
+      border-radius: 28px;
+      padding: clamp(24px, 4vw, 42px);
+    }}
+    .eyebrow {{
+      margin: 0 0 10px;
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }}
+    h1 {{
+      margin: 0;
+      max-width: 880px;
+      font-size: clamp(2rem, 6vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }}
+    .subtitle {{
+      margin: 18px 0 0;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: clamp(1rem, 2vw, 1.18rem);
+      overflow-wrap: anywhere;
+    }}
+    .metric-panel {{
+      border-radius: 24px;
+      padding: 22px;
+      display: grid;
+      gap: 12px;
+    }}
+    .metric {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px 16px;
+      background: rgba(255, 255, 255, 0.55);
+    }}
+    .metric span {{
+      display: block;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }}
+    .metric strong {{
+      display: block;
+      margin-top: 4px;
+      font-size: 1.05rem;
+      overflow-wrap: anywhere;
+    }}
+    .start-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .quickstart-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.76);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
+    .quickstart-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
+    .quickstart-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .quickstart-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .quickstart-badge {{
+      flex: 0 0 auto;
+      border: 1px solid rgba(47, 111, 115, 0.22);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--accent);
+      background: rgba(47, 111, 115, 0.08);
+      font-size: 0.84rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }}
+    .quickstart-steps {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .quickstart-steps a, .quickstart-steps span {{
+      display: block;
+      min-height: 92px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.62);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }}
+    .quickstart-steps a:hover, .quickstart-steps a:focus-visible {{
+      border-color: rgba(47, 111, 115, 0.42);
+      outline: none;
+    }}
+    .quickstart-steps small {{
+      display: block;
+      color: var(--accent-2);
+      font-weight: 800;
+    }}
+    .quickstart-steps strong {{
+      display: block;
+      margin-top: 4px;
+      font-size: 1rem;
+    }}
+    .report-health-panel, .start-card {{
+      display: flex;
+      flex-direction: column;
+      min-height: 230px;
+      border-radius: 22px;
+      padding: 22px;
+      color: inherit;
+      text-decoration: none;
+      transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }}
+    .start-card:hover, .start-card:focus-visible {{
+      transform: translateY(-3px);
+      border-color: rgba(47, 111, 115, 0.42);
+      box-shadow: 0 24px 70px rgba(47, 42, 35, 0.16);
+      outline: none;
+    }}
+    .start-card small {{
+      color: var(--accent-2);
+      font-weight: 800;
+    }}
+    .start-card h2 {{
+      margin: 16px 0 8px;
+      font-size: 1.35rem;
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .start-card p {{
+      margin: 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .start-card strong {{
+      margin-top: auto;
+      padding-top: 18px;
+      color: var(--accent);
+    }}
+    .report-health-panel {{
+      margin: 0 0 18px;
+      min-height: auto;
+      background: rgba(255, 255, 255, 0.80);
+      border: 1px solid var(--line);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
+    .report-health-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
+    .report-health-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .report-health-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .report-health-link {{
+      flex: 0 0 auto;
+      border: 1px solid rgba(47, 111, 115, 0.22);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--accent);
+      background: rgba(47, 111, 115, 0.08);
+      font-size: 0.84rem;
+      font-weight: 800;
+      text-decoration: none;
+      white-space: nowrap;
+    }}
+    .report-health-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .report-health-card {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.62);
+      overflow-wrap: anywhere;
+    }}
+    .report-health-card span {{
+      display: block;
+      color: var(--accent-2);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }}
+    .report-health-card strong {{
+      display: block;
+      margin-top: 4px;
+      color: var(--ink);
+      font-size: 1.1rem;
+    }}
+    .report-health-card small {{
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      line-height: 1.45;
+    }}
+    .scenario-panel {{
+      margin: 0 0 18px;
+      border-radius: 24px;
+      padding: 20px 22px;
+    }}
+    .scenario-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .scenario-panel > p {{
+      margin: 6px 0 14px;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .scenario-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .scenario-card {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.62);
+      overflow-wrap: anywhere;
+    }}
+    .scenario-card span {{
+      display: block;
+      color: var(--accent-2);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }}
+    .scenario-card strong {{
+      display: block;
+      margin-top: 5px;
+      font-size: 1.02rem;
+    }}
+    .scenario-card p {{
+      margin: 7px 0 10px;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }}
+    .scenario-card code {{
+      display: block;
+      border-radius: 12px;
+      padding: 9px;
+      background: rgba(33, 32, 29, 0.06);
+      color: var(--ink);
+      font-family: Consolas, "SFMono-Regular", "Liberation Mono", monospace;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }}
+    .next-paper-panel {{
+      margin-top: 16px;
+      border-radius: 24px;
+      padding: 22px;
+      display: grid;
+      grid-template-columns: minmax(0, 0.9fr) minmax(280px, 1.1fr);
+      gap: 18px;
+      align-items: start;
+    }}
+    .next-paper-panel h2 {{
+      margin: 0 0 8px;
+      font-size: clamp(1.4rem, 3vw, 2rem);
+      line-height: 1.18;
+      overflow-wrap: anywhere;
+    }}
+    .next-paper-panel p {{
+      margin: 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .command-grid {{
+      display: grid;
+      gap: 10px;
+    }}
+    .command-grid article {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.58);
+    }}
+    .command-grid span {{
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent-2);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }}
+    .command-grid code {{
+      display: block;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      color: var(--ink);
+      font-family: Consolas, "SFMono-Regular", "Liberation Mono", monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+    }}
+    .next-paper-note {{
+      grid-column: 1 / -1;
+      padding-top: 2px;
+      font-size: 0.92rem;
+    }}
+    .support-panel {{
+      margin-top: 16px;
+      border-radius: 22px;
+      padding: 20px 22px;
+    }}
+    .support-panel p {{
+      margin: 0 0 12px;
+      color: var(--muted);
+    }}
+    .support-links {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }}
+    .support-links a {{
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 8px 12px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.62);
+      text-decoration: none;
+    }}
+    .support-links a:hover, .support-links a:focus-visible {{
+      border-color: rgba(47, 111, 115, 0.42);
+      color: var(--accent);
+      outline: none;
+    }}
+    @media (max-width: 820px) {{
+      main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
+      .hero, .start-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid {{ grid-template-columns: 1fr; }}
+      .hero-copy {{ border-radius: 22px; }}
+      .start-card {{ min-height: auto; }}
+      .quickstart-panel header {{ display: block; }}
+      .report-health-panel header {{ display: block; }}
+      .quickstart-badge {{ display: inline-block; margin-top: 10px; }}
+      .report-health-link {{ display: inline-block; margin-top: 10px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero" aria-labelledby="start-title">
+      <div class="hero-copy">
+        <p class="eyebrow">fields-study-flow</p>
+        <h1 id="start-title">{escape(heading)}</h1>
+        <p class="subtitle">{escape(subtitle)}</p>
+        <p class="subtitle"><strong>{escape(goal_label)}：</strong>{escape(_truncate(goal, 260))}</p>
+      </div>
+      <aside class="metric-panel" aria-label="{escape('报告概览' if is_zh else 'Report overview')}">
+        <div class="metric"><span>{escape(time_label)}</span><strong>{escape(estimated_time)}</strong></div>
+        <div class="metric"><span>{escape(mode_label)}</span><strong>{escape(route_depth)}</strong></div>
+        <div class="metric"><span>{escape(resource_label)}</span><strong>{escape(selected_resources)}</strong></div>
+      </aside>
+    </section>
+    {quickstart_html}
+    {health_html}
+    {scenario_html}
+    <section class="start-grid" aria-label="{escape('推荐入口' if is_zh else 'Recommended entries')}">
+      {cards_html}
+    </section>
+    {next_panel_html}
+    <section class="support-panel" aria-labelledby="support-files">
+      <p class="eyebrow" id="support-files">{escape(technical_label)}</p>
+      <p>{escape(technical_note)}</p>
+      <div class="support-links">
+        <a href="roadmap.json">roadmap.json</a>
+        <a href="roadmap.md">roadmap.md</a>
+        <a href="roadmap.svg">roadmap.svg</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>"""
+
+
+def _index_cards(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, str]]:
+    cards: list[dict[str, str]] = []
+    if roadmap.get("paper_map"):
+        cards.append(
+            {
+                "step": "01",
+                "href": "paper_map.html",
+                "title": "先看论文逻辑图" if is_zh else "Open the Paper Map",
+                "body": "用 XMind 式主链抓住背景、动机、问题、方法、实验、贡献和局限。" if is_zh else "Use the causal map to understand background, motivation, method, experiments, contributions, and limits.",
+                "cta": "进入论文逻辑图" if is_zh else "Open Paper Map",
+            }
+        )
+    if roadmap.get("paper_lens"):
+        cards.append(
+            {
+                "step": f"{len(cards) + 1:02d}",
+                "href": "paper_lens.html",
+                "title": "再做段落精读" if is_zh else "Read Key Paragraphs",
+                "body": "把原文段落、直白解释、证据和资料放在一起，减少来回查资料。" if is_zh else "Read source paragraphs with plain explanations, evidence, and supporting materials together.",
+                "cta": "进入段落精读" if is_zh else "Open Paper Lens",
+            }
+        )
+    cards.append(
+        {
+            "step": f"{len(cards) + 1:02d}",
+            "href": "roadmap.html",
+            "title": "最后按路线验收" if is_zh else "Finish the Roadmap",
+            "body": "按阶段完成资料、任务和掌握证据，确认自己真的能解释、推导、复现和批判。" if is_zh else "Complete phases, tasks, and mastery evidence for explain, derive, reproduce, and critique.",
+            "cta": "进入学习路线" if is_zh else "Open Roadmap",
+        }
+    )
+    return cards
+
+
+def _index_card_html(card: dict[str, str]) -> str:
+    return f"""<a class="start-card" href="{escape(card['href'])}">
+        <small>{escape(card['step'])}</small>
+        <h2>{escape(card['title'])}</h2>
+        <p>{escape(card['body'])}</p>
+        <strong>{escape(card['cta'])}</strong>
+      </a>"""
+
+
+def _report_health_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    resources = _report_resources(roadmap)
+    total = len(resources)
+    local_count = sum(1 for item in resources if _resource_is_materialized(item))
+    failed_count = sum(1 for item in resources if str(item.get("status") or "") == "failed")
+    local_value = f"{local_count}/{total}" if total else ("待补齐" if is_zh else "pending")
+    failed_value = str(failed_count) if failed_count else ("无失败" if is_zh else "none")
+    title = "报告健康状态" if is_zh else "Report Health"
+    body = (
+        "打开前先确认这份报告是否可用：资料是否落地、隐私是否脱敏、排版是否安全，以及完整审计文件在哪里。"
+        if is_zh
+        else "Before learning, check whether the report is usable: local assets, privacy redaction, layout safety, and the full audit file."
+    )
+    audit_label = "查看完整审计" if is_zh else "Open full audit"
+    cards = [
+        {
+            "label": "本地资料" if is_zh else "Local assets",
+            "value": local_value,
+            "detail": "已下载、复制、快照或生成的资料会优先本地打开。" if is_zh else "Downloaded, copied, snapshotted, or generated resources open locally first.",
+        },
+        {
+            "label": "下载失败" if is_zh else "Download failures",
+            "value": failed_value,
+            "detail": "失败项会保留重试或原始链接，不会假装已经完成。" if is_zh else "Failures keep retry or source links instead of pretending they are complete.",
+        },
+        {
+            "label": "隐私已脱敏" if is_zh else "Privacy redacted",
+            "value": "已启用" if is_zh else "enabled",
+            "detail": "共享型 HTML/JSON/MD 不写入本地绝对路径。" if is_zh else "Shareable HTML/JSON/MD avoid absolute local paths.",
+        },
+        {
+            "label": "排版安全" if is_zh else "Layout safe",
+            "value": "已检查" if is_zh else "checked",
+            "detail": "长中文、英文标题和命令文本都有换行与宽度约束。" if is_zh else "Long Chinese, English titles, and commands have wrapping and width constraints.",
+        },
+    ]
+    card_html = "\n".join(_report_health_card_html(card) for card in cards)
+    return f"""<section class="report-health-panel" aria-labelledby="report-health-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('质量自检' if is_zh else 'Quality check')}</p>
+          <h2 id="report-health-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <a class="report-health-link" href="report_audit.json">{escape(audit_label)}</a>
+      </header>
+      <div class="report-health-grid">
+        {card_html}
+      </div>
+    </section>"""
+
+
+def _report_health_card_html(card: dict[str, str]) -> str:
+    return f"""<article class="report-health-card">
+          <span>{escape(card["label"])}</span>
+          <strong>{escape(card["value"])}</strong>
+          <small>{escape(card["detail"])}</small>
+        </article>"""
+
+
+def _scenario_panel_html(is_zh: bool) -> str:
+    title = "支持三种学习场景" if is_zh else "Three Learning Scenarios"
+    body = (
+        "当前报告只是其中一种入口。换目标时，不需要换工具：同一套规划、资料包和验收机制可以覆盖单篇论文、多篇论文和领域/课程路线。"
+        if is_zh
+        else "This report is one entry point. The same planner, bundle, and mastery checks cover one paper, paper sets, and field/course routes."
+    )
+    scenarios = [
+        {
+            "label": "01",
+            "title": "单篇论文" if is_zh else "Single paper",
+            "body": "用 Paper Map 抓主线，再用段落精读和验收任务确认真正掌握。" if is_zh else "Use Paper Map for the logic chain, then Paper Lens and mastery tasks.",
+            "command": "fields-study-flow paper --url ./paper.pdf --output-dir ./report",
+        },
+        {
+            "label": "02",
+            "title": "多篇论文 / 文献组" if is_zh else "Paper set",
+            "body": "把多篇论文作为本地资源加入，比较背景、方法、实验和贡献差异。" if is_zh else "Add multiple papers as local resources and compare background, methods, experiments, and contributions.",
+            "command": "fields-study-flow roadmap --goal \"compare papers on LLM planning\" --local-resource ./papers",
+        },
+        {
+            "label": "03",
+            "title": "领域 / 课程路线" if is_zh else "Field / course route",
+            "body": "从前置知识、核心概念、关键论文、项目和综合验收构建最短掌握路径。" if is_zh else "Build the shortest path across prerequisites, core concepts, key papers, projects, and synthesis.",
+            "command": "fields-study-flow roadmap --goal \"learn diffusion models\" --target-kind field",
+        },
+    ]
+    cards = "\n".join(_scenario_card_html(item) for item in scenarios)
+    return f"""<section class="scenario-panel" aria-labelledby="scenario-title">
+      <p class="eyebrow">{escape('产品覆盖' if is_zh else 'Coverage')}</p>
+      <h2 id="scenario-title">{escape(title)}</h2>
+      <p>{escape(body)}</p>
+      <div class="scenario-grid">
+        {cards}
+      </div>
+    </section>"""
+
+
+def _scenario_card_html(card: dict[str, str]) -> str:
+    return f"""<article class="scenario-card">
+          <span>{escape(card["label"])}</span>
+          <strong>{escape(card["title"])}</strong>
+          <p>{escape(card["body"])}</p>
+          <code>{escape(card["command"])}</code>
+        </article>"""
+
+
+def _report_resources(roadmap: dict[str, Any]) -> list[dict[str, Any]]:
+    bundle = roadmap.get("study_bundle") if isinstance(roadmap.get("study_bundle"), dict) else {}
+    resources = bundle.get("resources") if isinstance(bundle, dict) else []
+    if not resources:
+        resources = roadmap.get("resource_library") if isinstance(roadmap.get("resource_library"), list) else []
+    return [item for item in resources if isinstance(item, dict)]
+
+
+def _resource_is_materialized(resource: dict[str, Any]) -> bool:
+    return bool(resource.get("local_href")) or str(resource.get("status") or "") in {"downloaded", "copied", "snapshotted", "generated"}
+
+
+def _quickstart_panel_html(is_zh: bool, has_paper_map: bool, has_paper_lens: bool) -> str:
+    title = "10 分钟入门" if is_zh else "10-minute quickstart"
+    badge = "适合单篇论文" if is_zh else "Best for one paper"
+    body = (
+        "不用先读完整报告。按下面三步走，先建立论文主线，再进入精读和验收。"
+        if is_zh
+        else "Do not read the whole report first. Follow these three steps to build the paper logic, then read and validate."
+    )
+    steps = [
+        {
+            "href": "paper_map.html" if has_paper_map else "roadmap.html",
+            "label": "01",
+            "title": "先看主图" if is_zh else "Start with the map",
+            "body": "用背景、动机、问题、方法、实验、贡献、局限抓住主线。" if is_zh else "Capture the background, motivation, problem, method, experiments, contributions, and limits.",
+            "enabled": has_paper_map,
+        },
+        {
+            "href": "paper_lens.html" if has_paper_lens else "roadmap.html",
+            "label": "02",
+            "title": "再读关键段落" if is_zh else "Read key paragraphs",
+            "body": "只读最关键原文段落和直白解释，避免一开始被资料淹没。" if is_zh else "Read the highest-value source paragraphs and plain explanations without drowning in resources.",
+            "enabled": has_paper_lens,
+        },
+        {
+            "href": "roadmap.html",
+            "label": "03",
+            "title": "最后做验收" if is_zh else "Finish with evidence",
+            "body": "按解释、推导、复现、批判留下可检查的掌握证据。" if is_zh else "Leave checkable evidence for explain, derive, reproduce, and critique.",
+            "enabled": True,
+        },
+    ]
+    step_html = "\n".join(_quickstart_step_html(step) for step in steps)
+    return f"""<section class="quickstart-panel fresh-user-flow-panel" data-fresh-user-flow="first-10-minutes" aria-labelledby="quickstart-title">
+      <header>
+        <div>
+          <h2 id="quickstart-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="quickstart-badge">{escape(badge)}</span>
+      </header>
+      <div class="quickstart-steps">
+        {step_html}
+      </div>
+    </section>"""
+
+
+def _quickstart_step_html(step: dict[str, Any]) -> str:
+    tag = "a" if step.get("enabled") else "span"
+    href = f' href="{escape(str(step["href"]))}"' if tag == "a" else ""
+    return f"""<{tag}{href}>
+          <small>{escape(str(step["label"]))}</small>
+          <strong>{escape(str(step["title"]))}</strong>
+          <p>{escape(str(step["body"]))}</p>
+        </{tag}>"""
+
+
+def _next_paper_panel_html(is_zh: bool) -> str:
+    heading = "换成自己的论文" if is_zh else "Bring Your Own Paper"
+    body = (
+        "看完 demo 后，直接把下面命令里的 URL 或 PDF 路径换成自己的论文。报告仍会从 index.html 开始，并优先生成论文逻辑图和段落精读。"
+        if is_zh
+        else "After the demo, replace the URL or PDF path below with your own paper. The report still starts from index.html and prioritizes Paper Map plus Paper Lens."
+    )
+    url_label = "公开论文 URL / DOI" if is_zh else "Public paper URL / DOI"
+    local_label = "本地 PDF" if is_zh else "Local PDF"
+    note = (
+        "需要下载资料包时再加 `--resource-dir ./study-assets/my-paper`；共享报告不会暴露本地绝对路径。"
+        if is_zh
+        else "Add `--resource-dir ./study-assets/my-paper` when you want a local bundle; shareable reports redact absolute local paths."
+    )
+    return f"""<section class="next-paper-panel" aria-labelledby="next-paper-title">
+      <div>
+        <p class="eyebrow">{escape('下一步' if is_zh else 'Next Step')}</p>
+        <h2 id="next-paper-title">{escape(heading)}</h2>
+        <p>{escape(body)}</p>
+      </div>
+      <div class="command-grid">
+        <article>
+          <span>{escape(url_label)}</span>
+          <code>fields-study-flow paper --url https://arxiv.org/abs/1706.03762 --output-dir ./my-paper-report</code>
+        </article>
+        <article>
+          <span>{escape(local_label)}</span>
+          <code>fields-study-flow paper --url ./my-paper.pdf --output-dir ./my-paper-report</code>
+        </article>
+      </div>
+      <p class="next-paper-note">{escape(note)}</p>
+    </section>"""
+
+
+def _dist_dir() -> Path | None:
+    if _manifest_file(FRONTEND_DIST_DIR).exists():
+        return FRONTEND_DIST_DIR
+    repo_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
+    if _manifest_file(repo_dist).exists():
+        return repo_dist
+    return None
+
+
+def _manifest_file(dist_dir: Path) -> Path:
+    root_manifest = dist_dir / "manifest.json"
+    if root_manifest.exists():
+        return root_manifest
+    return dist_dir / ".vite" / "manifest.json"
+
+
+def _load_manifest(dist_dir: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(_manifest_file(dist_dir).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _asset_href(asset_prefix: str, file_name: str) -> str:
+    return "/".join(part.strip("/") for part in (asset_prefix, file_name) if part)
+
+
+def _asset_text(dist_dir: Path, file_name: str) -> str:
+    asset_path = dist_dir / file_name
+    try:
+        return asset_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise FileNotFoundError(f"frontend asset is missing: {asset_path}") from exc
+
+
+def _script_json(value: str) -> str:
+    return value.replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+
+
+def _inline_script_text(value: str) -> str:
+    return value.replace("</script", "<\\/script")
+
+
+def _style_text(value: str) -> str:
+    return value.replace("</style", "<\\/style")
+
+
+def _frontend_static_fallback_html(report_kind: str, roadmap: dict[str, Any], lang: str) -> str:
+    is_zh = lang != "en"
+    title = _display_report_base_title(roadmap)
+    report_labels = {
+        "paper_map": "论文逻辑图" if is_zh else "Paper Map",
+        "paper_lens": "段落精读" if is_zh else "Paper Lens",
+        "roadmap": "学习路线" if is_zh else "Roadmap",
+    }
+    heading = (
+        f"{report_labels.get(report_kind, '报告')}正在启动"
+        if is_zh
+        else f"{report_labels.get(report_kind, 'Report')} is loading"
+    )
+    body = (
+        "如果页面没有正常启动，可以先用下面的静态入口继续学习；重新生成报告或打开 index.html 也能恢复完整交互体验。"
+        if is_zh
+        else "If the interactive app does not start, use these static links to keep learning. Re-open index.html or regenerate the report to restore the full experience."
+    )
+    actions = _frontend_static_actions(report_kind, roadmap, is_zh)
+    links = "\n".join(
+        f'<a href="{escape(href)}">{escape(label)}</a>'
+        for href, label in actions
+    )
+    return f"""<section class="static-report-fallback" data-report-static-fallback="{escape(report_kind)}" aria-label="{escape(report_labels.get(report_kind, 'report'))}">
+    <div class="static-report-card">
+      <p class="static-report-eyebrow">{escape('离线报告' if is_zh else 'Offline report')}</p>
+      <h1>{escape(title)}</h1>
+      <h2>{escape(heading)}</h2>
+      <p>{escape(body)}</p>
+      <nav class="static-report-actions" aria-label="{escape('备用入口' if is_zh else 'Fallback links')}">
+        {links}
+      </nav>
+    </div>
+  </section>"""
+
+
+def _frontend_static_actions(report_kind: str, roadmap: dict[str, Any], is_zh: bool) -> list[tuple[str, str]]:
+    actions: list[tuple[str, str]] = [("index.html", "返回入口页" if is_zh else "Back to Start")]
+    if report_kind != "paper_map" and roadmap.get("paper_map"):
+        actions.append(("paper_map.html", "进入论文逻辑图" if is_zh else "Open Paper Map"))
+    if report_kind != "paper_lens" and roadmap.get("paper_lens"):
+        actions.append(("paper_lens.html", "进入段落精读" if is_zh else "Open Paper Lens"))
+    if report_kind != "roadmap":
+        actions.append(("roadmap.html", "查看学习路线" if is_zh else "Open Roadmap"))
+    if len(actions) == 1 and report_kind != "roadmap":
+        actions.append(("roadmap.html", "查看学习路线" if is_zh else "Open Roadmap"))
+    return actions
+
+
+def _frontend_static_fallback_style() -> str:
+    return """:root{color-scheme:light}.static-report-fallback{min-height:100vh;display:grid;place-items:center;padding:32px;background:#f6f3ed;color:#20201d;font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans SC","Source Han Sans SC",Arial,sans-serif;line-height:1.65}.static-report-card{width:min(720px,100%);border:1px solid rgba(52,47,40,.14);border-radius:24px;padding:28px;background:rgba(255,255,255,.9);box-shadow:0 20px 60px rgba(47,42,35,.12);overflow-wrap:anywhere}.static-report-eyebrow{margin:0 0 8px;color:#2f6f73;font-size:.82rem;font-weight:800;letter-spacing:.08em}.static-report-card h1{margin:0 0 12px;font-size:clamp(1.55rem,5vw,2.8rem);line-height:1.12;letter-spacing:0}.static-report-card h2{margin:0 0 10px;font-size:1.05rem}.static-report-card p{margin:0 0 18px;color:#625d54}.static-report-actions{display:flex;flex-wrap:wrap;gap:10px}.static-report-actions a{display:inline-flex;align-items:center;min-height:40px;border:1px solid rgba(47,111,115,.28);border-radius:999px;padding:8px 14px;color:#245f63;background:rgba(47,111,115,.08);font-weight:800;text-decoration:none}.static-report-noscript{margin:0;padding:12px 16px;background:#fff8dd;color:#4f3b08;font-family:"Microsoft YaHei UI","Microsoft YaHei",Arial,sans-serif;overflow-wrap:anywhere}"""
+
+
+def _sanitize_private_values(value: Any) -> Any:
+    if isinstance(value, dict):
+        output: dict[str, Any] = {}
+        for key, child in value.items():
+            if key == "local_path":
+                output[key] = None
+            else:
+                output[key] = _sanitize_private_values(child)
+        return output
+    if isinstance(value, list):
+        return [_sanitize_private_values(item) for item in value]
+    if isinstance(value, str):
+        return PRIVATE_PATH_RE.sub("[private local path]", value)
+    return value
+
+
+def _report_title(report_kind: str, roadmap: dict[str, Any]) -> str:
+    title = _display_report_base_title(roadmap)
+    if report_kind == "paper_map":
+        suffix = "论文逻辑图"
+    elif report_kind == "paper_lens":
+        suffix = "论文精读"
+    else:
+        suffix = "学习路线"
+    return f"{title} - {suffix}"
+
+
+def _display_report_base_title(roadmap: dict[str, Any]) -> str:
+    title = _target_paper_title(roadmap) or str(roadmap.get("title") or "fields-study-flow")
+    title = _strip_roadmap_prefix(_collapse_repeated_tail(title))
+    if ":" in title:
+        prefix = title.split(":", 1)[0].strip()
+        if 6 <= len(prefix) <= 52:
+            return prefix
+    return _truncate(title or "fields-study-flow", 72)
+
+
+def _target_paper_title(roadmap: dict[str, Any]) -> str:
+    paper_lens = roadmap.get("paper_lens") if isinstance(roadmap.get("paper_lens"), dict) else {}
+    target_papers = paper_lens.get("target_papers") if isinstance(paper_lens, dict) else []
+    if isinstance(target_papers, list) and target_papers and isinstance(target_papers[0], dict):
+        title = str(target_papers[0].get("title") or "").strip()
+        if title:
+            return title
+    target = paper_lens.get("target") if isinstance(paper_lens, dict) else {}
+    if isinstance(target, dict) and target.get("title"):
+        return str(target["title"])
+    paper_map = roadmap.get("paper_map") if isinstance(roadmap.get("paper_map"), dict) else {}
+    map_target = paper_map.get("target") if isinstance(paper_map, dict) else {}
+    if isinstance(map_target, dict) and map_target.get("title"):
+        return str(map_target["title"])
+    return ""
+
+
+def _strip_roadmap_prefix(value: str) -> str:
+    return re.sub(r"^(Learning Roadmap(?:\s*/\s*学习路线)?|学习路线)\s*[:：]\s*", "", value).strip()
+
+
+def _collapse_repeated_tail(value: str) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    for _ in range(3):
+        changed = False
+        for size in range(len(text) // 2, 15, -1):
+            tail = text[-size:].strip()
+            prefix = text[:-size].strip()
+            prefix_without_separator = re.sub(r"[\s:：,，;；-]+$", "", prefix).strip()
+            if tail and _normalize_title_text(prefix_without_separator).endswith(_normalize_title_text(tail)):
+                text = prefix_without_separator
+                changed = True
+                break
+        if not changed:
+            break
+    return text
+
+
+def _normalize_title_text(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "", str(value).lower())
+
+
+def _truncate(value: str, limit: int) -> str:
+    text = str(value)
+    return text if len(text) <= limit else text[: max(1, limit)].rstrip()
+
+
+def _html_lang(roadmap: dict[str, Any]) -> str:
+    profile = roadmap.get("profile", {}) if isinstance(roadmap.get("profile"), dict) else {}
+    language = str(profile.get("output_language") or roadmap.get("output_language") or "zh-CN")
+    return "en" if language == "en" else "zh-CN"

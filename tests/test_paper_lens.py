@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import re
 
-from fields_study_flow.paper_lens import build_paper_lens, render_paper_lens_html, write_paper_lens_latex
+from fields_study_flow.paper_lens import build_paper_lens, render_paper_lens_html, render_paper_lens_latex, write_paper_lens_latex
 
 
 def _roadmap_with_target_paper() -> dict:
@@ -166,6 +166,20 @@ def test_build_paper_lens_maps_bundle_and_evidence_to_target_sections():
     assert "D:/" not in serialized
 
 
+def test_build_paper_lens_does_not_add_visible_ellipsis_to_annotations():
+    roadmap = _roadmap_with_target_paper()
+    long_snippet = " ".join(
+        ["PDDL action preconditions effects and state transitions explain the planning method"] * 90
+    )
+    roadmap["rag_evidence"]["top_chunks"][0]["snippet"] = long_snippet
+
+    lens = build_paper_lens(roadmap, paper_lens_language="zh-CN", paper_lens_density="dense")
+    serialized = json.dumps(lens, ensure_ascii=False)
+
+    assert "..." not in serialized
+    assert "…" not in serialized
+
+
 def test_build_paper_lens_generates_dense_segments_and_chinese_inline_explanations():
     roadmap = _roadmap_with_target_paper()
 
@@ -188,6 +202,24 @@ def test_build_paper_lens_generates_dense_segments_and_chinese_inline_explanatio
     assert "接下来读什么" not in explanation["related_resources"][0]
     for field in ("plain_meaning", "why_it_matters", "method_note"):
         assert len({item[field] for item in dense["inline_explanations"]}) >= min(8, len(dense["inline_explanations"]))
+    segment_lookup = {segment["id"]: segment for segment in dense["segments"]}
+    explanation_lookup = {item["segment_id"]: item for item in dense["inline_explanations"]}
+    instruction_segment = next(segment for segment in dense["segments"] if "only final answers" in segment["original_text"])
+    instruction_explanation = explanation_lookup[instruction_segment["id"]]
+    instruction_text = " ".join(
+        instruction_explanation[field] for field in ("plain_meaning", "why_it_matters", "method_note")
+    )
+    assert "最终答案" in instruction_text
+    assert "逻辑轨迹" in instruction_text
+    experiment_segment = next(segment for segment in dense["segments"] if "PlanBench" in segment["original_text"] and "VAL" in segment["original_text"])
+    experiment_explanation = explanation_lookup[experiment_segment["id"]]
+    experiment_text = " ".join(experiment_explanation[field] for field in ("plain_meaning", "why_it_matters", "method_note"))
+    assert "PlanBench" in experiment_text
+    assert "VAL" in experiment_text
+    assert segment_lookup[instruction_segment["id"]]["section_kind"] == "method"
+    confidences = [item["confidence"] for item in dense["inline_explanations"]]
+    assert len(set(confidences)) > 1
+    assert max(confidences) < 0.95
     assert dense["reading_recommendations"]
     first_recommendation = dense["reading_recommendations"][0]
     assert {"section_id", "section_title", "summary", "resources"} <= set(first_recommendation)
@@ -195,6 +227,92 @@ def test_build_paper_lens_generates_dense_segments_and_chinese_inline_explanatio
     assert dense["explanation_provider"] == {"mode": "local", "llm_extension_ready": True}
     assert dense["explanation_summary"]["language"] == "zh-CN"
     assert dense["explanation_summary"]["density"] == "dense"
+
+
+def test_paper_lens_method_paragraph_explanation_covers_all_method_cues():
+    roadmap = _roadmap_with_target_paper()
+
+    lens = build_paper_lens(roadmap, paper_lens_language="zh-CN", paper_lens_density="dense")
+
+    explanation_lookup = {item["segment_id"]: item for item in lens["inline_explanations"]}
+    method_segment = next(segment for segment in lens["segments"] if segment["section_kind"] == "method")
+    method_explanation = explanation_lookup[method_segment["id"]]
+    method_text = " ".join(
+        method_explanation[field] for field in ("plain_meaning", "why_it_matters", "method_note")
+    )
+    assert "PDDL-Instruct" in method_text
+    assert "板书" in method_text
+    assert "微调" in method_text
+    assert "最终答案" in method_text
+    assert "这段在解释方法链条中的一个环节" not in method_text
+
+
+def test_paper_lens_method_explanation_handles_pdf_extracted_pddl_instruct_text():
+    roadmap = _roadmap_with_target_paper()
+    paper_metadata = roadmap["phases"][0]["resources"][0]["metadata"]["paper_metadata"]
+    paper_metadata["text_preview"] = "\n\n".join(
+        [
+            "Method",
+            (
+                "Figure 1: The PDDL-INSTRUCTapproach consists of three phases: "
+                "two training phases and tuning, enabling LLMs to generate syntactically "
+                "correct plans and verify planning steps."
+            ),
+        ]
+    )
+
+    lens = build_paper_lens(roadmap, paper_lens_language="zh-CN", paper_lens_density="dense")
+
+    explanation_lookup = {item["segment_id"]: item for item in lens["inline_explanations"]}
+    method_segment = next(segment for segment in lens["segments"] if segment["section_kind"] == "method")
+    method_explanation = explanation_lookup[method_segment["id"]]
+    method_text = " ".join(
+        method_explanation[field] for field in ("plain_meaning", "why_it_matters", "method_note")
+    )
+    assert "PDDL-Instruct" in method_text
+    assert "微调" in method_text
+    assert "三层" in method_text or "三阶段" in method_text
+
+
+def test_paper_lens_paragraph_explanations_do_not_use_sentence_level_cue_wording():
+    roadmap = _roadmap_with_target_paper()
+    paper_metadata = roadmap["phases"][0]["resources"][0]["metadata"]["paper_metadata"]
+    paper_metadata["text_preview"] = "\n\n".join(
+        [
+            "Method",
+            "The system connects planning modules with validation signals.",
+            "The system connects planning modules with validation signals.",
+        ]
+    )
+
+    lens = build_paper_lens(roadmap, paper_lens_language="zh-CN", paper_lens_density="dense")
+
+    serialized = json.dumps(lens["inline_explanations"], ensure_ascii=False)
+    assert "本句具体落在" not in serialized
+
+
+def test_build_paper_lens_defaults_to_paragraph_segments_and_keeps_sentence_mode():
+    roadmap = _roadmap_with_target_paper()
+
+    paragraph_lens = build_paper_lens(roadmap, paper_lens_language="zh-CN", paper_lens_density="dense")
+    sentence_lens = build_paper_lens(
+        roadmap,
+        paper_lens_language="zh-CN",
+        paper_lens_density="dense",
+        paper_lens_granularity="sentence",
+    )
+
+    assert paragraph_lens["explanation_summary"]["granularity"] == "paragraph"
+    assert sentence_lens["explanation_summary"]["granularity"] == "sentence"
+    assert all(segment["unit"] == "paragraph" for segment in paragraph_lens["segments"])
+    assert all("paragraph_index" in segment for segment in paragraph_lens["segments"])
+    assert all("sentence_count" in segment for segment in paragraph_lens["segments"])
+    assert any(
+        "Large language models struggle" in segment["original_text"]
+        and "Logical chain-of-thought traces expose" in segment["original_text"]
+        for segment in paragraph_lens["segments"]
+    )
+    assert len(sentence_lens["segments"]) >= len(paragraph_lens["segments"])
 
 
 def test_paper_lens_section_summary_follows_prompt_language():
@@ -241,7 +359,7 @@ def test_render_paper_lens_html_is_interactive_local_first_and_chinese():
     assert "revealHashTarget(window.location.hash, true)" in html
     assert 'tabindex="-1"' in html
     assert "三分钟读懂" in html
-    assert "关键句速读" in html
+    assert "核心段落速读" in html
     assert "精读模式" in html
     assert "deep-only" in html
     assert "data-quick-overview" in html
@@ -257,14 +375,14 @@ def test_render_paper_lens_html_is_interactive_local_first_and_chinese():
     assert "打开 PDF 精简版" in html
     assert "paper_lens.pdf" in html
     assert "paper_lens.tex" in html
-    assert "这句话在说什么" in html
+    assert "这段在说什么" in html
     assert "为什么重要" in html
     assert "方法怎么理解" in html
     assert "以上内容推荐阅读" in html
-    assert "读完一组句段后" in html
+    assert "读完一组段落后" in html
     assert "接下来读什么" not in html
     assert "展开详解" in html
-    assert "<strong>这句话在说什么</strong> 这句话在说什么" not in html
+    assert "<strong>这段在说什么</strong> 这段在说什么" not in html
     assert "<strong>为什么重要</strong> 为什么重要" not in html
     assert "<strong>方法怎么理解</strong> 方法怎么理解" not in html
     detail_links = [match for match in re.findall(r'href="#([^"]+)"', html) if match.startswith("detail-")]
@@ -290,7 +408,23 @@ def test_write_paper_lens_latex_writes_source_without_requiring_compiler(tmp_pat
     source = tex_path.read_text(encoding="utf-8")
     assert "\\documentclass" in source
     assert "三分钟读懂" in source
-    assert "关键句速读" in source
+    assert "核心段落速读" in source
     assert "以上内容推荐阅读" in source
     assert "C:/" not in source
     assert "D:/" not in source
+
+
+def test_render_paper_lens_latex_does_not_emit_empty_enumerate_for_missing_segments():
+    roadmap = _roadmap_with_target_paper()
+    roadmap["paper_lens"] = {
+        "target": {"title": "Teaching LLMs to Plan", "authors": []},
+        "sections": [],
+        "segments": [],
+        "inline_explanations": [],
+        "reading_recommendations": [],
+    }
+
+    source = render_paper_lens_latex(roadmap)
+
+    assert "\\begin{enumerate}\n\\end{enumerate}" not in source
+    assert "\\begin{enumerate}\r\n\\end{enumerate}" not in source
