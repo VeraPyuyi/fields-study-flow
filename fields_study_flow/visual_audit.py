@@ -3324,6 +3324,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Show a visible report-health panel on index.html so users can trust local assets, privacy redaction, layout safety, and the audit trail.",
         ),
         _experience_check(
+            "report_health_evidence_summary",
+            "Report health evidence summary",
+            _report_health_has_evidence_summary(html.get("index.html", "")),
+            "Surface evidence coverage near the start page health checks so users can tell whether key claims are source-backed.",
+        ),
+        _experience_check(
             "scenario_coverage_panel",
             "Scenario coverage panel",
             _contains_any_text(
@@ -3729,6 +3735,48 @@ def _resource_library_marker(roadmap: dict[str, Any], html: str, terms: tuple[st
 
 def _resource_library_has_evidence(roadmap: dict[str, Any]) -> bool:
     return any(_resource_evidence_chunks(item) for item in _all_resource_entries(roadmap) if isinstance(item, dict))
+
+
+def _report_health_has_evidence_summary(index_html: str) -> bool:
+    panel_html = _report_health_panel_fragment(index_html)
+    if not panel_html:
+        return False
+    return _contains_any_text(panel_html, ("证据覆盖", "Evidence coverage")) and _contains_any_text(
+        panel_html,
+        (
+            "证据化关系",
+            "可追溯证据片段",
+            "条边",
+            "条片段",
+            "待补齐",
+            "evidence-backed edges",
+            "traceable evidence snippets",
+            "edges",
+            "snippets",
+            "pending",
+        ),
+    )
+
+
+def _report_health_panel_fragment(index_html: str) -> str:
+    section = re.search(r"(?is)<section\b[^>]*\breport-health-panel\b[^>]*>.*?</section>", index_html)
+    if section:
+        return section.group(0)
+    starts = [
+        index_html.find("report-health-panel"),
+        index_html.find("报告健康状态"),
+        index_html.find("Report Health"),
+    ]
+    start = min((item for item in starts if item >= 0), default=-1)
+    if start < 0:
+        return ""
+    end_candidates = []
+    for token in ("scenario-panel", "fresh-user-flow-panel", "data-market-value-panel", "</body>"):
+        index = index_html.find(token, start + 1)
+        if index > start:
+            end_candidates.append(index)
+    end = min(end_candidates, default=start + 800)
+    return index_html[start:end]
 
 
 def _resource_evidence_review_link_count(roadmap: dict[str, Any], html: dict[str, str]) -> int:

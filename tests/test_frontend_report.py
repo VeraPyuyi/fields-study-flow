@@ -192,7 +192,11 @@ def test_report_index_surfaces_quality_health_status_for_new_users():
             "profile": {"goal": "理解论文", "output_language": "zh-CN"},
             "path_strategy": {"estimated_total_time": "3h", "selected_resources": 4},
             "paper_map": {"nodes": [{"id": "target"}]},
-            "paper_lens": {"segments": [{"id": "seg-1"}]},
+            "paper_lens": {
+                "segments": [{"id": "seg-1"}],
+                "inline_explanations": [{"evidence_refs": [{"snippet": "method evidence"}]}],
+            },
+            "knowledge_graph": {"summary": {"edges": 8, "evidence_backed_edges": 5}},
             "study_bundle": {
                 "resources": [
                     {"title": "Target paper", "status": "downloaded", "local_href": "assets/paper.pdf"},
@@ -201,6 +205,12 @@ def test_report_index_surfaces_quality_health_status_for_new_users():
                     {"title": "Repository", "status": "link-only"},
                 ]
             },
+            "resource_library": [
+                {
+                    "title": "Target paper",
+                    "metadata": {"rag": {"evidence_chunks": [{"snippet": "target-paper evidence"}]}},
+                }
+            ],
         }
     )
 
@@ -208,9 +218,56 @@ def test_report_index_surfaces_quality_health_status_for_new_users():
     assert "报告健康状态" in html
     assert "本地资料" in html
     assert "3/4" in html
+    assert "证据覆盖" in html
+    assert "5 条边" in html
     assert "隐私已脱敏" in html
     assert "排版安全" in html
     assert "report_audit.json" in html
+
+
+def test_report_index_counts_only_traceable_evidence_chunks():
+    html = render_report_index(
+        {
+            "title": "Teaching LLMs to Plan",
+            "profile": {"goal": "理解论文", "output_language": "zh-CN"},
+            "path_strategy": {"estimated_total_time": "3h", "selected_resources": 2},
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Target paper",
+                        "status": "downloaded",
+                        "local_href": "assets/paper.pdf",
+                        "metadata": {"rag": {"evidence_chunks": [None, {}, "", {"snippet": "method evidence"}]}},
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "证据覆盖" in html
+    assert "1 条片段" in html
+
+
+def test_report_index_marks_evidence_coverage_pending_when_no_traceable_chunks():
+    html = render_report_index(
+        {
+            "title": "Teaching LLMs to Plan",
+            "profile": {"goal": "理解论文", "output_language": "zh-CN"},
+            "path_strategy": {"estimated_total_time": "3h", "selected_resources": 1},
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Placeholder",
+                        "status": "link-only",
+                        "metadata": {"rag": {"evidence_chunks": [None, {}, ""]}},
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "证据覆盖" in html
+    assert "未发现可追溯证据片段" in html
 
 
 def test_report_index_explains_three_core_learning_scenarios():

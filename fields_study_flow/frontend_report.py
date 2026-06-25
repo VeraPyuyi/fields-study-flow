@@ -1292,6 +1292,7 @@ def _report_health_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
     total = len(resources)
     local_count = sum(1 for item in resources if _resource_is_materialized(item))
     failed_count = sum(1 for item in resources if str(item.get("status") or "") == "failed")
+    evidence = _report_evidence_health(roadmap, is_zh)
     local_value = f"{local_count}/{total}" if total else ("待补齐" if is_zh else "pending")
     failed_value = str(failed_count) if failed_count else ("无失败" if is_zh else "none")
     title = "报告健康状态" if is_zh else "Report Health"
@@ -1311,6 +1312,11 @@ def _report_health_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
             "label": "下载失败" if is_zh else "Download failures",
             "value": failed_value,
             "detail": "失败项会保留重试或原始链接，不会假装已经完成。" if is_zh else "Failures keep retry or source links instead of pretending they are complete.",
+        },
+        {
+            "label": "证据覆盖" if is_zh else "Evidence coverage",
+            "value": evidence["value"],
+            "detail": evidence["detail"],
         },
         {
             "label": "隐私已脱敏" if is_zh else "Privacy redacted",
@@ -1402,8 +1408,121 @@ def _report_resources(roadmap: dict[str, Any]) -> list[dict[str, Any]]:
     return [item for item in resources if isinstance(item, dict)]
 
 
+def _report_all_resource_entries(roadmap: dict[str, Any]) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str]] = set()
+    bundle = roadmap.get("study_bundle") if isinstance(roadmap.get("study_bundle"), dict) else {}
+    sources = [
+        bundle.get("resources") if isinstance(bundle, dict) else [],
+        roadmap.get("resource_library") if isinstance(roadmap.get("resource_library"), list) else [],
+    ]
+    for source in sources:
+        if not isinstance(source, list):
+            continue
+        for item in source:
+            if not isinstance(item, dict):
+                continue
+            key = (
+                str(item.get("id") or item.get("title") or ""),
+                str(item.get("url") or item.get("href") or ""),
+                str(item.get("local_href") or ""),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append(item)
+    return entries
+
+
 def _resource_is_materialized(resource: dict[str, Any]) -> bool:
     return bool(resource.get("local_href")) or str(resource.get("status") or "") in {"downloaded", "copied", "snapshotted", "generated"}
+
+
+def _report_evidence_health(roadmap: dict[str, Any], is_zh: bool) -> dict[str, str]:
+    kg_summary = _dict_at(roadmap, "knowledge_graph", "summary")
+    evidence_edges = _coerce_nonnegative_int(kg_summary.get("evidence_backed_edges"))
+    resource_chunks = sum(len(_resource_evidence_chunks(item)) for item in _report_all_resource_entries(roadmap))
+    lens_refs = _paper_lens_evidence_ref_count(roadmap)
+
+    if evidence_edges:
+        return {
+            "value": f"{evidence_edges} 条边" if is_zh else f"{evidence_edges} edges",
+            "detail": (
+                f"知识图谱已有 {evidence_edges} 条证据化关系，资源片段 {resource_chunks} 条，精读引用 {lens_refs} 条。"
+                if is_zh
+                else f"Knowledge graph has {evidence_edges} evidence-backed edges, plus {resource_chunks} resource snippets and {lens_refs} reading references."
+            ),
+        }
+    if resource_chunks or lens_refs:
+        total_refs = resource_chunks + lens_refs
+        return {
+            "value": f"{total_refs} 条片段" if is_zh else f"{total_refs} snippets",
+            "detail": (
+                "资源库或精读页已有可追溯片段；核心结论仍建议继续补足 KG 证据边。"
+                if is_zh
+                else "The resource library or Paper Lens has traceable snippets; add KG evidence edges for stronger claims."
+            ),
+        }
+    return {
+        "value": "待补齐" if is_zh else "pending",
+        "detail": (
+            "未发现可追溯证据片段，建议补充目标论文 PDF、资料包或 RAG 索引。"
+            if is_zh
+            else "No traceable evidence snippets were found; add the target PDF, resource bundle, or RAG index."
+        ),
+    }
+
+
+def _dict_at(root: dict[str, Any], *keys: str) -> dict[str, Any]:
+    current: Any = root
+    for key in keys:
+        if not isinstance(current, dict):
+            return {}
+        current = current.get(key)
+    return current if isinstance(current, dict) else {}
+
+
+def _coerce_nonnegative_int(value: Any) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _resource_evidence_chunks(resource: dict[str, Any]) -> list[Any]:
+    metadata = resource.get("metadata") if isinstance(resource.get("metadata"), dict) else {}
+    rag = metadata.get("rag") if isinstance(metadata.get("rag"), dict) else {}
+    chunks: list[Any] = []
+    for key in ("evidence_chunks", "top_chunks", "chunks"):
+        value = rag.get(key) or metadata.get(key)
+        if isinstance(value, list):
+            chunks.extend(chunk for chunk in value if _is_traceable_evidence_chunk(chunk))
+    return chunks
+
+
+def _is_traceable_evidence_chunk(chunk: Any) -> bool:
+    if isinstance(chunk, str):
+        return bool(chunk.strip())
+    if not isinstance(chunk, dict):
+        return False
+    snippet = str(chunk.get("snippet") or chunk.get("text") or chunk.get("quote") or "").strip()
+    locator = any(chunk.get(key) for key in ("detail_anchor", "local_href", "href", "url", "file_name", "resource_title"))
+    return bool(snippet or locator)
+
+
+def _paper_lens_evidence_ref_count(roadmap: dict[str, Any]) -> int:
+    lens = roadmap.get("paper_lens") if isinstance(roadmap.get("paper_lens"), dict) else {}
+    explanations = lens.get("inline_explanations") if isinstance(lens.get("inline_explanations"), list) else []
+    total = 0
+    for item in explanations:
+        if not isinstance(item, dict):
+            continue
+        refs = item.get("evidence_refs")
+        if isinstance(refs, list):
+            total += len([ref for ref in refs if ref])
+        elif refs:
+            total += 1
+    return total
 
 
 def _quickstart_panel_html(is_zh: bool, has_paper_map: bool, has_paper_lens: bool) -> str:

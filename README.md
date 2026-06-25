@@ -24,6 +24,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Paper Lens: paper routes export `paper_lens.html`, a standalone target-paper reader that maps collected literature, bundle files, evidence snippets, and tasks back onto paragraph-level target-paper explanations.
 - Evidence-driven RAG: local resources and study bundles are chunked into a lightweight `.rag_index`; key points, resource reasons, and validation tasks can cite supporting snippets.
 - Learning knowledge graph: reports include a local, evidence-driven concept -> resource -> task -> assessment graph for navigation and mastery tracing.
+- Evidence health summary: `index.html` shows evidence-backed graph edges, resource snippets, or missing-evidence status beside local assets and privacy checks.
 - Live discovery: open official APIs are searched by default; credentialed/link-only sources remain manual-link candidates.
 - Route audit: every plan explains coverage, omitted resources, time saved, and why the chosen route is the shortest visible path under the selected depth.
 - Actionability: reports include study tasks, next actions, quality gates, final evidence, and runnable artifact enforcement.
