@@ -85,6 +85,7 @@ Source refresh on 2026-06-22:
 - `audit-report` now adds `generated_artifact_audit` whenever it writes release dashboards, so newly generated HTML pages are checked for privacy, viewport, wrapping, font, encoding, and decorative-ellipsis risks before the command exits.
 - `report_audit.json` now includes `competitive_benchmark`, which converts the competitor scan into explicit checks: PaperQA/PaperQA2-style grounded evidence, Explainpaper-style contextual explanations, Scholarcy-style structured review cards, Get It-style measurable mastery maps, roadmap.sh-style first interaction, React Flow-style canvas affordances, Litmaps/ResearchRabbit-style research-context boundaries, resource purpose badges, resource strength/provenance/coverage signals, clickable resource evidence review links, and local-first study bundles. A report cannot be marked market-ready while this benchmark warns.
 - The same benchmark now checks NotebookLM-style portable study outputs: a single-paper report should expose at least two usable outputs such as presentation notes, a PDF/LaTeX reading export, or concrete mastery artifacts.
+- Exports now write `mastery_worksheet.md` as a fillable evidence log, so the Get It-style mastery contract leaves the browser and can be reviewed, submitted, or pasted into a lab notebook.
 - The local study bundle `README.md` is now a first-use dashboard with completion rate, a 10-minute start path, route/supplemental resource grouping, and retry guidance instead of a raw file list.
 
 ## Next Market-Facing Improvements
@@ -92,4 +93,4 @@ Source refresh on 2026-06-22:
 1. Add checked-in golden baselines for Paper Map, Paper Lens, Roadmap, and the start page, then run them in CI whenever frontend assets or report renderers change.
 2. Promote release-history summaries into CI artifacts once the repository has checked-in visual baselines and browser interaction probes for the main report surfaces.
 3. Deepen resource coverage scoring with measured retrieval coverage across target-paper paragraphs, downloaded resources, and local notes.
-4. Add a guided "fill the mastery worksheet" mode that links each worksheet evidence slot back to the exact Paper Map node, Paper Lens paragraph, and local resource.
+4. Keep strengthening the guided mastery worksheet by adding richer per-slot source anchors and review status sync back into `roadmap.html`.

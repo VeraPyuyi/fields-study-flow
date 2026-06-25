@@ -1353,7 +1353,7 @@ def _export(args: argparse.Namespace) -> int:
         targets.append(target)
     elif args.format in {"markdown", "svg", "html", "all"}:
         from fields_study_flow.artifact_templates import write_artifact_template
-        from fields_study_flow.frontend_report import render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+        from fields_study_flow.frontend_report import render_mastery_worksheet_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
         from fields_study_flow.roadmap import render_html, render_markdown, render_svg
 
         if args.format in {"markdown", "all"}:
@@ -1377,6 +1377,9 @@ def _export(args: argparse.Namespace) -> int:
             targets.append(target)
             target = output_dir / "study_quiz.md"
             target.write_text(render_study_quiz_markdown(data), encoding="utf-8")
+            targets.append(target)
+            target = output_dir / "mastery_worksheet.md"
+            target.write_text(render_mastery_worksheet_markdown(data), encoding="utf-8")
             targets.append(target)
             target = output_dir / "roadmap.json"
             target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

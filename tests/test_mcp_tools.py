@@ -174,10 +174,12 @@ def test_export_plan_writes_markdown_svg_and_html(tmp_path):
     assert (tmp_path / "roadmap.html").exists()
     assert (tmp_path / "study_cards.md").exists()
     assert (tmp_path / "study_quiz.md").exists()
+    assert (tmp_path / "mastery_worksheet.md").exists()
     assert result["index_html"].endswith("index.html")
     assert result["report_audit_json"].endswith("report_audit.json")
     assert result["study_cards_md"].endswith("study_cards.md")
     assert result["study_quiz_md"].endswith("study_quiz.md")
+    assert result["mastery_worksheet_md"].endswith("mastery_worksheet.md")
     assert result["roadmap_svg"].endswith("roadmap.svg")
     assert result["roadmap_html"].endswith("roadmap.html")
 

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fields_study_flow import frontend_report
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_mastery_worksheet_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 
 
 def test_checked_in_frontend_dist_has_package_visible_manifest():
@@ -221,6 +221,7 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "roadmap.json" in html
     assert "study_cards.md" in html
     assert "study_quiz.md" in html
+    assert "mastery_worksheet.md" in html
     assert "C:/Users/example" not in html
 
 
@@ -253,6 +254,52 @@ def test_study_quiz_markdown_reuses_cards_with_answer_key():
     assert "Without the report, can you explain the paper's main chain in one sentence?" in markdown
     assert "## Answer Key" in markdown
     assert "[Evidence](paper_map.html)" in markdown
+    assert "C:/Users/example" not in markdown
+
+
+def test_mastery_worksheet_markdown_has_fillable_evidence_slots_and_links():
+    markdown = render_mastery_worksheet_markdown(
+        {
+            "title": "Learning Roadmap: Transformer",
+            "profile": {"goal": "master Transformer", "output_language": "en"},
+            "mastery_evidence": {
+                "final_artifact": "paper-mastery",
+                "required_evidence": [
+                    {
+                        "task_id": "task-1-explain",
+                        "task_type": "explain",
+                        "title": "Explain the main chain",
+                        "evidence": "A no-notes explanation.",
+                        "pass_criteria": "Another learner can follow it.",
+                        "resources": ["Attention Is All You Need"],
+                        "estimated_minutes": 45,
+                        "evidence_chunks": [
+                            {
+                                "resource_title": "Attention Is All You Need",
+                                "snippet": "The Transformer is based solely on attention mechanisms.",
+                                "detail_anchor": "paper_lens.html#detail-seg-1",
+                            }
+                        ],
+                    }
+                ],
+            },
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Attention Is All You Need",
+                        "local_href": "study-assets/attention.pdf",
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "# Learning Roadmap: Transformer - Mastery Evidence Worksheet" in markdown
+    assert "## Evidence Slots" in markdown
+    assert "[Paper Map](paper_map.html)" in markdown
+    assert "[Attention Is All You Need](study-assets/attention.pdf)" in markdown
+    assert "[Attention Is All You Need](paper_lens.html#detail-seg-1)" in markdown
+    assert "**My Evidence**" in markdown
     assert "C:/Users/example" not in markdown
 
 

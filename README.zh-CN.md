@@ -43,7 +43,7 @@ fields-study-flow 可以把“掌握这篇论文”“学习 diffusion models”
 - 行动优先首页：产品价值说明、报告健康检查、替代向导和换论文命令会默认收进一个“更多说明与检查”折叠区，让默认视图先服务学习行动，而不是堆满说明文字。
 - 交互式学习中控台：`roadmap.html` 提供学习路线、可拖动/缩放的 KG 学习路径网络、右侧任务向导、本地进度勾选、本地优先资料链接、多维资料筛选 chips、证据展开/收起和阶段折叠。
 - 资源来源与覆盖范围：`roadmap.html` 的资料卡会显示资料用途、证据强度、来源类型，以及它覆盖论文逻辑或学习任务的哪一部分，方便用户先打开最有用的资料。
-- 可带走的掌握证据：路线里的掌握验收清单可以复制或下载为 `mastery_worksheet.md`，把解释、推导、复现和批判任务变成可提交、可复查的学习证据表。
+- 可带走的掌握证据：每次导出都会写出 `mastery_worksheet.md`，把解释、推导、复现和批判任务变成可填写、可提交、可复查的学习证据表。
 - 资料包开始页：本地资料目录会生成中文优先的 `README.md` 仪表盘，包含 10 分钟开始路径、路线资料、补充资料、仅链接资源和失败重试说明。
 
 ## 快速开始
@@ -210,7 +210,7 @@ study-assets/
 ```
 
 使用 `--resource-dir` 时，`roadmap.html`、`paper_map.html`、`paper_lens.html` 和 `roadmap.md` 中已下载/复制的资料会优先链接到本地资料包。原始网页链接仍作为来源或兜底入口展示，共享型输出仍不会暴露本地绝对路径。
-资料包里的 `README.md` 可以直接打开：它会显示完成率、推荐前 10 分钟怎么学、路线资料和补充资料分组，以及失败下载如何重试。`roadmap.html` 中的掌握验收清单也可以复制或下载为 `mastery_worksheet.md`，方便写笔记、做汇报或交给别人检查。
+资料包里的 `README.md` 可以直接打开：它会显示完成率、推荐前 10 分钟怎么学、路线资料和补充资料分组，以及失败下载如何重试。每次导出也会写出 `mastery_worksheet.md`，方便写笔记、做汇报或交给别人检查。
 
 只基于已经下载/复制的资料包提问：
 
@@ -282,7 +282,7 @@ python -m fields_study_flow.mcp_server
 - `validateSources`
 - `exportPlan`
 
-`exportPlan` 会写出 JSON、Markdown、SVG、HTML、`study_cards.md` 和 `study_quiz.md`；当路线需要可运行项目或复现验收时，还会写出 `artifact_template/` 模板包。
+`exportPlan` 会写出 JSON、Markdown、SVG、HTML、`study_cards.md`、`study_quiz.md` 和 `mastery_worksheet.md`；当路线需要可运行项目或复现验收时，还会写出 `artifact_template/` 模板包。
 模板包会遵循所选输出语言；如果有论文解析结果，也会写入公式、代码链接、实验和局限相关验收目标。
 
 交互式 HTML 是单个可离线打开的文件，不依赖前端框架、远程字体或在线脚本。任务进度会在浏览器允许时写入 `localStorage`；如果浏览器阻止本地存储，报告仍然可以阅读和点击，只是勾选状态作为临时状态处理。

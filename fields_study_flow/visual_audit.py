@@ -3231,7 +3231,9 @@ def _portable_study_output_count(root: Path, roadmap: dict[str, Any], html: dict
         outputs += 1
     task_types = {str(item.get("type") or "") for item in _list_at(roadmap, "study_tasks") if isinstance(item, dict)}
     required_evidence = _list_at(roadmap, "mastery_evidence", "required_evidence")
-    if (
+    if _has_portable_mastery_worksheet(root, index_html + roadmap_html):
+        outputs += 1
+    elif (
         len(task_types & {"explain", "derive", "reproduce", "critique"}) >= 3
         and bool(required_evidence)
         and _contains_any_text(
@@ -3338,6 +3340,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Portable evidence-linked quiz",
             _has_portable_study_quiz(root, html.get("index.html", "")),
             "Write study_quiz.md and link it from index.html so learners can test comprehension and self-grade with evidence.",
+        ),
+        _experience_check(
+            "portable_mastery_worksheet",
+            "Portable mastery evidence worksheet",
+            _has_portable_mastery_worksheet(root, html.get("index.html", "") + html.get("roadmap.html", "")),
+            "Write mastery_worksheet.md so explain/derive/reproduce/critique evidence can leave the browser as a reviewable artifact.",
         ),
         _experience_check(
             "support_files_progressive_disclosure",
@@ -3807,6 +3815,20 @@ def _has_portable_study_quiz(root: Path, index_html: str) -> bool:
     return _contains_any_text(content, ("Evidence-Linked Study Quiz", "证据链接学习小测")) and _contains_any_text(
         content,
         ("Answer Key", "自查答案钥匙"),
+    )
+
+
+def _has_portable_mastery_worksheet(root: Path, html: str) -> bool:
+    path = root / "mastery_worksheet.md"
+    if not path.exists() or "mastery_worksheet.md" not in html:
+        return False
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _contains_any_text(content, ("Mastery Evidence Worksheet", "掌握证据工作表")) and _contains_any_text(
+        content,
+        ("My Evidence", "我的证据", "Evidence Slots", "证据槽"),
     )
 
 

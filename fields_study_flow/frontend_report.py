@@ -1254,6 +1254,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <a href="roadmap.svg">roadmap.svg</a>
         <a href="study_cards.md">study_cards.md</a>
         <a href="study_quiz.md">study_quiz.md</a>
+        <a href="mastery_worksheet.md">mastery_worksheet.md</a>
       </div>
     </details>
   </main>
@@ -2036,6 +2037,99 @@ def render_study_quiz_markdown(roadmap: dict[str, Any]) -> str:
     return "\n".join(output)
 
 
+def render_mastery_worksheet_markdown(roadmap: dict[str, Any]) -> str:
+    """Render a fillable mastery-evidence worksheet from roadmap tasks."""
+    is_zh = _html_lang(roadmap) != "en"
+    title = _markdown_text(roadmap.get("title") or _display_report_base_title(roadmap))
+    profile = roadmap.get("profile") if isinstance(roadmap.get("profile"), dict) else {}
+    goal = _markdown_text(profile.get("goal") or title)
+    mastery = roadmap.get("mastery_evidence") if isinstance(roadmap.get("mastery_evidence"), dict) else {}
+    final_artifact = _markdown_text(mastery.get("final_artifact") or _dict_at(roadmap, "final_artifact").get("type") or "")
+    tasks = _mastery_worksheet_items(roadmap)
+    resource_links = _resource_links_by_title(roadmap)
+    heading = "掌握证据工作表" if is_zh else "Mastery Evidence Worksheet"
+    output: list[str] = [
+        f"# {title} - {heading}",
+        "",
+        f"- {'学习目标' if is_zh else 'Learning goal'}: {goal}",
+        f"- {'最终产物' if is_zh else 'Final artifact'}: {final_artifact or ('未指定' if is_zh else 'not specified')}",
+        f"- {'完成进度' if is_zh else 'Progress'}: 0/{len(tasks)}",
+        "",
+        (
+            "使用方法：每完成一项任务，就把自己的解释、推导、复现结果或批判结论写进“我的证据”，并补上来源链接或本地文件。"
+            if is_zh
+            else "How to use: for each task, fill in your explanation, derivation, reproduction result, or critique under My Evidence, then add the source link or local file."
+        ),
+        "",
+        f"## {'快速入口' if is_zh else 'Quick Links'}",
+        "",
+        "- [Paper Map](paper_map.html)",
+        "- [Paper Lens](paper_lens.html)",
+        "- [Roadmap / Mastery Checklist](roadmap.html#mastery-checklist-title)",
+        "",
+    ]
+    if not tasks:
+        output.extend(
+            [
+                f"## {'暂无验收任务' if is_zh else 'No Mastery Tasks Yet'}",
+                "",
+                (
+                    "当前路线还没有可填写的掌握任务。请补充目标论文、资料包或重新生成路线。"
+                    if is_zh
+                    else "This route does not have fillable mastery tasks yet. Add the target paper, study bundle, or regenerate the route."
+                ),
+                "",
+            ]
+        )
+        return "\n".join(output)
+    output.extend([f"## {'证据槽' if is_zh else 'Evidence Slots'}", ""])
+    for index, item in enumerate(tasks, start=1):
+        task_type = _worksheet_task_type_label(item.get("task_type") or item.get("type"), is_zh)
+        task_title = _markdown_text(item.get("title") or f"{'任务' if is_zh else 'Task'} {index}")
+        evidence = _markdown_text(item.get("evidence") or "")
+        pass_criteria = _markdown_text(item.get("pass_criteria") or item.get("acceptance") or "")
+        minutes = item.get("estimated_minutes")
+        output.extend(
+            [
+                f"### {index}. {task_title}",
+                "",
+                f"- {'类型' if is_zh else 'Type'}: {task_type}",
+                f"- {'建议入口' if is_zh else 'Suggested entry'}: {_worksheet_entry_link(str(item.get('task_type') or item.get('type') or ''), is_zh)}",
+                f"- {'预计耗时' if is_zh else 'Estimated time'}: {minutes if minutes else ('未估计' if is_zh else 'not estimated')}",
+                f"- {'要交付的证据' if is_zh else 'Evidence to produce'}: {evidence or ('填写可复查证据。' if is_zh else 'Fill reviewable evidence.')}",
+                f"- {'通过标准' if is_zh else 'Pass criteria'}: {pass_criteria or ('能回到来源说明为什么成立。' if is_zh else 'Can trace the claim back to the source.')}",
+                "",
+                f"**{'建议资料' if is_zh else 'Suggested resources'}**",
+            ]
+        )
+        resources = [str(value) for value in item.get("resources") or item.get("resource_titles") or [] if str(value).strip()]
+        if resources:
+            for resource in resources[:4]:
+                output.append(f"- {_resource_markdown_link(resource, resource_links)}")
+        else:
+            output.append(f"- {'回到路线资料库选择最短路径资料。' if is_zh else 'Return to the roadmap resource library and choose the shortest-path resource.'}")
+        chunk_lines = _worksheet_evidence_chunk_lines(item.get("evidence_chunks") or [], is_zh)
+        if chunk_lines:
+            output.extend(["", f"**{'可回看的原文证据' if is_zh else 'Source evidence to revisit'}**"])
+            output.extend(chunk_lines)
+        output.extend(
+            [
+                "",
+                f"**{'我的证据' if is_zh else 'My Evidence'}**",
+                "",
+                "- ",
+                "",
+                f"**{'来源 / 文件 / 页码' if is_zh else 'Source / File / Page'}**",
+                "",
+                "- ",
+                "",
+                f"**{'复核结果' if is_zh else 'Review Result'}**: {'通过 / 需要修改 / 证据不足' if is_zh else 'pass / revise / insufficient evidence'}",
+                "",
+            ]
+        )
+    return "\n".join(output)
+
+
 def _markdown_cell(value: object) -> str:
     return _markdown_text(value).replace("|", "\\|").replace("\n", "<br>")
 
@@ -2052,6 +2146,103 @@ def _safe_markdown_href(value: object) -> str:
     if PRIVATE_PATH_RE.search(href) or not href:
         return "roadmap.html"
     return href.replace(" ", "%20")
+
+
+def _mastery_worksheet_items(roadmap: dict[str, Any]) -> list[dict[str, Any]]:
+    mastery = roadmap.get("mastery_evidence") if isinstance(roadmap.get("mastery_evidence"), dict) else {}
+    required = mastery.get("required_evidence") if isinstance(mastery.get("required_evidence"), list) else []
+    if required:
+        return [item for item in required if isinstance(item, dict)]
+    tasks = roadmap.get("study_tasks") if isinstance(roadmap.get("study_tasks"), list) else []
+    items: list[dict[str, Any]] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        items.append(
+            {
+                "task_id": task.get("id"),
+                "task_type": task.get("type"),
+                "title": task.get("title"),
+                "evidence": task.get("evidence"),
+                "pass_criteria": task.get("acceptance"),
+                "resources": task.get("resource_titles", []),
+                "estimated_minutes": task.get("estimated_minutes"),
+                "evidence_chunks": task.get("evidence_chunks", []),
+            }
+        )
+    return items
+
+
+def _resource_links_by_title(roadmap: dict[str, Any]) -> dict[str, str]:
+    links: dict[str, str] = {}
+    for resource in _report_all_resource_entries(roadmap):
+        title = str(resource.get("title") or resource.get("resource_title") or "").strip()
+        if not title:
+            continue
+        href = str(resource.get("local_href") or resource.get("href") or resource.get("url") or "").strip()
+        if href and not href.startswith("local://") and not PRIVATE_PATH_RE.search(href):
+            links[title.casefold()] = _safe_markdown_href(href)
+    return links
+
+
+def _resource_markdown_link(title: str, links: dict[str, str]) -> str:
+    clean_title = _markdown_text(title)
+    href = links.get(clean_title.casefold())
+    if not href:
+        return clean_title
+    return f"[{clean_title}]({href})"
+
+
+def _worksheet_task_type_label(value: object, is_zh: bool) -> str:
+    task_type = str(value or "task")
+    labels = {
+        "explain": ("Explain", "解释"),
+        "derive": ("Derive", "推导"),
+        "reproduce": ("Reproduce", "复现"),
+        "critique": ("Critique", "批判"),
+        "synthesize": ("Synthesize", "综合"),
+    }
+    en, zh = labels.get(task_type, (task_type, task_type))
+    return zh if is_zh else en
+
+
+def _worksheet_entry_link(task_type: str, is_zh: bool) -> str:
+    entries = {
+        "explain": ("Paper Map", "paper_map.html"),
+        "derive": ("Paper Lens", "paper_lens.html"),
+        "reproduce": ("Roadmap", "roadmap.html#mastery-checklist-title"),
+        "critique": ("Paper Map", "paper_map.html"),
+        "synthesize": ("Roadmap", "roadmap.html#mastery-checklist-title"),
+    }
+    label, href = entries.get(task_type, ("Roadmap", "roadmap.html#mastery-checklist-title"))
+    if is_zh:
+        label = {"Paper Map": "论文逻辑图", "Paper Lens": "段落精读", "Roadmap": "学习路线"}.get(label, label)
+    return f"[{label}]({href})"
+
+
+def _worksheet_evidence_chunk_lines(chunks: object, is_zh: bool) -> list[str]:
+    if not isinstance(chunks, list):
+        return []
+    lines: list[str] = []
+    for chunk in chunks[:2]:
+        if not isinstance(chunk, dict):
+            continue
+        label = _markdown_text(chunk.get("resource_title") or chunk.get("file_name") or chunk.get("title") or ("证据片段" if is_zh else "Evidence snippet"))
+        snippet = _truncate_markdown(_markdown_text(chunk.get("snippet") or chunk.get("quote") or ""), 180)
+        href = str(chunk.get("detail_anchor") or chunk.get("local_href") or chunk.get("href") or chunk.get("url") or "").strip()
+        if href and not PRIVATE_PATH_RE.search(href):
+            label = f"[{label}]({_safe_markdown_href(href)})"
+        if snippet:
+            lines.append(f"- {label}: {snippet}")
+        else:
+            lines.append(f"- {label}")
+    return lines
+
+
+def _truncate_markdown(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: max(0, limit - 1)].rstrip() + "..."
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
