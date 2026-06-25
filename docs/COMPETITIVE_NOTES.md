@@ -51,6 +51,7 @@ Source refresh on 2026-06-22:
 - The start page now includes a "10-minute quickstart" panel for one-paper reports, copying the low-friction "get started" feel of interactive roadmap products while keeping the flow paper-centered: map first, paragraph reading second, mastery evidence last.
 - The start page now includes an intent router for "fastest understanding", "presentation-ready", and "validation/reproduction" modes, reducing first-click ambiguity for learners who do not yet know the report structure.
 - The start page now includes three starter questions plus `fields-study-flow ask` commands, borrowing NotebookLM-style guided learning while keeping every question tied to local bundle evidence and mastery artifacts.
+- The start page now includes a 5-minute active-recall self-check with expandable cards, adapting NotebookLM/Scholarcy/Get It flashcard lessons into evidence-seeking prompts rather than detached quiz trivia.
 - Single-paper reports prioritize `paper_map.html` first, because the fastest way to understand a paper is to see the logic chain before reading every paragraph.
 - Paper Map now exposes an adaptive reading-density control: beginners start in "core chain" mode, while advanced users can switch to the full evidence/resource/task exploration view.
 - Paper Map now exports the causal logic chain as a downloadable Markdown presentation script, so "understand the paper" can become a short oral report without manual copying.

@@ -163,6 +163,12 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert 'data-starter-question="paper-core-evidence"' in html
     assert 'data-starter-question="paper-mastery-proof"' in html
     assert "fields-study-flow ask --roadmap roadmap.json" in html
+    assert 'data-active-recall-panel="five-minute-check"' in html
+    assert 'data-recall-card="recall-main-chain"' in html
+    assert 'data-recall-card="recall-method"' in html
+    assert 'data-recall-card="recall-experiment"' in html
+    assert 'data-recall-card="recall-limits"' in html
+    assert "<details" in html
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
     assert 'data-fresh-user-flow="first-10-minutes"' in html
@@ -204,7 +210,13 @@ def test_report_index_starter_questions_fall_back_for_field_routes():
     assert 'data-starter-question="route-prerequisites"' in html
     assert 'data-starter-question="route-resource-priority"' in html
     assert 'data-starter-question="route-final-artifact"' in html
+    assert 'data-active-recall-panel="five-minute-check"' in html
+    assert 'data-recall-card="recall-prereq"' in html
+    assert 'data-recall-card="recall-core-concept"' in html
+    assert 'data-recall-card="recall-resource"' in html
+    assert 'data-recall-card="recall-artifact"' in html
     assert "3 starter questions" in html
+    assert "5-minute active recall" in html
     assert "fields-study-flow ask --roadmap roadmap.json" in html
     assert "paper_lens.html" not in html
 

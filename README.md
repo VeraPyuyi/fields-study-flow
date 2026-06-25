@@ -33,6 +33,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Recommended first action: the start page now highlights the best first click for the current report, with alternate paths for presentation, mastery validation, or bringing your own paper.
 - Learning outcome contract: the start page states what the learner should be able to deliver after studying: explain, derive, reproduce, and critique outputs.
 - Starter questions guide: `index.html` gives three plain-language questions plus `fields-study-flow ask` commands so learners can start from a guided question instead of reading the interface manual.
+- Active recall check: `index.html` includes a 5-minute self-test with expandable cards that point learners back to the exact map, lens, or roadmap evidence.
 - Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.
 - Progressive support files: technical JSON/Markdown/SVG artifacts stay collapsed on the start page, so new learners see the learning path before implementation files.
 - Interactive learning console: `roadmap.html` contains the roadmap, draggable/zoomable KG network, right-side task guide with local progress checks, local-first resource links, multi-dimensional resource filter chips, evidence expand/collapse, and collapsible phases.

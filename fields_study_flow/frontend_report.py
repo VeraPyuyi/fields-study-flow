@@ -96,6 +96,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     recommended_action_html = _recommended_action_panel_html(safe_roadmap, is_zh)
     outcome_contract_html = _learning_outcome_contract_panel_html(safe_roadmap, is_zh)
     learning_guide_html = _learning_guide_panel_html(safe_roadmap, is_zh)
+    active_recall_html = _active_recall_panel_html(safe_roadmap, is_zh)
     heading = "从这里开始" if is_zh else "Start Here"
     subtitle = (
         "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
@@ -235,6 +236,14 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       background: rgba(255, 255, 255, 0.78);
       box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
     }}
+    .active-recall-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
     .intent-router-panel {{
       margin: 0 0 18px;
       border: 1px solid var(--line);
@@ -264,6 +273,13 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       align-items: start;
       margin-bottom: 14px;
     }}
+    .active-recall-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
     .quickstart-panel h2 {{
       margin: 0;
       font-size: clamp(1.15rem, 2vw, 1.55rem);
@@ -282,6 +298,12 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       line-height: 1.22;
       overflow-wrap: anywhere;
     }}
+    .active-recall-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
     .quickstart-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
@@ -293,6 +315,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       overflow-wrap: anywhere;
     }}
     .learning-guide-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .active-recall-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
       overflow-wrap: anywhere;
@@ -321,6 +348,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     .learning-guide-grid {{
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .active-recall-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
     }}
     .quickstart-steps a, .quickstart-steps span {{
@@ -356,6 +388,52 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       padding: 12px;
       background: rgba(255, 255, 255, 0.64);
       overflow-wrap: anywhere;
+    }}
+    .recall-card {{
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 0;
+      background: rgba(255, 255, 255, 0.64);
+      overflow: hidden;
+    }}
+    .recall-card summary {{
+      display: grid;
+      gap: 6px;
+      padding: 12px;
+      cursor: pointer;
+      list-style: none;
+      overflow-wrap: anywhere;
+    }}
+    .recall-card summary::-webkit-details-marker {{ display: none; }}
+    .recall-card summary::after {{
+      content: "＋";
+      justify-self: start;
+      color: var(--accent);
+      font-weight: 900;
+    }}
+    .recall-card[open] summary::after {{ content: "－"; }}
+    .recall-card small {{
+      color: var(--accent-2);
+      font-weight: 900;
+    }}
+    .recall-card strong {{
+      display: block;
+      font-size: 0.98rem;
+      line-height: 1.32;
+      overflow-wrap: anywhere;
+    }}
+    .recall-card p {{
+      padding: 0 12px 8px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }}
+    .recall-card a {{
+      display: inline-block;
+      margin: 0 12px 12px;
+      color: var(--accent);
+      font-weight: 800;
+      text-decoration: none;
     }}
     .quickstart-steps a:hover, .quickstart-steps a:focus-visible {{
       border-color: rgba(47, 111, 115, 0.42);
@@ -945,11 +1023,12 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .active-recall-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
       .learning-guide-panel header {{ display: block; }}
+      .active-recall-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
       .market-value-panel header {{ display: block; }}
       .recommended-action-panel header {{ display: block; }}
@@ -982,6 +1061,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     {recommended_action_html}
     {outcome_contract_html}
     {learning_guide_html}
+    {active_recall_html}
     {quickstart_html}
     {intent_router_html}
     {health_html}
@@ -1394,6 +1474,110 @@ def _starter_question_card_html(item: dict[str, str], is_zh: bool) -> str:
           <a href="{escape(item["href"])}">{escape('打开对应页面' if is_zh else 'Open page')}</a>
           <code>{escape(command)}</code>
         </article>"""
+
+
+def _active_recall_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    title = "5 分钟主动回忆小测" if is_zh else "5-minute active recall"
+    body = (
+        "先别急着继续读。用这几张小卡闭卷回答，答不出来再打开对应页面找证据。"
+        if is_zh
+        else "Pause before reading more. Answer these cards from memory, then open the linked page to find evidence."
+    )
+    badge = "先答再看" if is_zh else "answer first"
+    cards = "\n".join(_recall_card_html(card, is_zh) for card in _recall_cards(roadmap, is_zh))
+    return f"""<section class="active-recall-panel" data-active-recall-panel="five-minute-check" aria-labelledby="active-recall-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('主动回忆' if is_zh else 'Active recall')}</p>
+          <h2 id="active-recall-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="quickstart-badge">{escape(badge)}</span>
+      </header>
+      <div class="active-recall-grid">
+        {cards}
+      </div>
+    </section>"""
+
+
+def _recall_cards(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, str]]:
+    has_map = bool(roadmap.get("paper_map"))
+    has_lens = bool(roadmap.get("paper_lens"))
+    is_paper = bool(has_map or has_lens)
+    if is_paper:
+        map_href = "paper_map.html" if has_map else "roadmap.html"
+        lens_href = "paper_lens.html" if has_lens else map_href
+        return [
+            {
+                "id": "recall-main-chain",
+                "label": "Q1",
+                "href": map_href,
+                "prompt": "不看报告，你能用一句话讲清论文主线吗？" if is_zh else "Without the report, can you explain the paper's main chain in one sentence?",
+                "check": "检查是否包含背景、动机、问题、方法和贡献。" if is_zh else "Check whether your answer includes background, motivation, problem, method, and contribution.",
+            },
+            {
+                "id": "recall-method",
+                "label": "Q2",
+                "href": lens_href,
+                "prompt": "核心方法为什么可能有效？" if is_zh else "Why might the core method work?",
+                "check": "找一段原文证据支撑你的解释，而不是只凭直觉。" if is_zh else "Find one source passage that supports your explanation, not just intuition.",
+            },
+            {
+                "id": "recall-experiment",
+                "label": "Q3",
+                "href": "roadmap.html",
+                "prompt": "如果要最小复现，你会先做哪一步？" if is_zh else "If you had to reproduce the minimum result, what would you do first?",
+                "check": "把答案落到一个命令、一个 notebook 单元或一条实验记录。" if is_zh else "Turn the answer into a command, notebook cell, or experiment log entry.",
+            },
+            {
+                "id": "recall-limits",
+                "label": "Q4",
+                "href": map_href,
+                "prompt": "这篇论文最可能在哪里失效？" if is_zh else "Where is this paper most likely to fail?",
+                "check": "至少说出一个数据、假设、任务或评价方式上的边界。" if is_zh else "Name at least one boundary in data, assumptions, task setting, or evaluation.",
+            },
+        ]
+    return [
+        {
+            "id": "recall-prereq",
+            "label": "Q1",
+            "href": "roadmap.html",
+            "prompt": "你能说出最先要补的两个前置知识吗？" if is_zh else "Can you name the first two prerequisites to fill?",
+            "check": "只保留会缩短当前路线的前置知识。" if is_zh else "Keep only prerequisites that shorten the current route.",
+        },
+        {
+            "id": "recall-core-concept",
+            "label": "Q2",
+            "href": "roadmap.html",
+            "prompt": "这个领域的核心概念之间怎么连？" if is_zh else "How do the core concepts in this field connect?",
+            "check": "用概念、资料、任务和验收之间的关系解释。" if is_zh else "Explain through concept, resource, task, and assessment links.",
+        },
+        {
+            "id": "recall-resource",
+            "label": "Q3",
+            "href": "roadmap.html",
+            "prompt": "哪份资料最值得先读？为什么？" if is_zh else "Which resource should you read first, and why?",
+            "check": "优先引用证据强度、覆盖范围和本地可打开状态。" if is_zh else "Use evidence strength, coverage, and local availability as the reason.",
+        },
+        {
+            "id": "recall-artifact",
+            "label": "Q4",
+            "href": "roadmap.html",
+            "prompt": "学完以后你要留下什么成果？" if is_zh else "What artifact should remain after learning?",
+            "check": "把答案落到项目、综述、复现日志或验收清单。" if is_zh else "Turn it into a project, survey, reproduction log, or checklist.",
+        },
+    ]
+
+
+def _recall_card_html(card: dict[str, str], is_zh: bool) -> str:
+    return f"""<details class="recall-card" data-recall-card="{escape(card["id"])}">
+          <summary>
+            <small>{escape(card["label"])}</small>
+            <strong>{escape(card["prompt"])}</strong>
+          </summary>
+          <p>{escape(card["check"])}</p>
+          <a href="{escape(card["href"])}">{escape('去找证据' if is_zh else 'Find evidence')}</a>
+        </details>"""
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:

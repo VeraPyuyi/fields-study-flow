@@ -3308,6 +3308,15 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Give new learners a small set of source-grounded starter questions so they can begin studying without learning the whole interface first.",
         ),
         _experience_check(
+            "active_recall_self_check",
+            "Active recall self-check",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("data-active-recall-panel", "data-recall-card", "5-minute active recall", "主动回忆", "Find evidence"),
+            ),
+            "Add a tiny active-recall check so learners test whether they can explain the material before continuing to read.",
+        ),
+        _experience_check(
             "support_files_progressive_disclosure",
             "Support files progressive disclosure",
             ("support-panel" not in html.get("index.html", ""))
