@@ -171,7 +171,7 @@ def build_parser() -> argparse.ArgumentParser:
     ask.add_argument("--limit", type=int, default=5)
 
     demo = subparsers.add_parser("demo", help="Generate a zero-setup sample report for first-time evaluation.")
-    demo.add_argument("--sample", choices=["transformer-paper"], default="transformer-paper")
+    demo.add_argument("--sample", choices=["transformer-paper", "diffusion-paper-set", "diffusion-field-course", "all-market"], default="transformer-paper")
     demo.add_argument("--output-language", choices=["zh-CN", "en", "bilingual"], default="zh-CN")
     demo.add_argument("--output-dir", default="fields-study-flow-demo")
     demo.add_argument("--market-check", action="store_true", help="After generating the demo, write a market-readiness audit summary into the demo folder.")
@@ -565,6 +565,23 @@ def _ask(args: argparse.Namespace) -> int:
 
 def _demo(args: argparse.Namespace) -> int:
     output_dir = Path(args.output_dir)
+    if args.sample == "all-market":
+        return _demo_market_suite(args, output_dir)
+    if args.sample != "transformer-paper":
+        profile, resources = _demo_sample(args.sample, normalize_output_language(args.output_language))
+        _build_demo_report(output_dir, profile, resources)
+        print((output_dir / "index.html").resolve())
+        if getattr(args, "market_check", False):
+            market_check = _run_demo_market_check(
+                output_dir,
+                fresh_user_minutes=getattr(args, "market_fresh_user_minutes", None),
+                capture_screenshots=bool(getattr(args, "market_check_screenshots", False)),
+                probe_interactions=bool(getattr(args, "market_check_interactions", False)),
+            )
+            market_check_path = output_dir / "demo_market_check.json"
+            market_check_path.write_text(json.dumps(market_check, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(market_check_path.resolve())
+        return 0
     profile = LearnerProfile(
         goal="快速理解并能够汇报 Attention Is All You Need",
         output_language=normalize_output_language(args.output_language),
@@ -589,6 +606,7 @@ def _demo(args: argparse.Namespace) -> int:
     write_bundle_rag_index(resource_dir, manifest, query=profile.goal, mode="light")
     roadmap = attach_study_bundle(roadmap, manifest, report_dir=output_dir)
     write_outputs(output_dir, profile, ranked, roadmap, SourceRegistry.default().snapshot())
+    write_report_audit(output_dir, roadmap)
     print((output_dir / "index.html").resolve())
     if getattr(args, "market_check", False):
         market_check = _run_demo_market_check(
@@ -601,6 +619,144 @@ def _demo(args: argparse.Namespace) -> int:
         market_check_path.write_text(json.dumps(market_check, ensure_ascii=False, indent=2), encoding="utf-8")
         print(market_check_path.resolve())
     return 0
+
+
+def _demo_sample(sample: str, output_language: str) -> tuple[LearnerProfile, list[Resource]]:
+    if sample == "diffusion-paper-set":
+        return (
+            LearnerProfile(
+                goal="compare diffusion model papers: DDPM, score SDE, and classifier-free guidance",
+                output_language=output_language,
+                resource_language_preference=normalize_resource_language_preference("en-first"),
+                levels={"paper_reading": "familiar", "generative_models": "beginner"},
+                target_kind="field",
+                route_depth="complete",
+                learning_style="theory",
+            ),
+            _demo_diffusion_paper_set_resources(),
+        )
+    if sample == "diffusion-field-course":
+        return (
+            LearnerProfile(
+                goal="learn diffusion models and build a small image generation project",
+                output_language=output_language,
+                resource_language_preference=normalize_resource_language_preference("en-first"),
+                levels={"machine_learning": "familiar", "pytorch": "beginner"},
+                target_kind="field",
+                route_depth="complete",
+                learning_style="practical",
+            ),
+            _demo_diffusion_field_course_resources(),
+        )
+    return (
+        LearnerProfile(
+            goal="quickly understand and present Attention Is All You Need",
+            output_language=output_language,
+            resource_language_preference=normalize_resource_language_preference("en-first"),
+            levels={"paper_reading": "beginner"},
+            target_kind="paper",
+            route_depth="fastest",
+            learning_style="practical",
+        ),
+        _demo_transformer_resources(),
+    )
+
+
+def _build_demo_report(output_dir: Path, profile: LearnerProfile, resources: list[Resource]) -> dict[str, object]:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _materialize_demo_resources(output_dir / "demo-source-materials", resources)
+    ranked = rank_resources(resources, profile)
+    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode="light")
+    roadmap = build_roadmap(
+        profile,
+        ranked,
+        live_search={"enabled": False, "status": "demo_offline"},
+        rag_evidence=public_rag_evidence(rag_index, profile.goal),
+    )
+    resource_dir = output_dir / "study-assets"
+    manifest = bundle_study_resources(resource_dir, ranked, roadmap, bundle_scope="all", progress=None)
+    write_bundle_rag_index(resource_dir, manifest, query=profile.goal, mode="light")
+    roadmap = attach_study_bundle(roadmap, manifest, report_dir=output_dir)
+    write_outputs(output_dir, profile, ranked, roadmap, SourceRegistry.default().snapshot())
+    write_report_audit(output_dir, roadmap)
+    return roadmap
+
+
+def _demo_market_suite(args: argparse.Namespace, output_dir: Path) -> int:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    sample_names = ["transformer-paper", "diffusion-paper-set", "diffusion-field-course"]
+    sample_dirs: list[Path] = []
+    for sample in sample_names:
+        sample_dir = output_dir / sample
+        profile, resources = _demo_sample(sample, normalize_output_language(args.output_language))
+        _build_demo_report(sample_dir, profile, resources)
+        sample_dirs.append(sample_dir)
+        if getattr(args, "market_check", False):
+            market_check = _run_demo_market_check(
+                sample_dir,
+                fresh_user_minutes=getattr(args, "market_fresh_user_minutes", None),
+                capture_screenshots=bool(getattr(args, "market_check_screenshots", False)),
+                probe_interactions=bool(getattr(args, "market_check_interactions", False)),
+            )
+            (sample_dir / "demo_market_check.json").write_text(json.dumps(market_check, ensure_ascii=False, indent=2), encoding="utf-8")
+    matrix = evaluate_market_sample_matrix(sample_dirs)
+    matrix_path = output_dir / "market_sample_matrix.json"
+    matrix_path.write_text(json.dumps(matrix, ensure_ascii=False, indent=2), encoding="utf-8")
+    _write_demo_market_suite_index(output_dir, sample_dirs, matrix)
+    print((output_dir / "index.html").resolve())
+    print(matrix_path.resolve())
+    return 0
+
+
+def _write_demo_market_suite_index(output_dir: Path, sample_dirs: list[Path], matrix: dict[str, object]) -> None:
+    summary = matrix.get("summary") if isinstance(matrix.get("summary"), dict) else {}
+    covered = ", ".join(str(item) for item in summary.get("covered_scenarios", [])) or "-"
+    missing = ", ".join(str(item) for item in summary.get("missing_scenarios", [])) or "-"
+    cards = "\n".join(
+        f'<a class="sample-card" href="{sample_dir.name}/index.html"><span>{sample_dir.name}</span><strong>Open report</strong></a>'
+        for sample_dir in sample_dirs
+    )
+    html = f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>fields-study-flow market samples</title>
+  <style>
+    * {{ box-sizing:border-box; }}
+    body {{ margin:0; background:#f6f4ef; color:#18201d; font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans SC",Arial,sans-serif; line-height:1.65; }}
+    main {{ width:min(1080px, calc(100vw - 28px)); margin:0 auto; padding:30px 0 46px; overflow-wrap:anywhere; }}
+    .hero, .sample-card, .matrix-card {{ border:1px solid #d9e2d7; border-radius:18px; background:#fffdfa; box-shadow:0 14px 36px rgba(43,53,45,.08); }}
+    .hero {{ padding:26px; }}
+    h1 {{ margin:0 0 10px; font-size:clamp(2rem,5vw,4rem); line-height:1.05; letter-spacing:0; }}
+    p {{ margin-top:0; color:#536258; }}
+    .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin-top:16px; }}
+    .sample-card, .matrix-card {{ display:block; padding:16px; color:inherit; text-decoration:none; }}
+    .sample-card span, .matrix-card span {{ display:block; color:#657066; font-size:.9rem; }}
+    .sample-card strong, .matrix-card strong {{ display:block; margin-top:6px; color:#2f6f73; font-size:1.1rem; }}
+    @media (max-width:720px) {{ main {{ width:min(100vw - 18px, 720px); }} .hero, .sample-card, .matrix-card {{ border-radius:14px; }} }}
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <p>Market sample matrix</p>
+      <h1>fields-study-flow market samples</h1>
+      <p>Use these three offline reports to review single-paper, paper-set, and field/course learning before claiming broad market readiness.</p>
+      <div class="grid">
+        <article class="matrix-card"><span>Matrix status</span><strong>{matrix.get("status", "unknown")}</strong></article>
+        <article class="matrix-card"><span>Covered scenarios</span><strong>{covered}</strong></article>
+        <article class="matrix-card"><span>Missing scenarios</span><strong>{missing}</strong></article>
+        <a class="matrix-card" href="market_sample_matrix.json"><span>Audit data</span><strong>Open JSON</strong></a>
+      </div>
+    </section>
+    <section class="grid" aria-label="sample reports">
+      {cards}
+    </section>
+  </main>
+</body>
+</html>"""
+    output_dir.joinpath("index.html").write_text(html, encoding="utf-8")
 
 
 def _run_demo_market_check(
@@ -868,6 +1024,230 @@ def _demo_transformer_resources() -> list[Resource]:
             trust_score=0.86,
             why_recommended="Provides an official implementation-oriented path for a small validation project.",
             license_or_access_note="Official public PyTorch documentation.",
+            critical_path_role="practice-validation",
+        ),
+    ]
+
+
+def _demo_diffusion_paper_set_resources() -> list[Resource]:
+    return [
+        Resource(
+            title="Diffusion Models Prerequisite Sprint",
+            url="local://diffusion-prerequisite-sprint",
+            source="generated",
+            type="template",
+            language="en",
+            difficulty="beginner",
+            concepts=["Gaussian noise", "Markov chains", "variational inference", "score matching"],
+            learning_key_points=[
+                "Review only the probability concepts that unlock DDPM and score-based diffusion papers.",
+                "Map noise schedules, likelihood bounds, and score functions to the later paper comparison.",
+            ],
+            focus_areas=["prerequisites", "probability", "paper reading bridge"],
+            estimated_minutes=75,
+            trust_score=0.8,
+            why_recommended="Adds a short foundation phase so the paper-set demo shows how learners enter the literature before comparing papers.",
+            license_or_access_note="Generated local demo prerequisite sprint.",
+            critical_path_role="prerequisite",
+        ),
+        Resource(
+            title="Denoising Diffusion Probabilistic Models",
+            url="https://arxiv.org/abs/2006.11239",
+            source="arxiv",
+            type="paper",
+            language="en",
+            difficulty="advanced",
+            concepts=["diffusion models", "denoising", "variational inference", "sampling"],
+            learning_key_points=[
+                "Forward noising turns data into Gaussian noise through a Markov chain.",
+                "Reverse denoising learns to reconstruct data step by step.",
+                "The training objective connects variational bounds with a simple noise-prediction loss.",
+            ],
+            focus_areas=["methodology", "objective", "sampling"],
+            estimated_minutes=180,
+            trust_score=0.97,
+            why_recommended="Core paper for understanding the discrete DDPM formulation before comparing later variants.",
+            license_or_access_note="Open arXiv abstract page.",
+            critical_path_role="core-paper",
+            metadata={
+                "paper_metadata": {
+                    "title": "Denoising Diffusion Probabilistic Models",
+                    "abstract_snippet": "A discrete-time denoising diffusion model that learns a reverse process from noise to data.",
+                    "concepts": ["diffusion models", "denoising", "variational inference"],
+                }
+            },
+        ),
+        Resource(
+            title="Score-Based Generative Modeling through Stochastic Differential Equations",
+            url="https://arxiv.org/abs/2011.13456",
+            source="arxiv",
+            type="paper",
+            language="en",
+            difficulty="advanced",
+            concepts=["diffusion models", "score matching", "stochastic differential equations", "sampling"],
+            learning_key_points=[
+                "Continuous-time SDEs generalize discrete diffusion processes.",
+                "Score functions guide the reverse-time generative process.",
+                "Predictor-corrector samplers connect theory with image generation practice.",
+            ],
+            focus_areas=["continuous-time formulation", "score estimation", "samplers"],
+            estimated_minutes=210,
+            trust_score=0.95,
+            why_recommended="Shows how diffusion methods evolved from discrete Markov chains to continuous-time score-based models.",
+            license_or_access_note="Open arXiv abstract page.",
+            critical_path_role="focused-support",
+            metadata={
+                "paper_metadata": {
+                    "title": "Score-Based Generative Modeling through Stochastic Differential Equations",
+                    "abstract_snippet": "A continuous-time framework for score-based generative modeling with SDEs.",
+                    "concepts": ["diffusion models", "score matching", "stochastic differential equations"],
+                }
+            },
+        ),
+        Resource(
+            title="Classifier-Free Diffusion Guidance",
+            url="https://arxiv.org/abs/2207.12598",
+            source="arxiv",
+            type="paper",
+            language="en",
+            difficulty="advanced",
+            concepts=["diffusion models", "classifier-free guidance", "conditional generation", "evaluation"],
+            learning_key_points=[
+                "Classifier-free guidance mixes conditional and unconditional predictions.",
+                "Guidance strength trades diversity for sample quality.",
+                "The technique became a practical default for controllable diffusion generation.",
+            ],
+            focus_areas=["guidance", "conditioning", "evaluation"],
+            estimated_minutes=150,
+            trust_score=0.93,
+            why_recommended="Adds the practical control mechanism that learners need to compare modern diffusion pipelines.",
+            license_or_access_note="Open arXiv abstract page.",
+            critical_path_role="support",
+            metadata={
+                "paper_metadata": {
+                    "title": "Classifier-Free Diffusion Guidance",
+                    "abstract_snippet": "A guidance method for conditional diffusion models that avoids a separate classifier.",
+                    "concepts": ["diffusion models", "classifier-free guidance", "conditional generation"],
+                }
+            },
+        ),
+        Resource(
+            title="Diffusion Paper Comparison Worksheet",
+            url="local://diffusion-paper-comparison-worksheet",
+            source="generated",
+            type="template",
+            language="en",
+            difficulty="beginner",
+            concepts=["paper comparison", "method evolution", "evaluation evidence"],
+            learning_key_points=[
+                "Compare each paper by problem, method, objective, sampler, experiment, contribution, and limitation.",
+                "Use shared concepts to explain why the papers form one learning path.",
+            ],
+            focus_areas=["synthesis", "presentation", "critique"],
+            estimated_minutes=60,
+            trust_score=0.78,
+            why_recommended="Turns the paper set into a measurable synthesis task rather than a loose bibliography.",
+            license_or_access_note="Generated local demo worksheet.",
+            critical_path_role="practice-validation",
+        ),
+    ]
+
+
+def _demo_diffusion_field_course_resources() -> list[Resource]:
+    return [
+        Resource(
+            title="Generative Modeling Prerequisite Sprint",
+            url="local://generative-modeling-prerequisite-sprint",
+            source="generated",
+            type="template",
+            language="en",
+            difficulty="beginner",
+            concepts=["probability", "PyTorch tensors", "training loop", "image generation"],
+            learning_key_points=[
+                "Refresh the minimum probability and PyTorch pieces needed before starting diffusion models.",
+                "Connect data, noise, loss, and generated samples before reading full implementation notes.",
+            ],
+            focus_areas=["prerequisites", "implementation readiness", "mental model"],
+            estimated_minutes=70,
+            trust_score=0.8,
+            why_recommended="Creates a clear foundation phase for the field/course demo instead of starting directly from implementation resources.",
+            license_or_access_note="Generated local demo prerequisite sprint.",
+            critical_path_role="prerequisite",
+        ),
+        Resource(
+            title="Diffusion Models from Scratch Notes",
+            url="local://diffusion-from-scratch-notes",
+            source="local-library",
+            type="course",
+            language="en",
+            difficulty="beginner",
+            concepts=["diffusion models", "forward process", "reverse process", "noise prediction"],
+            learning_key_points=[
+                "Understand the forward noising process before reading model code.",
+                "Map reverse denoising to a small neural network training loop.",
+            ],
+            focus_areas=["prerequisites", "intuition", "implementation"],
+            estimated_minutes=90,
+            trust_score=0.82,
+            why_recommended="Gives a compact prerequisite path for learners who want a project, not only papers.",
+            license_or_access_note="Generated local demo notes.",
+            critical_path_role="core-concept",
+        ),
+        Resource(
+            title="The Annotated Diffusion Model",
+            url="https://huggingface.co/blog/annotated-diffusion",
+            source="huggingface",
+            type="article",
+            language="en",
+            difficulty="intermediate",
+            concepts=["diffusion models", "PyTorch", "UNet", "training loop"],
+            learning_key_points=[
+                "Build the diffusion process and denoising model in readable code.",
+                "Connect loss, sampler, schedule, and generated images.",
+            ],
+            focus_areas=["implementation", "project"],
+            estimated_minutes=150,
+            trust_score=0.88,
+            why_recommended="Provides a practical implementation bridge for the field/course project path.",
+            license_or_access_note="Public educational article.",
+            critical_path_role="implementation-support",
+        ),
+        Resource(
+            title="Diffusers Quicktour",
+            url="https://huggingface.co/docs/diffusers/quicktour",
+            source="official-docs",
+            type="documentation",
+            language="en",
+            difficulty="beginner",
+            concepts=["diffusers", "pipeline", "sampling", "image generation"],
+            learning_key_points=[
+                "Run a pretrained diffusion pipeline before implementing the toy version.",
+                "Understand what a production pipeline abstracts away.",
+            ],
+            focus_areas=["tooling", "validation", "deployment"],
+            estimated_minutes=60,
+            trust_score=0.86,
+            why_recommended="Gives a fast local validation route and shows the difference between toy and production workflows.",
+            license_or_access_note="Official public Hugging Face documentation.",
+            critical_path_role="practice-validation",
+        ),
+        Resource(
+            title="Mini Diffusion Project Checklist",
+            url="local://mini-diffusion-project-checklist",
+            source="generated",
+            type="template",
+            language="en",
+            difficulty="beginner",
+            concepts=["project validation", "experiment log", "image samples", "critique"],
+            learning_key_points=[
+                "Train or run a minimal diffusion experiment and record evidence.",
+                "Explain which parts came from theory, code, and tool documentation.",
+            ],
+            focus_areas=["artifact", "mastery evidence", "reproduction"],
+            estimated_minutes=75,
+            trust_score=0.8,
+            why_recommended="Makes the field route finish with an inspectable project artifact instead of passive reading.",
+            license_or_access_note="Generated local demo checklist.",
             critical_path_role="practice-validation",
         ),
     ]

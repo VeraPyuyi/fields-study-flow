@@ -158,6 +158,66 @@ def test_cli_demo_market_check_rejects_invalid_fresh_user_minutes(tmp_path):
     assert "positive finite" in result.stderr
 
 
+def test_cli_demo_all_market_generates_cross_scenario_sample_matrix(tmp_path):
+    output_dir = tmp_path / "market-samples"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "demo",
+            "--sample",
+            "all-market",
+            "--output-dir",
+            str(output_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (output_dir / "index.html").exists()
+    assert (output_dir / "market_sample_matrix.json").exists()
+    assert "market_sample_matrix.json" in result.stdout
+
+    matrix = json.loads((output_dir / "market_sample_matrix.json").read_text(encoding="utf-8"))
+    assert matrix["status"] == "pass"
+    assert matrix["summary"]["covered_scenarios"] == ["single-paper", "paper-set", "field-course"]
+    assert matrix["summary"]["missing_scenarios"] == []
+
+    samples_by_report = {item["report"]: item for item in matrix["samples"]}
+    assert samples_by_report["transformer-paper"]["scenario"] == "single-paper"
+    assert samples_by_report["diffusion-paper-set"]["scenario"] == "paper-set"
+    assert samples_by_report["diffusion-field-course"]["scenario"] == "field-course"
+    assert all(item["sample_status"] == "pass" for item in samples_by_report.values())
+
+    paper_set_dir = output_dir / "diffusion-paper-set"
+    field_dir = output_dir / "diffusion-field-course"
+    for sample_dir in [output_dir / "transformer-paper", paper_set_dir, field_dir]:
+        assert (sample_dir / "index.html").exists()
+        assert (sample_dir / "roadmap.json").exists()
+        assert (sample_dir / "report_audit.json").exists()
+
+    paper_set = json.loads((paper_set_dir / "roadmap.json").read_text(encoding="utf-8"))
+    assert paper_set["paper_set"]["mode"] == "paper-set"
+    assert len(paper_set["paper_set"]["papers"]) >= 3
+    assert len(paper_set["phases"]) >= 3
+
+    field_route = json.loads((field_dir / "roadmap.json").read_text(encoding="utf-8"))
+    assert field_route["profile"]["target_kind"] == "field"
+    assert field_route["profile"]["route_depth"] == "complete"
+    assert len(field_route["phases"]) >= 3
+
+    index_html = (output_dir / "index.html").read_text(encoding="utf-8")
+    assert "transformer-paper/index.html" in index_html
+    assert "diffusion-paper-set/index.html" in index_html
+    assert "diffusion-field-course/index.html" in index_html
+    dumped = json.dumps(matrix, ensure_ascii=False)
+    assert str(output_dir) not in dumped
+
+
 def test_cli_discover_sources_outputs_language_filtered_sources():
     result = subprocess.run(
         [

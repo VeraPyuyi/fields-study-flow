@@ -138,6 +138,18 @@ fields-study-flow audit-report \
 
 The matrix checks whether the evidence covers the three product scenarios: single paper, paper set, and field/course route. Missing scenarios appear in `release_readiness.md` / `release_readiness.html` as `needs_work` next actions, so the project does not claim broad market readiness from a single cherry-picked report.
 
+For a zero-setup cross-scenario sample suite, generate all three offline demos in one command:
+
+```bash
+fields-study-flow demo \
+  --sample all-market \
+  --output-dir ./fields-study-flow-market-samples \
+  --market-check \
+  --market-fresh-user-minutes 8.5
+```
+
+This writes one root `index.html`, three sample reports (`transformer-paper`, `diffusion-paper-set`, and `diffusion-field-course`), per-sample `report_audit.json`, and a root `market_sample_matrix.json` that must cover all three scenarios before the suite is treated as market-ready evidence.
+
 The audit also emits `report_audit.json` with market-readiness, fresh-user-flow, experience, viewport, visual-snapshot-matrix, and competitor-benchmark checks so a report cannot be treated as product-ready while it lacks grounded evidence, portable study outputs, a measurable Paper Map, an intent-based first click, a clear first-10-minutes path, canvas affordances, dense-resource layout safety, or a local-first study bundle. When the command generates release dashboards, it adds `generated_artifact_audit` to the JSON output so the newly written HTML pages are checked in the same run.
 
 ```bash
