@@ -1217,6 +1217,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
     }
     summary["market_positioning"] = _market_positioning_matrix(summary)
     summary["market_opportunity_backlog"] = _market_opportunity_backlog(summary)
+    summary["market_experience_scorecard"] = _market_experience_scorecard(summary)
     return summary
 
 
@@ -1367,6 +1368,176 @@ def _market_backlog_release_proof(theme: str, next_proof: str) -> str:
     return f"{theme}: {next_proof}"
 
 
+def _market_experience_scorecard(summary: dict[str, Any]) -> list[dict[str, Any]]:
+    """Summarize user-facing competitiveness across the product experience."""
+
+    dimension_map = {
+        str(item.get("id") or ""): item
+        for item in summary.get("dimensions", [])
+        if isinstance(item, dict)
+    }
+    warning_ids = {
+        str(item.get("id") or "")
+        for item in summary.get("benchmark_warnings", [])
+        if isinstance(item, dict)
+    }
+    return [
+        _market_experience_card(
+            "ui_interface",
+            "UI/interface polish",
+            "React Flow / roadmap.sh",
+            "The report should feel like a clear product, not a generated document pile.",
+            _average_dimension_score(dimension_map, "visual_polish", "onboarding"),
+            _dimension_evidence(dimension_map, "visual_polish", "onboarding"),
+            "Keep Paper Map readable, draggable, zoomable, and visually stable on desktop and mobile.",
+            warning_ids,
+            warning_markers={"xyflow_canvas_affordance", "roadmap_interactive_first_step"},
+            status_penalties=_status_penalties(summary, "visual_status", "interaction_status"),
+        ),
+        _market_experience_card(
+            "content_depth",
+            "Content depth",
+            "Elicit / PaperQA2 / Get It",
+            "A learner should get a real path to mastery, not just a summary or link list.",
+            _average_dimension_score(dimension_map, "learning_depth", "actionability"),
+            _dimension_evidence(dimension_map, "learning_depth", "actionability"),
+            "Keep Paper Map, Paper Lens, KG, and explain/derive/reproduce/critique evidence connected.",
+            warning_ids,
+            warning_markers={"paperqa_grounded_evidence", "get_it_measurable_mastery_map"},
+        ),
+        _market_experience_card(
+            "plain_clarity",
+            "Plain-language clarity",
+            "Explainpaper / NotebookLM",
+            "The explanations should be direct enough that a reader can retell the paper in their own words.",
+            _average_dimension_score(dimension_map, "plain_explanation"),
+            _dimension_evidence(dimension_map, "plain_explanation"),
+            "Use paragraph-level, non-repetitive explanations that explain why each part matters.",
+            warning_ids,
+            warning_markers={"explainpaper_contextual_explanations"},
+        ),
+        _market_experience_card(
+            "first_run_ease",
+            "First-run ease",
+            "roadmap.sh / NotebookLM",
+            "A new user should know the first click and reach the first mastery task quickly.",
+            _average_dimension_score(dimension_map, "onboarding"),
+            _dimension_evidence(dimension_map, "onboarding") + _timing_evidence(summary),
+            "Measure the first 10 minutes and remove repeated fresh-user blockers before calling the report market-ready.",
+            warning_ids,
+            warning_markers={"roadmap_interactive_first_step"},
+            status_penalties=_status_penalties(summary, "fresh_user_timing_status", "fresh_user_trend_status"),
+        ),
+        _market_experience_card(
+            "evidence_trust",
+            "Evidence trust",
+            "Elicit / PaperQA2",
+            "Every claim, explanation, and recommended task should be easy to trace back to sources.",
+            _average_dimension_score(dimension_map, "learning_depth", "plain_explanation"),
+            _dimension_evidence(dimension_map, "learning_depth", "plain_explanation"),
+            "Keep citations, evidence snippets, and local review links visible from map nodes, lens paragraphs, and resources.",
+            warning_ids,
+            warning_markers={"paperqa_grounded_evidence", "resource_evidence_snippets", "resource_evidence_review_links"},
+        ),
+        _market_experience_card(
+            "resource_completeness",
+            "Resource completeness",
+            "ResearchRabbit / Litmaps / local-first study apps",
+            "The route should include enough downloadable, local-first material to actually study without hunting links.",
+            _average_dimension_score(dimension_map, "resource_completeness"),
+            _dimension_evidence(dimension_map, "resource_completeness"),
+            "Download, copy, snapshot, or generate the resources that shorten the mastery path; leave only unavailable items as links.",
+            warning_ids,
+            warning_markers={"local_first_bundle", "resource_provenance_coverage"},
+        ),
+        _market_experience_card(
+            "portable_outputs",
+            "Portable outputs",
+            "NotebookLM / Scholarcy",
+            "The report should leave the learner with reusable notes, checklists, and presentation-ready artifacts.",
+            _average_dimension_score(dimension_map, "actionability"),
+            _dimension_evidence(dimension_map, "actionability"),
+            "Keep generated worksheets, presentation notes, and artifact checklists close to the learning path.",
+            warning_ids,
+            warning_markers={"notebooklm_portable_study_outputs", "scholarcy_structured_review_cards"},
+        ),
+    ]
+
+
+def _market_experience_card(
+    id_: str,
+    label: str,
+    competitor_reference: str,
+    user_value: str,
+    base_score: int,
+    evidence: list[str],
+    next_improvement: str,
+    warning_ids: set[str],
+    *,
+    warning_markers: set[str] | None = None,
+    status_penalties: int = 0,
+) -> dict[str, Any]:
+    warning_markers = warning_markers or set()
+    warning_penalty = 15 if warning_ids & warning_markers else 0
+    score = max(0, min(100, int(base_score) - warning_penalty - status_penalties))
+    status = "strong" if score >= 80 else "adequate" if score >= 60 else "weak"
+    clean_evidence = [_sanitize_public_text(str(item)) for item in evidence if item]
+    if warning_ids & warning_markers:
+        clean_evidence.append("competitor benchmark warning: " + ", ".join(sorted(warning_ids & warning_markers)))
+    return {
+        "id": id_,
+        "label": label,
+        "competitor_reference": competitor_reference,
+        "user_value": user_value,
+        "score": score,
+        "status": status,
+        "evidence": clean_evidence or ["not measured"],
+        "next_improvement": next_improvement,
+    }
+
+
+def _average_dimension_score(dimension_map: dict[str, dict[str, Any]], *ids: str) -> int:
+    scores = [
+        int(dimension_map[id_].get("score") or 0)
+        for id_ in ids
+        if id_ in dimension_map
+    ]
+    return round(sum(scores) / len(scores)) if scores else 0
+
+
+def _dimension_evidence(dimension_map: dict[str, dict[str, Any]], *ids: str) -> list[str]:
+    evidence: list[str] = []
+    for id_ in ids:
+        item = dimension_map.get(id_)
+        if not isinstance(item, dict):
+            continue
+        label = str(item.get("label") or id_)
+        for value in item.get("evidence", []) if isinstance(item.get("evidence"), list) else []:
+            evidence.append(f"{label}: {value}")
+    return evidence
+
+
+def _timing_evidence(summary: dict[str, Any]) -> list[str]:
+    evidence = [f"fresh-user timing status: {summary.get('fresh_user_timing_status', 'not_run')}"]
+    blockers = int(summary.get("recurring_blockers") or 0)
+    if blockers:
+        evidence.append(f"recurring blockers: {blockers}")
+    return evidence
+
+
+def _status_penalties(summary: dict[str, Any], *status_keys: str) -> int:
+    penalty = 0
+    for key in status_keys:
+        status = str(summary.get(key) or "not_run")
+        if status in {"fail", "do_not_ship"}:
+            penalty += 30
+        elif status in {"warn", "needs_work", "needs_improvement"}:
+            penalty += 20
+        elif status == "not_run":
+            penalty += 10
+    return min(penalty, 35)
+
+
 def _release_next_actions(
     market: dict[str, Any],
     benchmark: dict[str, Any],
@@ -1434,6 +1605,7 @@ def _release_next_actions(
 def _release_readiness_markdown(summary: dict[str, Any]) -> str:
     positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
     opportunity_backlog = [item for item in summary.get("market_opportunity_backlog", []) if isinstance(item, dict)]
+    experience_scorecard = [item for item in summary.get("market_experience_scorecard", []) if isinstance(item, dict)]
     rows = [
         "# Release Readiness Dashboard",
         "",
@@ -1455,21 +1627,45 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
         f"| Market sample matrix | {_markdown_cell(str(summary.get('market_sample_matrix_status', 'not_run')))} |",
         f"| Recurring blockers | {int(summary['recurring_blockers'])} |",
         "",
-        "## Competitor-Inspired Gates",
+        "## Market Experience Scorecard",
         "",
-        "| Gate | What it protects | Current signal |",
-        "| --- | --- | --- |",
-        f"| Elicit/SciSpace evidence transparency | Every claim should point back to evidence, not just a summary. | {_dimension_signal(summary, 'learning_depth', 'plain_explanation')} |",
-        f"| ResearchRabbit/roadmap.sh visual navigation | Learners should see a clear map and know the first click. | {_dimension_signal(summary, 'onboarding', 'visual_polish')} |",
-        f"| React Flow canvas affordance | The Paper Map should feel draggable, zoomable, and stable. | {_release_status_signal(summary.get('interaction_status')) or _benchmark_signal(summary, 'xyflow_canvas_affordance')} |",
-        f"| Local-first study bundle | Resources should open locally when possible, with links as fallback. | {_dimension_signal(summary, 'resource_completeness')} |",
-        f"| Mastery proof | Understanding should end in explain/derive/reproduce/critique evidence. | {_dimension_signal(summary, 'actionability', 'mastery_actionability')} |",
-        "",
-        "## Market Positioning Matrix",
-        "",
-        "| Competitor / category | What users like | Their gap | fields-study-flow wedge | Current evidence | Next proof |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| Area | Competes with | Score | Status | User value | Evidence | Next improvement |",
+        "| --- | --- | ---: | --- | --- | --- | --- |",
     ]
+    if experience_scorecard:
+        for item in experience_scorecard:
+            rows.append(
+                "| {label} | {reference} | {score} | {status} | {value} | {evidence} | {improvement} |".format(
+                    label=_markdown_cell(_sanitize_public_text(str(item.get("label") or ""))),
+                    reference=_markdown_cell(_sanitize_public_text(str(item.get("competitor_reference") or ""))),
+                    score=int(item.get("score") or 0),
+                    status=_markdown_cell(_sanitize_public_text(str(item.get("status") or ""))),
+                    value=_markdown_cell(_sanitize_public_text(str(item.get("user_value") or ""))),
+                    evidence=_markdown_cell("; ".join(_sanitize_public_text(str(value)) for value in item.get("evidence", []) if value) or "-"),
+                    improvement=_markdown_cell(_sanitize_public_text(str(item.get("next_improvement") or ""))),
+                )
+            )
+    else:
+        rows.append("| Market experience | - | 0 | weak | Not measured | - | Run release readiness audit with report_audit.json. |")
+    rows.extend(
+        [
+            "",
+            "## Competitor-Inspired Gates",
+            "",
+            "| Gate | What it protects | Current signal |",
+            "| --- | --- | --- |",
+            f"| Elicit/SciSpace evidence transparency | Every claim should point back to evidence, not just a summary. | {_dimension_signal(summary, 'learning_depth', 'plain_explanation')} |",
+            f"| ResearchRabbit/roadmap.sh visual navigation | Learners should see a clear map and know the first click. | {_dimension_signal(summary, 'onboarding', 'visual_polish')} |",
+            f"| React Flow canvas affordance | The Paper Map should feel draggable, zoomable, and stable. | {_release_status_signal(summary.get('interaction_status')) or _benchmark_signal(summary, 'xyflow_canvas_affordance')} |",
+            f"| Local-first study bundle | Resources should open locally when possible, with links as fallback. | {_dimension_signal(summary, 'resource_completeness')} |",
+            f"| Mastery proof | Understanding should end in explain/derive/reproduce/critique evidence. | {_dimension_signal(summary, 'actionability', 'mastery_actionability')} |",
+            "",
+            "## Market Positioning Matrix",
+            "",
+            "| Competitor / category | What users like | Their gap | fields-study-flow wedge | Current evidence | Next proof |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
     for item in positioning:
         source = str(item.get("source_url") or "")
         competitor = str(item.get("competitor") or "Unknown")
@@ -1591,6 +1787,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     trends = summary.get("trends", [])
     positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
     opportunity_backlog = [item for item in summary.get("market_opportunity_backlog", []) if isinstance(item, dict)]
+    experience_scorecard = [item for item in summary.get("market_experience_scorecard", []) if isinstance(item, dict)]
     action_items = "".join(f"<li>{_html_escape(_sanitize_public_text(str(action)))}</li>" for action in actions) or "<li>No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.</li>"
     sample_matrix_summary = summary.get("market_sample_matrix_summary") if isinstance(summary.get("market_sample_matrix_summary"), dict) else {}
     sample_matrix_html = ""
@@ -1648,6 +1845,40 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
             signal=_html_escape(_sanitize_public_text(str(signal))),
         )
         for name, purpose, signal in gate_rows
+    )
+    experience_cards = "".join(
+        """
+        <article class="experience-card status-{status_class}">
+          <div class="experience-card-top">
+            <h3>{label}</h3>
+            <strong>{score}</strong>
+          </div>
+          <p class="reference">{reference}</p>
+          <p>{value}</p>
+          <p><strong>Evidence:</strong> {evidence}</p>
+          <p class="proof"><strong>Next:</strong> {improvement}</p>
+        </article>
+        """.format(
+            status_class=_html_escape(_sanitize_public_text(str(item.get("status") or "weak"))),
+            label=_html_escape(_sanitize_public_text(str(item.get("label") or ""))),
+            score=int(item.get("score") or 0),
+            reference=_html_escape(_sanitize_public_text(str(item.get("competitor_reference") or ""))),
+            value=_html_escape(_sanitize_public_text(str(item.get("user_value") or ""))),
+            evidence=_html_escape("; ".join(_sanitize_public_text(str(value)) for value in item.get("evidence", []) if value) or "-"),
+            improvement=_html_escape(_sanitize_public_text(str(item.get("next_improvement") or ""))),
+        )
+        for item in experience_scorecard
+    )
+    experience_html = (
+        f"""
+        <section class="panel" data-market-experience-scorecard>
+          <h2>Market Experience Scorecard / 市场体验评分卡</h2>
+          <p class="panel-note">A market-facing readout for the exact product qualities that matter: UI, learning depth, plain explanations, first-run ease, trust, resources, and reusable outputs.</p>
+          <div class="experience-grid">{experience_cards}</div>
+        </section>
+        """
+        if experience_cards
+        else ""
     )
     positioning_rows = "".join(
         """
@@ -1752,6 +1983,16 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     .gate-card {{ min-width:0; border:1px solid var(--line); border-radius:18px; padding:16px; background:#fff; }}
     .gate-card p {{ color:var(--muted); }}
     .gate-card strong {{ display:block; padding-top:8px; border-top:1px solid var(--line); }}
+    .experience-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:14px; }}
+    .experience-card {{ min-width:0; border:1px solid var(--line); border-radius:18px; padding:16px; background:#fff; }}
+    .experience-card.status-weak {{ border-color:#efb4ad; background:#fff6f4; }}
+    .experience-card.status-adequate {{ border-color:#e7d08d; background:#fffbea; }}
+    .experience-card.status-strong {{ border-color:#8ec7b3; background:#f2fbf6; }}
+    .experience-card-top {{ display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }}
+    .experience-card-top strong {{ flex:0 0 auto; font-size:2rem; line-height:1; color:var(--accent); }}
+    .experience-card .reference {{ color:var(--accent); font-weight:800; }}
+    .experience-card p {{ color:var(--muted); }}
+    .experience-card .proof {{ color:var(--ink); }}
     .backlog-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }}
     .backlog-card {{ min-width:0; border:1px solid var(--line); border-radius:18px; padding:16px; background:#fff; position:relative; }}
     .backlog-card.priority-p0 {{ border-color:#e7b46d; background:#fff8ec; }}
@@ -1784,6 +2025,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
       </aside>
     </section>
     <section class="status-grid" aria-label="Status signals">{status_cards}</section>
+    {experience_html}
     <section class="panel">
       <h2>Competitor-Inspired Gates / 竞品启发门槛</h2>
       <div class="gate-grid">{gate_cards}</div>

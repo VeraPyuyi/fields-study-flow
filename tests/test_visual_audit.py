@@ -544,6 +544,10 @@ def test_write_release_readiness_report_uses_market_sample_matrix(tmp_path):
     assert result["summary"]["decision"] == "needs_work"
     assert result["summary"]["market_sample_matrix_status"] == "warn"
     assert any(item["competitor"] == "PaperQA2 / scientific RAG" for item in result["summary"]["market_positioning"])
+    scorecard = result["summary"]["market_experience_scorecard"]
+    scorecard_ids = {item["id"] for item in scorecard}
+    assert {"ui_interface", "content_depth", "plain_clarity", "first_run_ease", "evidence_trust", "resource_completeness", "portable_outputs"} <= scorecard_ids
+    assert all(item.get("score") is not None and item.get("next_improvement") for item in scorecard)
     backlog = result["summary"]["market_opportunity_backlog"]
     assert len(backlog) == len(result["summary"]["market_positioning"])
     assert all(item.get("priority") and item.get("theme") and item.get("competitor") and item.get("action") and item.get("release_proof") for item in backlog)
@@ -555,12 +559,17 @@ def test_write_release_readiness_report_uses_market_sample_matrix(tmp_path):
     text = (tmp_path / "release_readiness.md").read_text(encoding="utf-8")
     html = (tmp_path / "release_readiness.html").read_text(encoding="utf-8")
     assert "Market Positioning Matrix" in text
+    assert "Market Experience Scorecard" in text
+    assert "UI/interface polish" in text
+    assert "First-run ease" in text
     assert "Market Opportunity Backlog" in text
     assert "not measured" in text
     assert "Prove every core Paper Map and mastery task" in text
     assert "PaperQA2 / scientific RAG" in text
     assert "Get It / measurable mastery map" in text
     assert "data-market-positioning" in html
+    assert "data-market-experience-scorecard" in html
+    assert "市场体验评分卡" in html
     assert "data-market-opportunity-backlog" in html
     assert "Evidence-backed Paper Map" in html
     assert "市场机会待办" in html
@@ -634,6 +643,7 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
     assert result["summary"]["path"] == "release_readiness.md"
     assert result["summary"]["html_path"] == "release_readiness.html"
     assert result["summary"]["decision"] == "needs_work"
+    assert any(item["id"] == "content_depth" and item["score"] >= 80 for item in result["summary"]["market_experience_scorecard"])
     assert any(item["theme"] == "Canvas interaction proof" for item in result["summary"]["market_opportunity_backlog"])
     text = (tmp_path / "release_readiness.md").read_text(encoding="utf-8")
     html = (tmp_path / "release_readiness.html").read_text(encoding="utf-8")
@@ -642,6 +652,8 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
     assert "Elicit/SciSpace evidence transparency" in text
     assert "ResearchRabbit/roadmap.sh visual navigation" in text
     assert "React Flow canvas affordance" in text
+    assert "Market Experience Scorecard" in text
+    assert "Evidence trust" in text
     assert "Market Opportunity Backlog" in text
     assert "Canvas interaction proof" in text
     assert "actionability: 88" in text
@@ -656,6 +668,8 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
     assert "overflow-wrap:anywhere" in html
     assert "Microsoft YaHei UI" in html
     assert "Elicit/SciSpace evidence transparency" in html
+    assert "data-market-experience-scorecard" in html
+    assert "Evidence trust" in html
     assert "data-market-opportunity-backlog" in html
     assert "Canvas interaction proof" in html
     assert "[private path]" in html
