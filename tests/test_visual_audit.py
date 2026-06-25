@@ -1689,6 +1689,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
         "paper_map_branch_deferral",
         "paper_lens_paragraph_focus",
         "recommended_first_action_panel",
+        "learning_outcome_contract",
         "resource_local_first",
         "resource_purpose_badges",
         "resource_strength_signals",

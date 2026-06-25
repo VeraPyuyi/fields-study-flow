@@ -150,6 +150,14 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "如果要汇报" in html
     assert "如果要掌握" in html
     assert "如果要换论文" in html
+    assert 'data-learning-outcome-contract="true"' in html
+    assert "学完后你应该能交付什么" in html
+    assert 'data-outcome="explain"' in html
+    assert 'data-outcome="derive"' in html
+    assert 'data-outcome="reproduce"' in html
+    assert 'data-outcome="critique"' in html
+    assert "3 分钟讲明白论文主线" in html
+    assert "留下最小复现实验记录" in html
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
     assert 'data-fresh-user-flow="first-10-minutes"' in html

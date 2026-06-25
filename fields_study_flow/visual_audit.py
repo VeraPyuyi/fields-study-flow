@@ -3286,6 +3286,19 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Show one explicit recommended first click so new users do not need to compare every report surface before starting.",
         ),
         _experience_check(
+            "learning_outcome_contract",
+            "Learning outcome contract",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("data-learning-outcome-contract", "学完后你应该能交付什么", "What you should be able to deliver", "Outcome contract"),
+            )
+            or _contains_any_text(
+                html.get("roadmap.html", ""),
+                ("data-mastery-export", "mastery_worksheet.md", "Copy evidence worksheet", "下载 worksheet"),
+            ),
+            "Make the expected learning outputs explicit: explain, derive, reproduce, and critique should feel like concrete deliverables, not hidden implementation details.",
+        ),
+        _experience_check(
             "fresh_user_one_minute_start",
             "Fresh-user one-minute start",
             _contains_any_text(html.get("roadmap.html", ""), ("1分钟上手", "1 分钟上手", "1-minute start")),

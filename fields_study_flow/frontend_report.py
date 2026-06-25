@@ -94,6 +94,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     intent_router_html = _intent_router_panel_html(safe_roadmap, is_zh)
     market_value_html = _market_value_panel_html(safe_roadmap, is_zh)
     recommended_action_html = _recommended_action_panel_html(safe_roadmap, is_zh)
+    outcome_contract_html = _learning_outcome_contract_panel_html(safe_roadmap, is_zh)
     heading = "从这里开始" if is_zh else "Start Here"
     subtitle = (
         "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
@@ -513,6 +514,90 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       color: var(--muted);
       font-size: 0.9rem;
     }}
+    .outcome-contract-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.80);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
+    .outcome-contract-panel header {{
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }}
+    .outcome-contract-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .outcome-contract-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .outcome-contract-badge {{
+      flex: 0 0 auto;
+      border: 1px solid rgba(47, 111, 115, 0.22);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--accent);
+      background: rgba(47, 111, 115, 0.08);
+      font-size: 0.84rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }}
+    .outcome-contract-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .outcome-card {{
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.62);
+      overflow-wrap: anywhere;
+    }}
+    .outcome-card span {{
+      display: block;
+      color: var(--accent-2);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }}
+    .outcome-card strong {{
+      display: block;
+      margin-top: 5px;
+      font-size: 1rem;
+      line-height: 1.25;
+    }}
+    .outcome-card p {{
+      margin-top: 7px;
+      font-size: 0.92rem;
+      line-height: 1.52;
+    }}
+    .outcome-proof-row {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }}
+    .outcome-proof-row a, .outcome-proof-row span {{
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 7px 10px;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.68);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }}
     .report-health-panel, .start-card {{
       display: flex;
       flex-direction: column;
@@ -752,17 +837,19 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
       .market-value-panel header {{ display: block; }}
       .recommended-action-panel header {{ display: block; }}
+      .outcome-contract-panel header {{ display: block; }}
       .report-health-panel header {{ display: block; }}
       .quickstart-badge {{ display: inline-block; margin-top: 10px; }}
       .market-value-badge {{ display: inline-block; margin-top: 10px; }}
       .recommended-action-badge {{ display: inline-block; margin-top: 10px; }}
+      .outcome-contract-badge {{ display: inline-block; margin-top: 10px; }}
       .report-health-link {{ display: inline-block; margin-top: 10px; }}
     }}
   </style>
@@ -784,6 +871,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     </section>
     {market_value_html}
     {recommended_action_html}
+    {outcome_contract_html}
     {quickstart_html}
     {intent_router_html}
     {health_html}
@@ -1018,6 +1106,80 @@ def _recommended_action_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
         <div class="recommended-action-side">
           {alternative_html}
         </div>
+      </div>
+    </section>"""
+
+
+def _learning_outcome_contract_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    task_types = {
+        str(item.get("type") or item.get("task_type") or "").lower()
+        for item in roadmap.get("study_tasks", [])
+        if isinstance(item, dict)
+    }
+    required = {"explain", "derive", "reproduce", "critique"}
+    covered = len(task_types & required)
+    title = "学完后你应该能交付什么" if is_zh else "What you should be able to deliver"
+    body = (
+        "把“看懂了”拆成可检查的结果：能讲清、能推导、能复现、能批判。缺哪一项，就按学习路线补哪一项。"
+        if is_zh
+        else "Turn 'I understood it' into checkable outputs: explain, derive, reproduce, and critique. If one is missing, use the roadmap to fill it."
+    )
+    badge = (f"{covered}/4 项已覆盖" if is_zh else f"{covered}/4 covered") if task_types else ("等待任务生成" if is_zh else "tasks pending")
+    outcomes = [
+        {
+            "key": "explain",
+            "label": "Explain" if not is_zh else "讲清楚",
+            "title": "3 分钟讲明白论文主线" if is_zh else "Explain the paper in 3 minutes",
+            "body": "能说出背景、动机、问题、方法、实验、贡献和局限。" if is_zh else "State the background, motivation, problem, method, experiments, contributions, and limits.",
+        },
+        {
+            "key": "derive",
+            "label": "Derive" if not is_zh else "推出来",
+            "title": "推导一个关键机制" if is_zh else "Derive one key mechanism",
+            "body": "把核心公式、状态转移、损失函数或算法步骤拆成自己的话。" if is_zh else "Break down the core formula, state transition, objective, or algorithm step in your own words.",
+        },
+        {
+            "key": "reproduce",
+            "label": "Reproduce" if not is_zh else "做出来",
+            "title": "留下最小复现实验记录" if is_zh else "Leave a minimal reproduction log",
+            "body": "运行或设计一个最小实验，记录输入、输出、失败点和验证证据。" if is_zh else "Run or design a small experiment and record inputs, outputs, failures, and validation evidence.",
+        },
+        {
+            "key": "critique",
+            "label": "Critique" if not is_zh else "能批判",
+            "title": "说明适用边界和不足" if is_zh else "Explain boundaries and limitations",
+            "body": "指出方法在哪些数据、假设、任务或评价方式下可能失效。" if is_zh else "Identify where the method may fail across data, assumptions, tasks, or evaluation choices.",
+        },
+    ]
+    cards = "\n".join(
+        f"""<article class="outcome-card" data-outcome="{escape(item["key"])}">
+          <span>{escape(item["label"])}</span>
+          <strong>{escape(item["title"])}</strong>
+          <p>{escape(item["body"])}</p>
+        </article>"""
+        for item in outcomes
+    )
+    proof_links: list[tuple[str, str]] = []
+    if roadmap.get("paper_map"):
+        proof_links.append(("paper_map.html", "论文逻辑图" if is_zh else "Paper Map"))
+    if roadmap.get("paper_lens"):
+        proof_links.append(("paper_lens.html", "段落精读" if is_zh else "Paper Lens"))
+    proof_links.append(("roadmap.html", "验收清单" if is_zh else "Mastery checklist"))
+    proof_html = "\n".join(f'<a href="{escape(href)}">{escape(label)}</a>' for href, label in proof_links)
+    return f"""<section class="outcome-contract-panel" data-learning-outcome-contract="true" aria-labelledby="outcome-contract-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('学习结果契约' if is_zh else 'Outcome contract')}</p>
+          <h2 id="outcome-contract-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="outcome-contract-badge">{escape(badge)}</span>
+      </header>
+      <div class="outcome-contract-grid">
+        {cards}
+      </div>
+      <div class="outcome-proof-row" aria-label="{escape('相关验收入口' if is_zh else 'Related validation entries')}">
+        {proof_html}
       </div>
     </section>"""
 
