@@ -3299,6 +3299,16 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Make the expected learning outputs explicit: explain, derive, reproduce, and critique should feel like concrete deliverables, not hidden implementation details.",
         ),
         _experience_check(
+            "support_files_progressive_disclosure",
+            "Support files progressive disclosure",
+            ("support-panel" not in html.get("index.html", ""))
+            or _contains_any_text(
+                html.get("index.html", ""),
+                ("data-support-files-panel", "<details", "Open only when you need data or export files", "需要原始数据或导出文件时再展开"),
+            ),
+            "Keep technical JSON/Markdown/SVG support files behind a collapsed disclosure so new learners see the learning path before implementation artifacts.",
+        ),
+        _experience_check(
             "fresh_user_one_minute_start",
             "Fresh-user one-minute start",
             _contains_any_text(html.get("roadmap.html", ""), ("1分钟上手", "1 分钟上手", "1-minute start")),

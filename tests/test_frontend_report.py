@@ -179,6 +179,8 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "换成自己的论文" in html
     assert "fields-study-flow paper --url" in html
     assert "fields-study-flow paper --url ./my-paper.pdf" in html
+    assert '<details class="support-panel" data-support-files-panel="collapsed">' in html
+    assert "需要原始数据或导出文件时再展开" in html
     assert "roadmap.json" in html
     assert "C:/Users/example" not in html
 

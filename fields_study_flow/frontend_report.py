@@ -113,6 +113,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         if is_zh
         else "JSON, Markdown, and SVG are support artifacts; learners should start with the cards above."
     )
+    technical_summary = "需要原始数据或导出文件时再展开" if is_zh else "Open only when you need data or export files"
     return f"""<!doctype html>
 <html lang="{escape(lang)}">
 <head>
@@ -813,8 +814,46 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       border-radius: 22px;
       padding: 20px 22px;
     }}
+    .support-panel summary {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      cursor: pointer;
+      list-style: none;
+      overflow-wrap: anywhere;
+    }}
+    .support-panel summary::-webkit-details-marker {{
+      display: none;
+    }}
+    .support-panel summary::after {{
+      content: "+";
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      background: rgba(255, 255, 255, 0.62);
+      font-weight: 900;
+    }}
+    .support-panel[open] summary::after {{
+      content: "-";
+    }}
+    .support-panel summary span {{
+      display: block;
+    }}
+    .support-panel summary strong {{
+      display: block;
+      margin-top: 3px;
+      font-size: 1rem;
+      line-height: 1.35;
+    }}
     .support-panel p {{
-      margin: 0 0 12px;
+      margin: 12px 0;
       color: var(--muted);
     }}
     .support-links {{
@@ -880,15 +919,20 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       {cards_html}
     </section>
     {next_panel_html}
-    <section class="support-panel" aria-labelledby="support-files">
-      <p class="eyebrow" id="support-files">{escape(technical_label)}</p>
+    <details class="support-panel" data-support-files-panel="collapsed">
+      <summary id="support-files">
+        <span>
+          <span class="eyebrow">{escape(technical_label)}</span>
+          <strong>{escape(technical_summary)}</strong>
+        </span>
+      </summary>
       <p>{escape(technical_note)}</p>
       <div class="support-links">
         <a href="roadmap.json">roadmap.json</a>
         <a href="roadmap.md">roadmap.md</a>
         <a href="roadmap.svg">roadmap.svg</a>
       </div>
-    </section>
+    </details>
   </main>
 </body>
 </html>"""
