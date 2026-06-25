@@ -1255,6 +1255,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <a href="study_cards.md">study_cards.md</a>
         <a href="study_quiz.md">study_quiz.md</a>
         <a href="mastery_worksheet.md">mastery_worksheet.md</a>
+        <a href="quick_brief.md">quick_brief.md</a>
       </div>
     </details>
   </main>
@@ -2130,6 +2131,82 @@ def render_mastery_worksheet_markdown(roadmap: dict[str, Any]) -> str:
     return "\n".join(output)
 
 
+def render_quick_brief_markdown(roadmap: dict[str, Any]) -> str:
+    """Render a one-page quick brief for first-read comprehension."""
+    is_zh = _html_lang(roadmap) != "en"
+    title = _markdown_text(roadmap.get("title") or _display_report_base_title(roadmap))
+    profile = roadmap.get("profile") if isinstance(roadmap.get("profile"), dict) else {}
+    goal = _markdown_text(profile.get("goal") or title)
+    paper_map = roadmap.get("paper_map") if isinstance(roadmap.get("paper_map"), dict) else {}
+    core_nodes = _quick_brief_core_nodes(paper_map)
+    resource_links = _resource_links_by_title(roadmap)
+    heading = "5 分钟速读 Brief" if is_zh else "5-Minute Research Brief"
+    one_sentence = _quick_brief_one_sentence(core_nodes, roadmap, is_zh)
+    start_label, start_chain = _quick_brief_start_here(roadmap, is_zh)
+    output: list[str] = [
+        f"# {title} - {heading}",
+        "",
+        f"- {'目标' if is_zh else 'Goal'}: {goal}",
+        f"- {start_label}: {start_chain}",
+        "",
+        f"## {'一句话理解' if is_zh else 'One-Sentence Takeaway'}",
+        "",
+        one_sentence,
+        "",
+    ]
+    if core_nodes:
+        output.extend([f"## {'论文逻辑主链' if is_zh else 'Paper Logic Chain'}", ""])
+        labels = _quick_brief_chain_labels(is_zh)
+        for kind in ("background", "motivation", "problem", "methodology", "experiment", "contribution", "limitation"):
+            node = next((item for item in core_nodes if str(item.get("kind")) == kind), {})
+            if not node:
+                continue
+            text = _quick_brief_node_text(node)
+            output.append(f"- **{labels.get(kind, kind)}**: {text}")
+        output.append("")
+        talking_points = [_markdown_text(node.get("talking_point") or node.get("plain_explanation") or "") for node in core_nodes]
+        talking_points = [item for item in talking_points if item][:3]
+        if talking_points:
+            output.extend([f"## {'汇报时可以这样说' if is_zh else 'Presentation Wording'}", ""])
+            output.extend(f"- {item}" for item in talking_points)
+            output.append("")
+        evidence_lines = _quick_brief_evidence_lines(core_nodes, is_zh)
+        if evidence_lines:
+            output.extend([f"## {'最该打开的证据' if is_zh else 'Evidence to Open First'}", ""])
+            output.extend(evidence_lines)
+            output.append("")
+    else:
+        output.extend(_quick_brief_route_sections(roadmap, is_zh))
+    next_actions = [item for item in roadmap.get("next_actions", []) if isinstance(item, dict)]
+    if next_actions:
+        output.extend([f"## {'下一步动作' if is_zh else 'Next Actions'}", ""])
+        for action in next_actions[:3]:
+            title_text = _markdown_text(action.get("title") or action.get("task_id") or "")
+            minutes = action.get("estimated_minutes")
+            evidence = _markdown_text(action.get("evidence") or "")
+            suffix = f" ({minutes} {'分钟' if is_zh else 'min'})" if minutes else ""
+            output.append(f"- {title_text}{suffix}: {evidence}")
+        output.append("")
+    resources = _quick_brief_resource_lines(roadmap, resource_links, is_zh)
+    if resources:
+        output.extend([f"## {'先打开这些资料' if is_zh else 'Open These Resources First'}", ""])
+        output.extend(resources)
+        output.append("")
+    output.extend(
+        [
+            f"## {'掌握检查' if is_zh else 'Mastery Check'}",
+            "",
+            (
+                "- 读完这页后，去 `study_quiz.md` 闭卷做一遍，再把证据写进 `mastery_worksheet.md`。"
+                if is_zh
+                else "- After this page, take `study_quiz.md` closed-book, then fill evidence into `mastery_worksheet.md`."
+            ),
+            "",
+        ]
+    )
+    return "\n".join(output)
+
+
 def _markdown_cell(value: object) -> str:
     return _markdown_text(value).replace("|", "\\|").replace("\n", "<br>")
 
@@ -2243,6 +2320,121 @@ def _truncate_markdown(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
     return text[: max(0, limit - 1)].rstrip() + "..."
+
+
+def _quick_brief_core_nodes(paper_map: dict[str, Any]) -> list[dict[str, Any]]:
+    nodes = paper_map.get("nodes") if isinstance(paper_map.get("nodes"), list) else []
+    core = [node for node in nodes if isinstance(node, dict) and node.get("role") == "core"]
+    order = {"background": 0, "motivation": 1, "problem": 2, "methodology": 3, "experiment": 4, "contribution": 5, "limitation": 6}
+    return sorted(core, key=lambda node: order.get(str(node.get("kind")), 99))
+
+
+def _quick_brief_chain_labels(is_zh: bool) -> dict[str, str]:
+    if is_zh:
+        return {
+            "background": "背景",
+            "motivation": "动机 / 缺口",
+            "problem": "问题",
+            "methodology": "方法",
+            "experiment": "实验",
+            "contribution": "贡献",
+            "limitation": "局限",
+        }
+    return {
+        "background": "Background",
+        "motivation": "Motivation / Gap",
+        "problem": "Problem",
+        "methodology": "Methodology",
+        "experiment": "Experiments",
+        "contribution": "Contributions",
+        "limitation": "Limitations",
+    }
+
+
+def _quick_brief_start_here(roadmap: dict[str, Any], is_zh: bool) -> tuple[str, str]:
+    has_map = bool(roadmap.get("paper_map"))
+    has_lens = bool(roadmap.get("paper_lens"))
+    label = "建议先读" if is_zh else "Start here"
+    links: list[str] = []
+    if has_map:
+        links.append("[论文逻辑图](paper_map.html)" if is_zh else "[Paper Map](paper_map.html)")
+    if has_lens:
+        links.append("[段落精读](paper_lens.html)" if is_zh else "[Paper Lens](paper_lens.html)")
+    if not links:
+        links.append("[学习路线](roadmap.html)" if is_zh else "[Roadmap](roadmap.html)")
+    links.append("[学习小测](study_quiz.md)" if is_zh else "[Study Quiz](study_quiz.md)")
+    links.append("[掌握验收表](mastery_worksheet.md)" if is_zh else "[Mastery Worksheet](mastery_worksheet.md)")
+    return label, " -> ".join(links)
+
+
+def _quick_brief_node_text(node: dict[str, Any]) -> str:
+    text = _markdown_text(node.get("plain_explanation") or node.get("summary") or node.get("label") or "")
+    return _truncate_markdown(text, 240)
+
+
+def _quick_brief_one_sentence(core_nodes: list[dict[str, Any]], roadmap: dict[str, Any], is_zh: bool) -> str:
+    if core_nodes:
+        problem = next((node for node in core_nodes if str(node.get("kind")) == "problem"), {})
+        method = next((node for node in core_nodes if str(node.get("kind")) == "methodology"), {})
+        contribution = next((node for node in core_nodes if str(node.get("kind")) == "contribution"), {})
+        parts = [_quick_brief_node_text(item) for item in (problem, method, contribution) if item]
+        if parts:
+            connector = "；" if is_zh else "; "
+            return connector.join(parts[:3])
+    goal = _markdown_text(_dict_at(roadmap, "profile").get("goal") or roadmap.get("title") or "")
+    return (
+        f"这份路线要用最短路径帮你掌握：{goal}。"
+        if is_zh
+        else f"This route is the shortest useful path to master: {goal}."
+    )
+
+
+def _quick_brief_evidence_lines(core_nodes: list[dict[str, Any]], is_zh: bool) -> list[str]:
+    lines: list[str] = []
+    for node in core_nodes:
+        for item in node.get("evidence") or []:
+            if not isinstance(item, dict):
+                continue
+            label = _markdown_text(item.get("source_title") or item.get("file_name") or item.get("title") or ("证据" if is_zh else "Evidence"))
+            snippet = _truncate_markdown(_markdown_text(item.get("snippet") or item.get("note") or ""), 180)
+            href = str(item.get("local_href") or item.get("detail_anchor") or item.get("href") or item.get("url") or "").strip()
+            if href and not PRIVATE_PATH_RE.search(href):
+                label = f"[{label}]({_safe_markdown_href(href)})"
+            if snippet:
+                lines.append(f"- {label}: {snippet}")
+            else:
+                lines.append(f"- {label}")
+            if len(lines) >= 5:
+                return lines
+    return lines
+
+
+def _quick_brief_route_sections(roadmap: dict[str, Any], is_zh: bool) -> list[str]:
+    phases = [item for item in roadmap.get("phases", []) if isinstance(item, dict)]
+    lines: list[str] = [f"## {'路线速览' if is_zh else 'Route at a Glance'}", ""]
+    if phases:
+        for phase in phases[:5]:
+            name = _markdown_text(phase.get("name") or ("阶段" if is_zh else "Phase"))
+            objective = _truncate_markdown(_markdown_text(phase.get("objective") or ""), 220)
+            lines.append(f"- **{name}**: {objective}")
+    else:
+        lines.append("- " + ("当前报告还没有阶段路线，请补充资料后重新生成。" if is_zh else "No phases yet; add resources and regenerate the report."))
+    lines.append("")
+    return lines
+
+
+def _quick_brief_resource_lines(roadmap: dict[str, Any], resource_links: dict[str, str], is_zh: bool) -> list[str]:
+    resources = _report_all_resource_entries(roadmap)
+    selected = [item for item in resources if item.get("selected") or str(item.get("route_status") or "") == "selected"]
+    if not selected:
+        selected = resources[:4]
+    lines: list[str] = []
+    for resource in selected[:4]:
+        title = _markdown_text(resource.get("title") or resource.get("label") or ("资料" if is_zh else "Resource"))
+        link = _resource_markdown_link(title, resource_links)
+        reason = _truncate_markdown(_markdown_text(resource.get("why_recommended") or resource.get("reason") or resource.get("critical_path_role") or ""), 160)
+        lines.append(f"- {link}" + (f": {reason}" if reason else ""))
+    return lines
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:

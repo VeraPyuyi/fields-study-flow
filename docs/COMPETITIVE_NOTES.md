@@ -54,6 +54,7 @@ Source refresh on 2026-06-22:
 - The start page now includes a 5-minute active-recall self-check with expandable cards, adapting NotebookLM/Scholarcy/Get It flashcard lessons into evidence-seeking prompts rather than detached quiz trivia.
 - Exports now include `study_cards.md`, a portable active-recall card set generated from the same prompts as the start page, so NotebookLM-style study cards become a local artifact instead of an online-only interaction.
 - Exports now also include `study_quiz.md`, an evidence-linked self-graded quiz with an answer key, turning NotebookLM-style quizzes into a local mastery check instead of another passive summary.
+- Exports now include `quick_brief.md`, a one-page first-read brief that adapts Scholarcy-style quick summaries and Spotlight key findings into a paper-logic chain with evidence links and next actions.
 - The start page now includes a 45-60 minute first-session plan, combining roadmap.sh-style low-friction pathing with NotebookLM/Get It-style active study outputs: map the paper, read one evidence paragraph, recall from memory, and finish one checkable mastery task.
 - The start page now uses action-first progressive disclosure: secondary value explanation, report-health checks, alternate guidance, and bring-your-own-paper commands stay collapsed until the learner asks for them, keeping the first view closer to roadmap.sh's simple first interaction.
 - Single-paper reports prioritize `paper_map.html` first, because the fastest way to understand a paper is to see the logic chain before reading every paragraph.

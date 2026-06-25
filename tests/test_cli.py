@@ -1050,10 +1050,76 @@ def test_cli_export_all_sanitizes_private_paths_and_lists_outputs(tmp_path):
     assert "roadmap.svg" in result.stdout
     assert "index.html" in result.stdout
     assert "roadmap.html" in result.stdout
-    for target in ("roadmap.json", "roadmap.md", "roadmap.svg", "index.html", "roadmap.html"):
+    assert "quick_brief.md" in result.stdout
+    for target in ("roadmap.json", "roadmap.md", "roadmap.svg", "index.html", "roadmap.html", "quick_brief.md"):
         exported = (export_dir / target).read_text(encoding="utf-8")
         assert "C:/Users/example/private" not in exported
         assert "file:///C:/Users/example/private" not in exported
+
+
+def test_cli_export_all_writes_paper_map_and_lens_for_paper_brief_links(tmp_path):
+    source = tmp_path / "roadmap.json"
+    source.write_text(
+        json.dumps(
+            {
+                "title": "Learning Roadmap: Demo Paper",
+                "profile": {
+                    "goal": "understand demo paper",
+                    "output_language": "en",
+                    "target_kind": "paper",
+                    "route_depth": "balanced",
+                    "learning_style": "practical",
+                    "resource_language_preference": "auto",
+                },
+                "paper_map": {
+                    "nodes": [
+                        {
+                            "id": "problem",
+                            "role": "core",
+                            "kind": "problem",
+                            "plain_explanation": "The paper asks a concrete research question.",
+                        }
+                    ],
+                    "edges": [],
+                },
+                "paper_lens": {"segments": []},
+                "study_tasks": [],
+                "phases": [],
+                "checkpoints": ["Explain the paper."],
+                "safety_policy": ["Do not expose private paths."],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    export_dir = tmp_path / "export"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "export",
+            "--input",
+            str(source),
+            "--format",
+            "all",
+            "--output-dir",
+            str(export_dir),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "paper_map.html" in result.stdout
+    assert "paper_lens.html" in result.stdout
+    assert (export_dir / "paper_map.html").exists()
+    assert (export_dir / "paper_lens.html").exists()
+    quick_brief = (export_dir / "quick_brief.md").read_text(encoding="utf-8")
+    assert "[Paper Map](paper_map.html)" in quick_brief
+    assert "[Paper Lens](paper_lens.html)" in quick_brief
 
 
 def test_write_outputs_sanitizes_private_urls_in_resource_indices(tmp_path):
@@ -1082,12 +1148,17 @@ def test_write_outputs_sanitizes_private_urls_in_resource_indices(tmp_path):
 
     write_outputs(tmp_path, profile, [resource], roadmap, {"sources": []})
 
+    assert (tmp_path / "quick_brief.md").exists()
     for target in ("resource_index.json", "local_resource_analysis.json", "roadmap.json"):
         exported = (tmp_path / target).read_text(encoding="utf-8")
         assert "C:/Users/example/private" not in exported
         assert "private folder" not in exported
         assert "file:///C:/Users/example/private" not in exported
         assert "local://private-paper" in exported
+    quick_brief = (tmp_path / "quick_brief.md").read_text(encoding="utf-8")
+    assert "C:/Users/example/private" not in quick_brief
+    assert "private folder" not in quick_brief
+    assert "file:///C:/Users/example/private" not in quick_brief
 
 
 def test_write_outputs_exports_generated_artifact_template(tmp_path):

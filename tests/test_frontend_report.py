@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fields_study_flow import frontend_report
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_mastery_worksheet_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 
 
 def test_checked_in_frontend_dist_has_package_visible_manifest():
@@ -222,6 +222,7 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "study_cards.md" in html
     assert "study_quiz.md" in html
     assert "mastery_worksheet.md" in html
+    assert "quick_brief.md" in html
     assert "C:/Users/example" not in html
 
 
@@ -301,6 +302,92 @@ def test_mastery_worksheet_markdown_has_fillable_evidence_slots_and_links():
     assert "[Attention Is All You Need](paper_lens.html#detail-seg-1)" in markdown
     assert "**My Evidence**" in markdown
     assert "C:/Users/example" not in markdown
+
+
+def test_quick_brief_markdown_summarizes_paper_logic_and_evidence():
+    markdown = render_quick_brief_markdown(
+        {
+            "title": "Learning Roadmap: Transformer",
+            "profile": {"goal": "master Transformer", "output_language": "en"},
+            "paper_map": {
+                "nodes": [
+                    {
+                        "id": "problem",
+                        "role": "core",
+                        "kind": "problem",
+                        "label": "Sequence modeling bottleneck",
+                        "plain_explanation": "The paper targets sequence modeling without recurrent bottlenecks.",
+                        "talking_point": "It asks whether attention alone can replace recurrence.",
+                        "evidence": [
+                            {
+                                "source_title": "Attention Is All You Need",
+                                "snippet": "The Transformer is based solely on attention mechanisms.",
+                                "detail_anchor": "paper_lens.html#detail-seg-1",
+                            }
+                        ],
+                    },
+                    {
+                        "id": "methodology",
+                        "role": "core",
+                        "kind": "methodology",
+                        "plain_explanation": "The method uses self-attention and feed-forward layers.",
+                    },
+                    {
+                        "id": "contribution",
+                        "role": "core",
+                        "kind": "contribution",
+                        "plain_explanation": "It shows attention-only models can be strong and parallelizable.",
+                    },
+                ]
+            },
+            "next_actions": [{"title": "Explain the main chain", "estimated_minutes": 30, "evidence": "No-notes explanation."}],
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Attention Is All You Need",
+                        "local_href": "study-assets/attention.pdf",
+                        "selected": True,
+                        "why_recommended": "Target paper.",
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "# Learning Roadmap: Transformer - 5-Minute Research Brief" in markdown
+    assert "## One-Sentence Takeaway" in markdown
+    assert "## Paper Logic Chain" in markdown
+    assert "[Attention Is All You Need](paper_lens.html#detail-seg-1)" in markdown
+    assert "[Attention Is All You Need](study-assets/attention.pdf)" in markdown
+    assert "study_quiz.md" in markdown
+    assert "C:/Users/example" not in markdown
+
+
+def test_quick_brief_field_route_uses_roadmap_start_without_paper_only_links():
+    markdown = render_quick_brief_markdown(
+        {
+            "title": "Learning Roadmap: Diffusion Models",
+            "profile": {"goal": "learn diffusion models", "output_language": "en", "target_kind": "field"},
+            "phases": [{"name": "Core Concepts", "objective": "Understand denoising score matching and sampling."}],
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Diffusion Tutorial",
+                        "href": "https://example.com/diffusion",
+                        "selected": True,
+                        "why_recommended": "Best compact overview.",
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "[Roadmap](roadmap.html)" in markdown
+    assert "paper_map.html" not in markdown
+    assert "paper_lens.html" not in markdown
+    assert "## Route at a Glance" in markdown
+    assert markdown.count("Open These Resources First") == 1
+    assert "[Diffusion Tutorial](https://example.com/diffusion)" in markdown
 
 
 def test_report_index_starter_questions_fall_back_for_field_routes():

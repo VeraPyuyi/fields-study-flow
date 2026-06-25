@@ -1353,9 +1353,12 @@ def _export(args: argparse.Namespace) -> int:
         targets.append(target)
     elif args.format in {"markdown", "svg", "html", "all"}:
         from fields_study_flow.artifact_templates import write_artifact_template
-        from fields_study_flow.frontend_report import render_mastery_worksheet_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+        from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+        from fields_study_flow.paper_lens import render_paper_lens_html
+        from fields_study_flow.paper_map import render_paper_map_html
         from fields_study_flow.roadmap import render_html, render_markdown, render_svg
 
+        frontend_asset_base = copy_frontend_assets(output_dir) if args.format in {"html", "all"} else None
         if args.format in {"markdown", "all"}:
             target = output_dir / "roadmap.md"
             target.write_text(render_markdown(data), encoding="utf-8")
@@ -1366,7 +1369,10 @@ def _export(args: argparse.Namespace) -> int:
             targets.append(target)
         if args.format in {"html", "all"}:
             target = output_dir / "roadmap.html"
-            target.write_text(render_html(data), encoding="utf-8")
+            target.write_text(
+                render_frontend_report("roadmap", data, asset_base=frontend_asset_base) if frontend_asset_base else render_html(data),
+                encoding="utf-8",
+            )
             targets.append(target)
         if args.format == "all":
             target = output_dir / "index.html"
@@ -1381,6 +1387,23 @@ def _export(args: argparse.Namespace) -> int:
             target = output_dir / "mastery_worksheet.md"
             target.write_text(render_mastery_worksheet_markdown(data), encoding="utf-8")
             targets.append(target)
+            target = output_dir / "quick_brief.md"
+            target.write_text(render_quick_brief_markdown(data), encoding="utf-8")
+            targets.append(target)
+            if data.get("paper_map"):
+                target = output_dir / "paper_map.html"
+                target.write_text(
+                    render_frontend_report("paper_map", data, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_map_html(data),
+                    encoding="utf-8",
+                )
+                targets.append(target)
+            if data.get("paper_lens"):
+                target = output_dir / "paper_lens.html"
+                target.write_text(
+                    render_frontend_report("paper_lens", data, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_lens_html(data),
+                    encoding="utf-8",
+                )
+                targets.append(target)
             target = output_dir / "roadmap.json"
             target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
             targets.append(target)

@@ -64,6 +64,7 @@ Export a generated plan:
 - `roadmap.svg`
 - `index.html`
 - `roadmap.html`
+- `quick_brief.md`
 - `study_cards.md`
 - `study_quiz.md`
 - `mastery_worksheet.md`

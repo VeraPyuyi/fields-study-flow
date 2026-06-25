@@ -3204,6 +3204,8 @@ def _portable_study_output_count(root: Path, roadmap: dict[str, Any], html: dict
         outputs += 1
     if (root / "study_quiz.md").exists() and _contains_any_text(index_html, ("study_quiz.md", "Evidence-Linked Study Quiz", "证据链接学习小测")):
         outputs += 1
+    if (root / "quick_brief.md").exists() and _contains_any_text(index_html, ("quick_brief.md", "5-Minute Research Brief", "5 分钟速读 Brief")):
+        outputs += 1
     if _contains_any_text(
         paper_map_html,
         (
@@ -3346,6 +3348,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Portable mastery evidence worksheet",
             _has_portable_mastery_worksheet(root, html.get("index.html", "") + html.get("roadmap.html", "")),
             "Write mastery_worksheet.md so explain/derive/reproduce/critique evidence can leave the browser as a reviewable artifact.",
+        ),
+        _experience_check(
+            "portable_quick_brief",
+            "Portable five-minute brief",
+            _has_portable_quick_brief(root, html.get("index.html", "")),
+            "Write quick_brief.md so learners can get a concise first-pass understanding before opening the full interactive report.",
         ),
         _experience_check(
             "support_files_progressive_disclosure",
@@ -3830,6 +3838,42 @@ def _has_portable_mastery_worksheet(root: Path, html: str) -> bool:
         content,
         ("My Evidence", "我的证据", "Evidence Slots", "证据槽"),
     )
+
+
+def _has_portable_quick_brief(root: Path, index_html: str) -> bool:
+    path = root / "quick_brief.md"
+    if not path.exists() or "quick_brief.md" not in index_html:
+        return False
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if PRIVATE_PATH_RE.search(content):
+        return False
+    if "paper_map.html" in content and not (root / "paper_map.html").exists():
+        return False
+    if "paper_lens.html" in content and not (root / "paper_lens.html").exists():
+        return False
+    has_heading = _contains_any_text(content, ("5-Minute Research Brief", "5 分钟速读 Brief"))
+    has_structure = _contains_any_text(
+        content,
+        ("Paper Logic Chain", "论文逻辑主链", "Route at a Glance", "路线速览"),
+    )
+    has_actions = "study_quiz.md" in content and "mastery_worksheet.md" in content
+    has_useful_detail = _contains_any_text(
+        content,
+        (
+            "Evidence to Open First",
+            "最该打开的证据",
+            "Next Actions",
+            "下一步动作",
+            "Open These Resources First",
+            "先打开这些资料",
+            "Route at a Glance",
+            "路线速览",
+        ),
+    )
+    return has_heading and has_structure and has_actions and has_useful_detail
 
 
 def _all_core_pages_have_check(visual_audit: dict[str, Any], check_name: str) -> bool:

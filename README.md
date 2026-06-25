@@ -36,6 +36,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Active recall check: `index.html` includes a 5-minute self-test with expandable cards that point learners back to the exact map, lens, or roadmap evidence.
 - Portable study cards: every export writes `study_cards.md`, a local active-recall card set that learners can review, print, or paste into notes without reopening the full report.
 - Evidence-linked quiz: every export also writes `study_quiz.md`, a short self-graded quiz with answer checks and evidence links for a faster "did I really understand it?" pass.
+- Quick brief: every export writes `quick_brief.md`, a one-page first-read summary with the paper logic chain, evidence links, resources, and next actions.
 - First study session plan: `index.html` now gives a 45-60 minute timeboxed loop that links Paper Map, Paper Lens, active recall, and the first mastery task so learners can start productively without planning the session themselves.
 - Action-first start page: secondary product rationale, report-health checks, alternate guidance, and bring-your-own-paper commands are collapsed behind a single disclosure so the default view stays focused on learning.
 - Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.
@@ -307,7 +308,7 @@ Available functions:
 - `validateSources`
 - `exportPlan`
 
-`exportPlan` writes JSON, Markdown, SVG, HTML, `study_cards.md`, `study_quiz.md`, `mastery_worksheet.md`, `paper_lens.html` when a target paper is present, and the `artifact_template/` package when the route needs a runnable project or reproduction checkpoint.
+`exportPlan` writes JSON, Markdown, SVG, HTML, `quick_brief.md`, `study_cards.md`, `study_quiz.md`, `mastery_worksheet.md`, `paper_lens.html` when a target paper is present, and the `artifact_template/` package when the route needs a runnable project or reproduction checkpoint.
 The template package follows the selected output language and includes paper-derived formula/code/experiment targets when available.
 
 The exporter prefers the React/Vite static frontend when `fields_study_flow/frontend_dist/manifest.json` is available, and falls back to the built-in Python HTML renderer when frontend assets are missing. The React frontend is still offline-first: no CDN, no remote fonts, and JSON data is embedded in the exported report shell.
