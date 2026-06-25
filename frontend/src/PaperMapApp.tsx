@@ -94,6 +94,28 @@ function toFlowEdges(edges: PaperMapEdge[] | undefined): Edge[] {
   }));
 }
 
+const COMPACT_VIEWPORT_QUERY = "(max-width: 720px)";
+
+function getCompactViewportMatch() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return false;
+  return window.matchMedia(COMPACT_VIEWPORT_QUERY).matches;
+}
+
+function useCompactViewport() {
+  const [isCompact, setIsCompact] = useState(() => getCompactViewportMatch());
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const query = window.matchMedia(COMPACT_VIEWPORT_QUERY);
+    const update = () => setIsCompact(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  return isCompact;
+}
+
 export function PaperMapApp({ roadmap }: { roadmap: Roadmap }) {
   const paperMap = roadmap.paper_map ?? {};
   const rawNodes = paperMap.nodes ?? [];
@@ -112,6 +134,10 @@ export function PaperMapApp({ roadmap }: { roadmap: Roadmap }) {
   const [isDragging, setIsDragging] = useState(false);
   const [isMoving, setIsMoving] = useState(false);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const compactViewport = useCompactViewport();
+  const focusedMinZoom = compactViewport ? 0.72 : 0.58;
+  const mapMinZoom = showBranches ? (compactViewport ? 0.38 : 0.3) : focusedMinZoom;
+  const mapFitPadding = showBranches ? (compactViewport ? 0.08 : 0.16) : compactViewport ? 0.01 : 0.04;
   const presentationSteps = useMemo(() => buildPresentationSteps(rawNodes), [rawNodes]);
   const presentationText = useMemo(
     () => buildPresentationText(presentationSteps, paperMap.target?.title || roadmap.title || "论文"),
@@ -235,12 +261,12 @@ export function PaperMapApp({ roadmap }: { roadmap: Roadmap }) {
       <section className="map-workspace">
         <div className="flow-shell" data-paper-map-canvas>
           <ReactFlow
-            key={showBranches ? "paper-map-expanded" : "paper-map-focus"}
+            key={`${compactViewport ? "compact" : "wide"}-${showBranches ? "expanded" : "focus"}`}
             nodes={nodes}
             edges={edges}
             fitView
-            fitViewOptions={{ padding: showBranches ? 0.18 : 0.1 }}
-            minZoom={0.25}
+            fitViewOptions={{ padding: mapFitPadding }}
+            minZoom={mapMinZoom}
             maxZoom={1.8}
             onNodeClick={(_, node) => setSelectedId(node.id)}
             onNodesChange={onNodesChange}

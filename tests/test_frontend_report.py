@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from fields_study_flow import frontend_report
 from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index
@@ -17,6 +18,35 @@ def test_checked_in_frontend_dist_has_package_visible_manifest():
     for css_file in data["index.html"].get("css", []):
         assert css_file.startswith("assets/")
         assert (frontend_report.FRONTEND_DIST_DIR / css_file).exists()
+
+
+def test_paper_map_mobile_canvas_keeps_readable_space_without_minimap_overlap():
+    css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
+
+    assert "@media (max-width: 720px)" in css
+    mobile_section = css.split("@media (max-width: 720px)", 1)[1]
+    assert ".flow-shell" in mobile_section
+    assert "min-height: 640px" in mobile_section
+    assert ".whiteboard-minimap" in mobile_section
+    assert "display: none" in mobile_section
+    assert ".density-control" in mobile_section
+    assert "max-width: calc(100vw - 42px)" in mobile_section
+
+
+def test_checked_in_frontend_dist_references_existing_built_assets():
+    manifest = json.loads((frontend_report.FRONTEND_DIST_DIR / "manifest.json").read_text(encoding="utf-8"))
+    entry = manifest["index.html"]
+
+    assert (frontend_report.FRONTEND_DIST_DIR / entry["file"]).exists()
+    css_payloads = []
+    for css_file in entry.get("css", []):
+        css_path = frontend_report.FRONTEND_DIST_DIR / css_file
+        assert css_path.exists()
+        css_payloads.append(css_path.read_text(encoding="utf-8"))
+
+    normalized_css = "".join(css_payloads).replace(" ", "")
+    assert "@media(max-width:720px)" in normalized_css
+    assert ".whiteboard-minimap{display:none}" in normalized_css
 
 
 def test_frontend_report_shell_copies_assets_and_embeds_payload(tmp_path, monkeypatch):
