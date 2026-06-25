@@ -94,6 +94,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     intent_router_html = _intent_router_panel_html(safe_roadmap, is_zh)
     market_value_html = _market_value_panel_html(safe_roadmap, is_zh)
     recommended_action_html = _recommended_action_panel_html(safe_roadmap, is_zh)
+    first_session_html = _first_session_plan_panel_html(safe_roadmap, is_zh)
     outcome_contract_html = _learning_outcome_contract_panel_html(safe_roadmap, is_zh)
     learning_guide_html = _learning_guide_panel_html(safe_roadmap, is_zh)
     active_recall_html = _active_recall_panel_html(safe_roadmap, is_zh)
@@ -244,6 +245,16 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       background: rgba(255, 255, 255, 0.78);
       box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
     }}
+    .session-plan-panel {{
+      margin: 0 0 18px;
+      border: 1px solid rgba(47, 111, 115, 0.18);
+      border-radius: 24px;
+      padding: 18px;
+      background:
+        linear-gradient(135deg, rgba(47, 111, 115, 0.09), transparent 42%),
+        rgba(255, 255, 255, 0.80);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
     .intent-router-panel {{
       margin: 0 0 18px;
       border: 1px solid var(--line);
@@ -280,6 +291,13 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       align-items: start;
       margin-bottom: 14px;
     }}
+    .session-plan-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
     .quickstart-panel h2 {{
       margin: 0;
       font-size: clamp(1.15rem, 2vw, 1.55rem);
@@ -304,6 +322,12 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       line-height: 1.22;
       overflow-wrap: anywhere;
     }}
+    .session-plan-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
     .quickstart-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
@@ -320,6 +344,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       overflow-wrap: anywhere;
     }}
     .active-recall-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .session-plan-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
       overflow-wrap: anywhere;
@@ -354,6 +383,61 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 10px;
+    }}
+    .session-plan-list {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .session-step {{
+      display: flex;
+      flex-direction: column;
+      min-height: 168px;
+      border: 1px solid rgba(47, 111, 115, 0.16);
+      border-radius: 18px;
+      padding: 14px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.68);
+      text-decoration: none;
+      transition: transform 0.16s ease, border-color 0.16s ease, box-shadow 0.16s ease;
+    }}
+    .session-step:hover, .session-step:focus-visible {{
+      transform: translateY(-2px);
+      border-color: rgba(47, 111, 115, 0.42);
+      box-shadow: 0 14px 32px rgba(47, 42, 35, 0.10);
+      outline: none;
+    }}
+    .session-step time {{
+      width: fit-content;
+      border: 1px solid rgba(47, 111, 115, 0.18);
+      border-radius: 999px;
+      padding: 4px 9px;
+      color: var(--accent);
+      background: rgba(47, 111, 115, 0.08);
+      font-size: 0.78rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }}
+    .session-step strong {{
+      margin-top: 10px;
+      font-size: 1rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }}
+    .session-step span {{
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.9rem;
+      line-height: 1.55;
+      overflow-wrap: anywhere;
+    }}
+    .session-step em {{
+      margin-top: auto;
+      color: var(--accent-2);
+      font-size: 0.82rem;
+      font-style: normal;
+      font-weight: 800;
+      overflow-wrap: anywhere;
     }}
     .quickstart-steps a, .quickstart-steps span {{
       display: block;
@@ -1023,12 +1107,13 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .active-recall-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .active-recall-grid, .session-plan-list, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
       .learning-guide-panel header {{ display: block; }}
       .active-recall-panel header {{ display: block; }}
+      .session-plan-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
       .market-value-panel header {{ display: block; }}
       .recommended-action-panel header {{ display: block; }}
@@ -1059,6 +1144,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     </section>
     {market_value_html}
     {recommended_action_html}
+    {first_session_html}
     {outcome_contract_html}
     {learning_guide_html}
     {active_recall_html}
@@ -1402,6 +1488,139 @@ def _learning_guide_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
         {cards}
       </div>
     </section>"""
+
+
+def _first_session_plan_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    steps = _first_session_steps(roadmap, is_zh)
+    total_minutes = sum(int(step["minutes"]) for step in steps)
+    title = "第一轮学习会话" if is_zh else "First study session"
+    body = (
+        "如果只想立刻开始，按这条时间盒走一遍：先抓主线，再读证据，再闭卷回忆，最后留下一个可验收结果。"
+        if is_zh
+        else "If you want to start immediately, follow this timebox: map the logic, read evidence, recall from memory, then leave one checkable result."
+    )
+    badge = f"约 {total_minutes} 分钟" if is_zh else f"about {total_minutes} min"
+    step_html = "\n".join(_session_step_card_html(step, is_zh) for step in steps)
+    return f"""<section class="session-plan-panel" data-first-session-plan="true" aria-labelledby="first-session-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('今日开始' if is_zh else 'Start today')}</p>
+          <h2 id="first-session-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="quickstart-badge">{escape(badge)}</span>
+      </header>
+      <div class="session-plan-list">
+        {step_html}
+      </div>
+    </section>"""
+
+
+def _first_session_steps(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, str | int]]:
+    has_map = bool(roadmap.get("paper_map"))
+    has_lens = bool(roadmap.get("paper_lens"))
+    profile = roadmap.get("profile", {}) if isinstance(roadmap.get("profile"), dict) else {}
+    target_kind = str(profile.get("target_kind") or roadmap.get("target_kind") or "").lower()
+    is_field_route = target_kind in {"field", "course"}
+    is_paper = bool(has_map or has_lens) and not is_field_route
+    if is_paper:
+        map_href = "paper_map.html" if has_map else "roadmap.html"
+        lens_href = "paper_lens.html" if has_lens else map_href
+        return [
+            {
+                "id": "session-paper-map",
+                "minutes": 6,
+                "href": map_href,
+                "title": "先看论文主链" if is_zh else "Map the paper chain",
+                "body": "只看背景、动机、问题、方法、实验、贡献、局限怎么连。"
+                if is_zh
+                else "Read only how background, motivation, problem, method, experiments, contributions, and limits connect.",
+                "cta": "打开逻辑图" if is_zh else "Open map",
+            },
+            {
+                "id": "session-paper-evidence",
+                "minutes": 14,
+                "href": lens_href,
+                "title": "读一段关键证据" if is_zh else "Read one evidence paragraph",
+                "body": "挑一个方法或实验段落，确认解释不是凭感觉。"
+                if is_zh
+                else "Pick one method or experiment paragraph and ground the explanation in evidence.",
+                "cta": "进入精读" if is_zh else "Read lens",
+            },
+            {
+                "id": "session-recall",
+                "minutes": 8,
+                "href": "#active-recall-title",
+                "title": "闭卷主动回忆" if is_zh else "Recall without notes",
+                "body": "先回答小卡片，再回页面找证据修正答案。"
+                if is_zh
+                else "Answer the recall cards first, then reopen evidence to correct your answer.",
+                "cta": "做小测" if is_zh else "Try recall",
+            },
+            {
+                "id": "session-mastery-task",
+                "minutes": 22,
+                "href": "roadmap.html",
+                "title": "完成一个验收任务" if is_zh else "Finish one mastery task",
+                "body": "留下解释、推导、复现或批判中的一个可检查证据。"
+                if is_zh
+                else "Leave one checkable explain, derive, reproduce, or critique artifact.",
+                "cta": "打开任务" if is_zh else "Open tasks",
+            },
+        ]
+    return [
+        {
+            "id": "session-prereq-scan",
+            "minutes": 10,
+            "href": "roadmap.html",
+            "title": "扫一遍前置知识" if is_zh else "Scan prerequisites",
+            "body": "只补会缩短路线的前置知识，不重学整门课。"
+            if is_zh
+            else "Fill only prerequisites that shorten the route, not a whole course.",
+            "cta": "看路线" if is_zh else "Open route",
+        },
+        {
+            "id": "session-core-resource",
+            "minutes": 20,
+            "href": "roadmap.html",
+            "title": "读第一份核心资料" if is_zh else "Read the first core resource",
+            "body": "优先选择证据强、覆盖目标概念、能本地打开的资料。"
+            if is_zh
+            else "Start with the resource that is evidence-backed, target-covering, and locally available.",
+            "cta": "看资料" if is_zh else "Open resources",
+        },
+        {
+            "id": "session-route-recall",
+            "minutes": 10,
+            "href": "#active-recall-title",
+            "title": "闭卷说出结构" if is_zh else "Recall the structure",
+            "body": "说清概念、资料、任务和验收之间的关系。"
+            if is_zh
+            else "Explain how concepts, resources, tasks, and assessments connect.",
+            "cta": "做小测" if is_zh else "Try recall",
+        },
+        {
+            "id": "session-route-artifact",
+            "minutes": 20,
+            "href": "roadmap.html",
+            "title": "定义今天的产出" if is_zh else "Define today's artifact",
+            "body": "把学习落到项目、综述、复现日志或验收清单上。"
+            if is_zh
+            else "Turn learning into a project, survey, reproduction log, or checklist.",
+            "cta": "看验收" if is_zh else "Open validation",
+        },
+    ]
+
+
+def _session_step_card_html(step: dict[str, str | int], is_zh: bool) -> str:
+    minutes = int(step["minutes"])
+    time_text = f"{minutes} 分钟" if is_zh else f"{minutes} min"
+    return f"""<a class="session-step" data-session-step="{escape(str(step["id"]))}" href="{escape(str(step["href"]))}">
+          <time>{escape(time_text)}</time>
+          <strong>{escape(str(step["title"]))}</strong>
+          <span>{escape(str(step["body"]))}</span>
+          <em>{escape(str(step["cta"]))}</em>
+        </a>"""
 
 
 def _starter_questions(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, str]]:

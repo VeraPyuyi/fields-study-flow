@@ -168,6 +168,16 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert 'data-recall-card="recall-method"' in html
     assert 'data-recall-card="recall-experiment"' in html
     assert 'data-recall-card="recall-limits"' in html
+    assert 'data-first-session-plan="true"' in html
+    assert 'data-session-step="session-paper-map"' in html
+    assert 'data-session-step="session-paper-evidence"' in html
+    assert 'data-session-step="session-recall"' in html
+    assert 'data-session-step="session-mastery-task"' in html
+    session_html = html.split('data-first-session-plan="true"', 1)[1].split("</section>", 1)[0]
+    assert 'href="paper_map.html"' in session_html
+    assert 'href="paper_lens.html"' in session_html
+    assert 'href="roadmap.html"' in session_html
+    assert session_html.index("paper_map.html") < session_html.index("paper_lens.html") < session_html.index("roadmap.html")
     assert "<details" in html
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
@@ -215,10 +225,35 @@ def test_report_index_starter_questions_fall_back_for_field_routes():
     assert 'data-recall-card="recall-core-concept"' in html
     assert 'data-recall-card="recall-resource"' in html
     assert 'data-recall-card="recall-artifact"' in html
+    assert 'data-first-session-plan="true"' in html
+    assert 'data-session-step="session-prereq-scan"' in html
+    assert 'data-session-step="session-core-resource"' in html
+    assert 'data-session-step="session-route-recall"' in html
+    assert 'data-session-step="session-route-artifact"' in html
     assert "3 starter questions" in html
     assert "5-minute active recall" in html
     assert "fields-study-flow ask --roadmap roadmap.json" in html
-    assert "paper_lens.html" not in html
+    session_html = html.split('data-first-session-plan="true"', 1)[1].split("</section>", 1)[0]
+    assert "paper_lens.html" not in session_html
+
+
+def test_report_index_field_routes_ignore_incidental_paper_lens_for_first_session():
+    html = render_report_index(
+        {
+            "title": "Diffusion field route",
+            "profile": {"goal": "learn diffusion models", "output_language": "en", "target_kind": "field"},
+            "path_strategy": {"estimated_total_time": "6h", "selected_resources": 5},
+            "paper_lens": {"segments": [{"id": "seg-1"}]},
+            "phases": [{"name": "Prerequisites"}],
+        }
+    )
+
+    session_html = html.split('data-first-session-plan="true"', 1)[1].split("</section>", 1)[0]
+    assert 'data-session-step="session-prereq-scan"' in session_html
+    assert 'data-session-step="session-core-resource"' in session_html
+    assert 'data-session-step="session-route-recall"' in session_html
+    assert 'data-session-step="session-route-artifact"' in session_html
+    assert "paper_lens.html" not in session_html
 
 
 def test_report_index_surfaces_quality_health_status_for_new_users():

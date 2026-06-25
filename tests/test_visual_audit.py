@@ -1610,7 +1610,7 @@ def test_cli_audit_report_capture_screenshots_degrades_without_browser_runtime(t
 
 def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence paper_map.html paper_lens.html roadmap.html Local assets",
+        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence paper_map.html paper_lens.html roadmap.html Local assets",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
             "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据",
@@ -1692,6 +1692,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
         "learning_outcome_contract",
         "starter_questions_panel",
         "active_recall_self_check",
+        "first_session_plan",
         "support_files_progressive_disclosure",
         "report_health_evidence_summary",
         "resource_local_first",
@@ -1874,8 +1875,62 @@ def test_experience_warnings_prevent_market_ready_status(tmp_path):
     audit = build_report_audit(tmp_path, roadmap)
 
     assert audit["experience_risks"]["status"] == "warn"
+    assert any(item["id"] == "first_session_plan" and item["status"] == "warn" for item in audit["experience_risks"]["checks"])
     assert audit["market_readiness"]["status"] == "needs_improvement"
     assert audit["market_readiness"]["score"] < 100
+
+
+def test_first_session_plan_requires_panel_and_multiple_steps(tmp_path):
+    for name, marker in {
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence",
+        "paper_map.html": "Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback=\"paper_map\" data-paper-map-canvas react-flow Download presentation notes",
+        "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
+        "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
+    }.items():
+        (tmp_path / name).write_text(
+            '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+            "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}.flow-shell{min-height:520px}@media (max-width: 820px){body{max-width:100%}}</style></head>"
+            f"<body>{marker}</body></html>",
+            encoding="utf-8",
+        )
+    roadmap = {
+        "profile": {"output_language": "en"},
+        "paper_map": {"nodes": [{"id": "background"}, {"id": "method"}]},
+        "paper_lens": {
+            "segments": [{"id": "seg-1"}],
+            "inline_explanations": [
+                {"plain_meaning": "This paragraph explains the target paper motivation.", "confidence": 0.82},
+                {"plain_meaning": "This paragraph explains the target paper method.", "confidence": 0.78},
+            ],
+        },
+        "study_tasks": [
+            {"type": "explain"},
+            {"type": "derive"},
+            {"type": "reproduce"},
+            {"type": "critique"},
+        ],
+        "mastery_evidence": {"required_evidence": [{"task_id": "task-1"}, {"task_id": "task-2"}]},
+        "knowledge_graph": {"summary": {"edges": 12, "evidence_backed_edges": 5}},
+        "study_bundle": {"resources": [{"title": "Paper", "local_href": "assets/paper.pdf", "status": "downloaded"}]},
+        "resource_library": [
+            {
+                "title": "Target paper",
+                "metadata": {
+                    "rag": {
+                        "evidence_chunks": [
+                            {"snippet": "Target-paper evidence supports this resource.", "detail_anchor": "detail-seg-1", "score": 2.4}
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+
+    audit = build_report_audit(tmp_path, roadmap)
+    checks = {item["id"]: item for item in audit["experience_risks"]["checks"]}
+
+    assert checks["first_session_plan"]["status"] == "warn"
+    assert audit["market_readiness"]["status"] == "needs_improvement"
 
 
 def test_sparse_roadmap_requires_route_recovery_next_steps(tmp_path):
@@ -2079,7 +2134,7 @@ def test_experience_risks_require_market_value_panel_on_start_page(tmp_path):
 
 def test_viewport_warnings_prevent_market_ready_status(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health Evidence coverage 4 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health Evidence coverage 4 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence",
         "roadmap.html": "learning console mastery",
@@ -2120,7 +2175,7 @@ def test_viewport_warnings_prevent_market_ready_status(tmp_path):
 
 def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
@@ -2254,7 +2309,7 @@ def test_competitive_benchmark_requires_contextual_paper_lens_explanations(tmp_p
 
 def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health Evidence coverage 4 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health Evidence coverage 4 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
     }.items():
         (tmp_path / name).write_text(

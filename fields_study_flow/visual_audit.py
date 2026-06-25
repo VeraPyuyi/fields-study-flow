@@ -3286,6 +3286,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Show one explicit recommended first click so new users do not need to compare every report surface before starting.",
         ),
         _experience_check(
+            "first_session_plan",
+            "First session plan",
+            _has_first_session_plan(html.get("index.html", "")),
+            "Show a timeboxed first study session that turns the first report visit into a concrete learning loop.",
+        ),
+        _experience_check(
             "learning_outcome_contract",
             "Learning outcome contract",
             _contains_any_text(
@@ -3700,6 +3706,12 @@ def _read_text(path: Path) -> str:
 
 def _contains_any_text(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
+
+
+def _has_first_session_plan(index_html: str) -> bool:
+    if "data-first-session-plan" not in index_html:
+        return False
+    return index_html.count("data-session-step=") >= 4
 
 
 def _all_core_pages_have_check(visual_audit: dict[str, Any], check_name: str) -> bool:
