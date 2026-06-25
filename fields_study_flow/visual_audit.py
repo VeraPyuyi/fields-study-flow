@@ -1191,7 +1191,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
     else:
         decision = "ship"
         status = "pass"
-    return {
+    summary = {
         "status": status,
         "decision": decision,
         "score": int(market.get("score") or 0),
@@ -1215,6 +1215,84 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
         "next_actions": _release_next_actions(market, benchmark, trend, timing, snapshot, baseline, interaction, sample_matrix),
         "trends": [item for item in trend.get("trends", []) if isinstance(item, dict)],
     }
+    summary["market_positioning"] = _market_positioning_matrix(summary)
+    return summary
+
+
+def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
+    """Translate competitor lessons into current product proof requirements."""
+
+    evidence_signal = _dimension_signal(summary, "learning_depth", "plain_explanation")
+    navigation_signal = _dimension_signal(summary, "onboarding", "visual_polish")
+    canvas_signal = _release_status_signal(summary.get("interaction_status")) or _benchmark_signal(summary, "xyflow_canvas_affordance")
+    bundle_signal = _dimension_signal(summary, "resource_completeness")
+    mastery_signal = _dimension_signal(summary, "actionability", "mastery_actionability")
+    matrix_signal = _release_status_signal(summary.get("market_sample_matrix_status"))
+    return [
+        {
+            "competitor": "Elicit / systematic review AI",
+            "source_url": "https://elicit.com/",
+            "strength": "Large-scale paper search, structured research reports, extraction tables, sentence-level citations.",
+            "gap": "Optimized for evidence review, not for turning one target paper into a shortest mastery path with runnable validation.",
+            "wedge": "Keep the target paper at the center and connect every resource to explain, derive, reproduce, and critique tasks.",
+            "current_evidence": evidence_signal,
+            "next_proof": "Show source-backed Paper Map nodes plus local resources for every mastery task.",
+        },
+        {
+            "competitor": "PaperQA2 / scientific RAG",
+            "source_url": "https://github.com/Future-House/paper-qa",
+            "strength": "High-accuracy RAG over scientific documents with cited answers and metadata-aware retrieval.",
+            "gap": "Answers questions well, but does not package a visual learning route, study bundle, and mastery artifact by default.",
+            "wedge": "Use RAG as evidence infrastructure, then render a learner-facing logic map, paragraph lens, and exportable evidence checklist.",
+            "current_evidence": evidence_signal,
+            "next_proof": "Keep chunk citations visible in Paper Lens, roadmap resources, and generated artifacts.",
+        },
+        {
+            "competitor": "Explainpaper / passage explanations",
+            "source_url": "https://www.explainpaper.com/",
+            "strength": "Highlight confusing paper text and get context-aware explanations in many languages.",
+            "gap": "Great for local confusion, weaker for showing the whole paper's causal logic and final mastery proof.",
+            "wedge": "Pair paragraph explanations with Paper Map causal nodes and a concrete report/reproduction checklist.",
+            "current_evidence": evidence_signal,
+            "next_proof": "Verify paragraph explanations are non-repetitive, language-aware, and linked to map nodes.",
+        },
+        {
+            "competitor": "roadmap.sh / visual learning paths",
+            "source_url": "https://github.com/nilbuild/developer-roadmap",
+            "strength": "Interactive roadmaps make a broad topic scannable and give learners a clear first click.",
+            "gap": "Generic routes are not automatically grounded in the user's target paper, local files, or evidence snippets.",
+            "wedge": "Generate route structure from the paper/resources and prove coverage with a cross-scenario sample matrix.",
+            "current_evidence": f"{navigation_signal}; matrix={matrix_signal}",
+            "next_proof": "Keep single-paper, paper-set, and field/course samples market-ready in one command.",
+        },
+        {
+            "competitor": "React Flow / xyflow canvas standard",
+            "source_url": "https://github.com/xyflow/xyflow",
+            "strength": "Mature pan, zoom, drag, node UI, and customization patterns for graph-based products.",
+            "gap": "It is an interaction library, not a learning product or evidence pipeline.",
+            "wedge": "Adopt strong canvas affordances while keeping semantic learning nodes, evidence, tasks, and local resources attached.",
+            "current_evidence": canvas_signal,
+            "next_proof": "Run browser interaction probes for drag, zoom, branch toggle, and detail-panel updates.",
+        },
+        {
+            "competitor": "Get It / measurable mastery map",
+            "source_url": "https://github.com/beltromatti/get-it",
+            "strength": "PDF-centered mastery map with concept scores, visualizations, flashcards, quizzes, and Feynman-style proof.",
+            "gap": "Focused on a desktop study loop; less emphasis on multi-source literature discovery and field/course route export.",
+            "wedge": "Compete on source discovery, local bundles, paper-set comparison, and portable report artifacts while preserving mastery proof.",
+            "current_evidence": mastery_signal,
+            "next_proof": "Add stronger learner progress evidence and keep generated worksheets/export artifacts easy to use.",
+        },
+        {
+            "competitor": "Litmaps / ResearchRabbit literature maps",
+            "source_url": "https://www.litmaps.com/",
+            "strength": "Visual discovery maps help researchers see related work, gaps, and citation neighborhoods.",
+            "gap": "Discovery graphs can become detached from what the learner must read, explain, derive, or reproduce next.",
+            "wedge": "Attach discovered papers to the target paper logic and only promote resources that shorten the mastery route.",
+            "current_evidence": bundle_signal,
+            "next_proof": "Show strongest evidence snippets and local-first links for selected and supplemental resources.",
+        },
+    ]
 
 
 def _release_next_actions(
@@ -1282,6 +1360,7 @@ def _release_next_actions(
 
 
 def _release_readiness_markdown(summary: dict[str, Any]) -> str:
+    positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
     rows = [
         "# Release Readiness Dashboard",
         "",
@@ -1313,9 +1392,32 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
         f"| Local-first study bundle | Resources should open locally when possible, with links as fallback. | {_dimension_signal(summary, 'resource_completeness')} |",
         f"| Mastery proof | Understanding should end in explain/derive/reproduce/critique evidence. | {_dimension_signal(summary, 'actionability', 'mastery_actionability')} |",
         "",
-        "## Next Actions",
+        "## Market Positioning Matrix",
         "",
+        "| Competitor / category | What users like | Their gap | fields-study-flow wedge | Current evidence | Next proof |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
+    for item in positioning:
+        source = str(item.get("source_url") or "")
+        competitor = str(item.get("competitor") or "Unknown")
+        competitor_cell = f"[{competitor}]({source})" if source else competitor
+        rows.append(
+            "| {competitor} | {strength} | {gap} | {wedge} | {evidence} | {next_proof} |".format(
+                competitor=_markdown_cell(competitor_cell),
+                strength=_markdown_cell(_sanitize_public_text(str(item.get("strength") or ""))),
+                gap=_markdown_cell(_sanitize_public_text(str(item.get("gap") or ""))),
+                wedge=_markdown_cell(_sanitize_public_text(str(item.get("wedge") or ""))),
+                evidence=_markdown_cell(_sanitize_public_text(str(item.get("current_evidence") or ""))),
+                next_proof=_markdown_cell(_sanitize_public_text(str(item.get("next_proof") or ""))),
+            )
+        )
+    rows.extend(
+        [
+            "",
+            "## Next Actions",
+            "",
+        ]
+    )
     actions = summary.get("next_actions", [])
     if actions:
         rows.extend(f"- {_markdown_cell(_sanitize_public_text(str(action)))}" for action in actions)
@@ -1391,6 +1493,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     ]
     actions = summary.get("next_actions", [])
     trends = summary.get("trends", [])
+    positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
     action_items = "".join(f"<li>{_html_escape(_sanitize_public_text(str(action)))}</li>" for action in actions) or "<li>No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.</li>"
     sample_matrix_summary = summary.get("market_sample_matrix_summary") if isinstance(summary.get("market_sample_matrix_summary"), dict) else {}
     sample_matrix_html = ""
@@ -1449,6 +1552,43 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
         )
         for name, purpose, signal in gate_rows
     )
+    positioning_rows = "".join(
+        """
+        <tr>
+          <td><a href="{source}">{competitor}</a></td>
+          <td>{strength}</td>
+          <td>{gap}</td>
+          <td>{wedge}</td>
+          <td>{evidence}</td>
+          <td>{next_proof}</td>
+        </tr>
+        """.format(
+            source=_html_escape(_sanitize_public_text(str(item.get("source_url") or "#"))),
+            competitor=_html_escape(_sanitize_public_text(str(item.get("competitor") or "Unknown"))),
+            strength=_html_escape(_sanitize_public_text(str(item.get("strength") or ""))),
+            gap=_html_escape(_sanitize_public_text(str(item.get("gap") or ""))),
+            wedge=_html_escape(_sanitize_public_text(str(item.get("wedge") or ""))),
+            evidence=_html_escape(_sanitize_public_text(str(item.get("current_evidence") or ""))),
+            next_proof=_html_escape(_sanitize_public_text(str(item.get("next_proof") or ""))),
+        )
+        for item in positioning
+    )
+    positioning_html = (
+        f"""
+        <section class="panel" data-market-positioning>
+          <h2>Market Positioning Matrix / 市场定位矩阵</h2>
+          <p class="panel-note">A compact competitor landscape that turns external product lessons into current evidence and next proof for this report.</p>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Competitor / category</th><th>What users like</th><th>Their gap</th><th>fields-study-flow wedge</th><th>Current evidence</th><th>Next proof</th></tr></thead>
+              <tbody>{positioning_rows}</tbody>
+            </table>
+          </div>
+        </section>
+        """
+        if positioning_rows
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -1478,6 +1618,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     .status-grid span {{ display:block; color:var(--muted); font-size:.85rem; }}
     .status-grid strong {{ display:block; margin-top:4px; font-size:1.02rem; }}
     .panel {{ margin-top:18px; padding:22px; }}
+    .panel-note {{ color:var(--muted); max-width:78ch; }}
     .gate-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; }}
     .gate-card {{ min-width:0; border:1px solid var(--line); border-radius:18px; padding:16px; background:#fff; }}
     .gate-card p {{ color:var(--muted); }}
@@ -1511,6 +1652,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
       <h2>Competitor-Inspired Gates / 竞品启发门槛</h2>
       <div class="gate-grid">{gate_cards}</div>
     </section>
+    {positioning_html}
     <section class="panel">
       <h2>Next Actions / 下一步</h2>
       <ol class="actions">{action_items}</ol>

@@ -543,9 +543,16 @@ def test_write_release_readiness_report_uses_market_sample_matrix(tmp_path):
     assert result["status"] == "warn"
     assert result["summary"]["decision"] == "needs_work"
     assert result["summary"]["market_sample_matrix_status"] == "warn"
+    assert any(item["competitor"] == "PaperQA2 / scientific RAG" for item in result["summary"]["market_positioning"])
     assert any("paper-set" in action for action in result["summary"]["next_actions"])
     text = (tmp_path / "release_readiness.md").read_text(encoding="utf-8")
     html = (tmp_path / "release_readiness.html").read_text(encoding="utf-8")
+    assert "Market Positioning Matrix" in text
+    assert "PaperQA2 / scientific RAG" in text
+    assert "Get It / measurable mastery map" in text
+    assert "data-market-positioning" in html
+    assert "Market Positioning Matrix" in html
+    assert "Elicit / systematic review AI" in html
     assert "Market Sample Matrix" in text
     assert "paper-set" in text
     assert "Market Sample Matrix" in html
