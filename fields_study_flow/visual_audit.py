@@ -3299,6 +3299,15 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Make the expected learning outputs explicit: explain, derive, reproduce, and critique should feel like concrete deliverables, not hidden implementation details.",
         ),
         _experience_check(
+            "starter_questions_panel",
+            "Starter questions panel",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("data-learning-guide-panel", "三问上手", "3 starter questions", "data-starter-question", "fields-study-flow ask"),
+            ),
+            "Give new learners a small set of source-grounded starter questions so they can begin studying without learning the whole interface first.",
+        ),
+        _experience_check(
             "support_files_progressive_disclosure",
             "Support files progressive disclosure",
             ("support-panel" not in html.get("index.html", ""))

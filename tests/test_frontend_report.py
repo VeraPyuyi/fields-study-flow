@@ -158,6 +158,11 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert 'data-outcome="critique"' in html
     assert "3 分钟讲明白论文主线" in html
     assert "留下最小复现实验记录" in html
+    assert 'data-learning-guide-panel="starter-questions"' in html
+    assert 'data-starter-question="paper-main-chain"' in html
+    assert 'data-starter-question="paper-core-evidence"' in html
+    assert 'data-starter-question="paper-mastery-proof"' in html
+    assert "fields-study-flow ask --roadmap roadmap.json" in html
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
     assert 'data-fresh-user-flow="first-10-minutes"' in html
@@ -183,6 +188,25 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "需要原始数据或导出文件时再展开" in html
     assert "roadmap.json" in html
     assert "C:/Users/example" not in html
+
+
+def test_report_index_starter_questions_fall_back_for_field_routes():
+    html = render_report_index(
+        {
+            "title": "Diffusion field route",
+            "profile": {"goal": "learn diffusion models", "output_language": "en", "target_kind": "field"},
+            "path_strategy": {"estimated_total_time": "6h", "selected_resources": 5},
+            "phases": [{"name": "Prerequisites"}],
+        }
+    )
+
+    assert 'data-learning-guide-panel="starter-questions"' in html
+    assert 'data-starter-question="route-prerequisites"' in html
+    assert 'data-starter-question="route-resource-priority"' in html
+    assert 'data-starter-question="route-final-artifact"' in html
+    assert "3 starter questions" in html
+    assert "fields-study-flow ask --roadmap roadmap.json" in html
+    assert "paper_lens.html" not in html
 
 
 def test_report_index_surfaces_quality_health_status_for_new_users():

@@ -95,6 +95,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     market_value_html = _market_value_panel_html(safe_roadmap, is_zh)
     recommended_action_html = _recommended_action_panel_html(safe_roadmap, is_zh)
     outcome_contract_html = _learning_outcome_contract_panel_html(safe_roadmap, is_zh)
+    learning_guide_html = _learning_guide_panel_html(safe_roadmap, is_zh)
     heading = "从这里开始" if is_zh else "Start Here"
     subtitle = (
         "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
@@ -226,6 +227,14 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       background: rgba(255, 255, 255, 0.76);
       box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
     }}
+    .learning-guide-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
     .intent-router-panel {{
       margin: 0 0 18px;
       border: 1px solid var(--line);
@@ -248,6 +257,13 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       align-items: start;
       margin-bottom: 14px;
     }}
+    .learning-guide-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
     .quickstart-panel h2 {{
       margin: 0;
       font-size: clamp(1.15rem, 2vw, 1.55rem);
@@ -260,12 +276,23 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       line-height: 1.22;
       overflow-wrap: anywhere;
     }}
+    .learning-guide-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
     .quickstart-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
       overflow-wrap: anywhere;
     }}
     .intent-router-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .learning-guide-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
       overflow-wrap: anywhere;
@@ -287,6 +314,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       gap: 10px;
     }}
     .intent-router-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .learning-guide-grid {{
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
@@ -315,6 +347,16 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       overflow-wrap: anywhere;
       transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
     }}
+    .learning-question-card {{
+      display: grid;
+      gap: 7px;
+      min-height: 150px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.64);
+      overflow-wrap: anywhere;
+    }}
     .quickstart-steps a:hover, .quickstart-steps a:focus-visible {{
       border-color: rgba(47, 111, 115, 0.42);
       outline: none;
@@ -325,6 +367,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       background: rgba(255, 255, 255, 0.86);
       outline: none;
     }}
+    .learning-question-card a {{
+      color: var(--accent);
+      font-weight: 800;
+      text-decoration: none;
+    }}
     .quickstart-steps small {{
       display: block;
       color: var(--accent-2);
@@ -332,6 +379,10 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     .intent-card small {{
       color: var(--accent);
+      font-weight: 900;
+    }}
+    .learning-question-card small {{
+      color: var(--accent-2);
       font-weight: 900;
     }}
     .quickstart-steps strong {{
@@ -343,6 +394,24 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       display: block;
       font-size: 1rem;
       line-height: 1.28;
+    }}
+    .learning-question-card strong {{
+      display: block;
+      font-size: 1rem;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }}
+    .learning-question-card code {{
+      display: block;
+      border: 1px solid rgba(47, 111, 115, 0.16);
+      border-radius: 12px;
+      padding: 8px;
+      color: #2d4f52;
+      background: rgba(47, 111, 115, 0.07);
+      white-space: normal;
+      overflow-wrap: anywhere;
+      font-size: 0.82rem;
+      line-height: 1.45;
     }}
     .intent-card em {{
       align-self: end;
@@ -876,10 +945,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
+      .learning-guide-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
       .market-value-panel header {{ display: block; }}
       .recommended-action-panel header {{ display: block; }}
@@ -911,6 +981,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     {market_value_html}
     {recommended_action_html}
     {outcome_contract_html}
+    {learning_guide_html}
     {quickstart_html}
     {intent_router_html}
     {health_html}
@@ -1226,6 +1297,103 @@ def _learning_outcome_contract_panel_html(roadmap: dict[str, Any], is_zh: bool) 
         {proof_html}
       </div>
     </section>"""
+
+
+def _learning_guide_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    title = "三问上手" if is_zh else "3 starter questions"
+    body = (
+        "不想先研究界面时，直接按这三个问题读。每个问题都指向一个页面，也给出本地资料包问答命令。"
+        if is_zh
+        else "If you do not want to learn the interface first, start with these questions. Each one points to a page and a local-bundle Q&A command."
+    )
+    badge = "像导师一样开场" if is_zh else "guided start"
+    questions = _starter_questions(roadmap, is_zh)
+    cards = "\n".join(_starter_question_card_html(item, is_zh) for item in questions)
+    return f"""<section class="learning-guide-panel" data-learning-guide-panel="starter-questions" aria-labelledby="learning-guide-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('学习向导' if is_zh else 'Learning guide')}</p>
+          <h2 id="learning-guide-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="quickstart-badge">{escape(badge)}</span>
+      </header>
+      <div class="learning-guide-grid">
+        {cards}
+      </div>
+    </section>"""
+
+
+def _starter_questions(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, str]]:
+    has_map = bool(roadmap.get("paper_map"))
+    has_lens = bool(roadmap.get("paper_lens"))
+    is_paper = bool(has_map or has_lens)
+    if is_paper:
+        main_href = "paper_map.html" if has_map else "roadmap.html"
+        evidence_href = "paper_lens.html" if has_lens else main_href
+        return [
+            {
+                "id": "paper-main-chain",
+                "label": "01",
+                "href": main_href,
+                "question": "这篇论文的主线到底是什么？" if is_zh else "What is the paper's main logic chain?",
+                "hint": "先看背景、动机、问题、方法、实验、贡献和局限如何连起来。" if is_zh else "Start with how background, motivation, problem, method, experiments, contributions, and limits connect.",
+                "ask": "这篇论文在解决什么问题？请用一句话说明主线。" if is_zh else "What problem does this paper solve? Explain the main chain in one sentence.",
+            },
+            {
+                "id": "paper-core-evidence",
+                "label": "02",
+                "href": evidence_href,
+                "question": "核心方法为什么可能有效？证据在哪里？" if is_zh else "Why might the core method work, and where is the evidence?",
+                "hint": "用段落精读和证据片段确认关键方法不是凭感觉理解。" if is_zh else "Use paragraph reading and evidence snippets so the method is not understood by intuition alone.",
+                "ask": "哪些原文证据支撑这篇论文的核心方法？" if is_zh else "Which source evidence supports the paper's core method?",
+            },
+            {
+                "id": "paper-mastery-proof",
+                "label": "03",
+                "href": "roadmap.html",
+                "question": "我怎样证明自己真的掌握了？" if is_zh else "How do I prove I actually mastered it?",
+                "hint": "最后用 explain、derive、reproduce、critique 留下可检查结果。" if is_zh else "Finish with checkable explain, derive, reproduce, and critique evidence.",
+                "ask": "我需要交付哪些证据才能算掌握这篇论文？" if is_zh else "What evidence should I produce to prove mastery of this paper?",
+            },
+        ]
+    return [
+        {
+            "id": "route-prerequisites",
+            "label": "01",
+            "href": "roadmap.html",
+            "question": "我应该先补哪几个前置知识？" if is_zh else "Which prerequisites should I learn first?",
+            "hint": "先补会缩短路线的知识，不把整门课重学一遍。" if is_zh else "Fill only the prerequisites that shorten the route instead of retaking a whole course.",
+            "ask": "这条学习路线最先需要补哪些前置知识？" if is_zh else "Which prerequisites matter first for this route?",
+        },
+        {
+            "id": "route-resource-priority",
+            "label": "02",
+            "href": "roadmap.html",
+            "question": "哪些资料是核心，哪些只是补充？" if is_zh else "Which resources are core, and which are optional support?",
+            "hint": "按证据强度、覆盖范围和本地可打开状态筛资源。" if is_zh else "Use evidence strength, coverage, and local availability to choose resources.",
+            "ask": "哪些资料最值得先读，为什么？" if is_zh else "Which resources should I read first, and why?",
+        },
+        {
+            "id": "route-final-artifact",
+            "label": "03",
+            "href": "roadmap.html",
+            "question": "学完以后我要交付什么？" if is_zh else "What should I deliver after learning?",
+            "hint": "用项目、复现日志、综述笔记或验收清单证明学习结果。" if is_zh else "Use a project, reproduction log, survey note, or checklist to prove the result.",
+            "ask": "这条路线最终应该交付什么成果？" if is_zh else "What final artifact should this route produce?",
+        },
+    ]
+
+
+def _starter_question_card_html(item: dict[str, str], is_zh: bool) -> str:
+    command = f'fields-study-flow ask --roadmap roadmap.json --question "{item["ask"]}"'
+    return f"""<article class="learning-question-card" data-starter-question="{escape(item["id"])}">
+          <small>{escape(item["label"])}</small>
+          <strong>{escape(item["question"])}</strong>
+          <p>{escape(item["hint"])}</p>
+          <a href="{escape(item["href"])}">{escape('打开对应页面' if is_zh else 'Open page')}</a>
+          <code>{escape(command)}</code>
+        </article>"""
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
