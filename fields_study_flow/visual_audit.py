@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|\\\\[A-Za-z0-9._$-]+[\\/][A-Za-z0-9._$-]+(?:[\\/][^)\]}\"'<\r\n]+)?|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
 VISIBLE_MOJIBAKE_RE = re.compile(r"(?:\ufffd|锟斤拷|Ã.|Â.|â[€\x80-\x9f]|ðŸ)")
 
 
@@ -1216,6 +1216,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
         "trends": [item for item in trend.get("trends", []) if isinstance(item, dict)],
     }
     summary["market_positioning"] = _market_positioning_matrix(summary)
+    summary["market_opportunity_backlog"] = _market_opportunity_backlog(summary)
     return summary
 
 
@@ -1237,6 +1238,8 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Keep the target paper at the center and connect every resource to explain, derive, reproduce, and critique tasks.",
             "current_evidence": evidence_signal,
             "next_proof": "Show source-backed Paper Map nodes plus local resources for every mastery task.",
+            "backlog_theme": "Evidence-backed Paper Map",
+            "backlog_action": "Prove every core Paper Map and mastery task has visible evidence, local resources, and a clear source trail.",
         },
         {
             "competitor": "PaperQA2 / scientific RAG",
@@ -1246,6 +1249,8 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Use RAG as evidence infrastructure, then render a learner-facing logic map, paragraph lens, and exportable evidence checklist.",
             "current_evidence": evidence_signal,
             "next_proof": "Keep chunk citations visible in Paper Lens, roadmap resources, and generated artifacts.",
+            "backlog_theme": "Grounded RAG route",
+            "backlog_action": "Use evidence chunks as the ranking backbone, then expose citations in Paper Lens, roadmap resources, and artifacts.",
         },
         {
             "competitor": "Explainpaper / passage explanations",
@@ -1255,6 +1260,8 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Pair paragraph explanations with Paper Map causal nodes and a concrete report/reproduction checklist.",
             "current_evidence": evidence_signal,
             "next_proof": "Verify paragraph explanations are non-repetitive, language-aware, and linked to map nodes.",
+            "backlog_theme": "Plain paragraph understanding",
+            "backlog_action": "Keep paragraph explanations language-aware, non-repetitive, and tied to the paper logic map.",
         },
         {
             "competitor": "roadmap.sh / visual learning paths",
@@ -1264,6 +1271,8 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Generate route structure from the paper/resources and prove coverage with a cross-scenario sample matrix.",
             "current_evidence": f"{navigation_signal}; matrix={matrix_signal}",
             "next_proof": "Keep single-paper, paper-set, and field/course samples market-ready in one command.",
+            "backlog_theme": "Cross-scenario route proof",
+            "backlog_action": "Keep single-paper, paper-set, and field/course demos passing in one market sample matrix.",
         },
         {
             "competitor": "React Flow / xyflow canvas standard",
@@ -1273,6 +1282,8 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Adopt strong canvas affordances while keeping semantic learning nodes, evidence, tasks, and local resources attached.",
             "current_evidence": canvas_signal,
             "next_proof": "Run browser interaction probes for drag, zoom, branch toggle, and detail-panel updates.",
+            "backlog_theme": "Canvas interaction proof",
+            "backlog_action": "Verify drag, zoom, branch collapse, node selection, and detail-panel updates with browser interaction probes.",
         },
         {
             "competitor": "Get It / measurable mastery map",
@@ -1282,6 +1293,8 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Compete on source discovery, local bundles, paper-set comparison, and portable report artifacts while preserving mastery proof.",
             "current_evidence": mastery_signal,
             "next_proof": "Add stronger learner progress evidence and keep generated worksheets/export artifacts easy to use.",
+            "backlog_theme": "Measurable mastery proof",
+            "backlog_action": "Make explain, derive, reproduce, and critique outputs easy to find, complete, and reuse after reading.",
         },
         {
             "competitor": "Litmaps / ResearchRabbit literature maps",
@@ -1291,8 +1304,67 @@ def _market_positioning_matrix(summary: dict[str, Any]) -> list[dict[str, str]]:
             "wedge": "Attach discovered papers to the target paper logic and only promote resources that shorten the mastery route.",
             "current_evidence": bundle_signal,
             "next_proof": "Show strongest evidence snippets and local-first links for selected and supplemental resources.",
+            "backlog_theme": "Resource discovery discipline",
+            "backlog_action": "Attach related papers and resources only when they shorten the target mastery route or improve evidence coverage.",
         },
     ]
+
+
+def _market_opportunity_backlog(summary: dict[str, Any]) -> list[dict[str, str]]:
+    """Turn market positioning lessons into release-review backlog items."""
+
+    positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
+    sample_matrix_status = str(summary.get("market_sample_matrix_status") or "not_run")
+    interaction_status = str(summary.get("interaction_status") or "not_run")
+    decision = str(summary.get("decision") or "needs_work")
+    backlog: list[dict[str, str]] = []
+    for item in positioning:
+        competitor = _sanitize_public_text(str(item.get("competitor") or "Unknown"))
+        evidence = _sanitize_public_text(str(item.get("current_evidence") or "not measured"))
+        next_proof = _sanitize_public_text(str(item.get("next_proof") or item.get("wedge") or "Add a measurable release proof."))
+        priority = _market_backlog_priority(competitor, evidence, sample_matrix_status, interaction_status, decision)
+        theme = _sanitize_public_text(str(item.get("backlog_theme") or "Market proof"))
+        action = _sanitize_public_text(str(item.get("backlog_action") or next_proof))
+        release_proof = _sanitize_public_text(str(item.get("backlog_release_proof") or _market_backlog_release_proof(theme, next_proof)))
+        backlog.append(
+            {
+                "priority": priority,
+                "theme": theme,
+                "competitor": competitor,
+                "current_evidence": evidence,
+                "action": action,
+                "release_proof": release_proof,
+            }
+        )
+    return sorted(backlog, key=lambda item: {"P0": 0, "P1": 1, "P2": 2}.get(item.get("priority", "P2"), 2))
+
+
+def _market_backlog_priority(
+    competitor: str,
+    evidence: str,
+    sample_matrix_status: str,
+    interaction_status: str,
+    decision: str,
+) -> str:
+    competitor_lower = competitor.lower()
+    evidence_lower = evidence.lower()
+    if decision == "ship":
+        if any(marker in competitor_lower for marker in ("elicit", "paperqa2", "get it")):
+            return "P1"
+        return "P2"
+    if any(marker in evidence_lower for marker in ("not measured", "not_run", "warn", "fail", "unknown")):
+        return "P0"
+    if "roadmap.sh" in competitor_lower and sample_matrix_status not in {"pass", "skipped", "not_run"}:
+        return "P0"
+    if "react flow" in competitor_lower and interaction_status != "pass":
+        return "P0"
+    if any(marker in competitor_lower for marker in ("elicit", "paperqa2", "get it")):
+        return "P1"
+    return "P2"
+
+
+def _market_backlog_release_proof(theme: str, next_proof: str) -> str:
+    return f"{theme}: {next_proof}"
 
 
 def _release_next_actions(
@@ -1361,6 +1433,7 @@ def _release_next_actions(
 
 def _release_readiness_markdown(summary: dict[str, Any]) -> str:
     positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
+    opportunity_backlog = [item for item in summary.get("market_opportunity_backlog", []) if isinstance(item, dict)]
     rows = [
         "# Release Readiness Dashboard",
         "",
@@ -1411,6 +1484,29 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
                 next_proof=_markdown_cell(_sanitize_public_text(str(item.get("next_proof") or ""))),
             )
         )
+    rows.extend(
+        [
+            "",
+            "## Market Opportunity Backlog",
+            "",
+            "| Priority | Theme | Competitor lesson | Current evidence | Action | Release proof |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    if opportunity_backlog:
+        for item in opportunity_backlog:
+            rows.append(
+                "| {priority} | {theme} | {competitor} | {evidence} | {action} | {proof} |".format(
+                    priority=_markdown_cell(_sanitize_public_text(str(item.get("priority") or "P2"))),
+                    theme=_markdown_cell(_sanitize_public_text(str(item.get("theme") or ""))),
+                    competitor=_markdown_cell(_sanitize_public_text(str(item.get("competitor") or ""))),
+                    evidence=_markdown_cell(_sanitize_public_text(str(item.get("current_evidence") or ""))),
+                    action=_markdown_cell(_sanitize_public_text(str(item.get("action") or ""))),
+                    proof=_markdown_cell(_sanitize_public_text(str(item.get("release_proof") or ""))),
+                )
+            )
+    else:
+        rows.append("| P2 | Market proof | - | - | Keep monitoring competitor lessons after each release check. | - |")
     rows.extend(
         [
             "",
@@ -1494,6 +1590,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     actions = summary.get("next_actions", [])
     trends = summary.get("trends", [])
     positioning = [item for item in summary.get("market_positioning", []) if isinstance(item, dict)]
+    opportunity_backlog = [item for item in summary.get("market_opportunity_backlog", []) if isinstance(item, dict)]
     action_items = "".join(f"<li>{_html_escape(_sanitize_public_text(str(action)))}</li>" for action in actions) or "<li>No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.</li>"
     sample_matrix_summary = summary.get("market_sample_matrix_summary") if isinstance(summary.get("market_sample_matrix_summary"), dict) else {}
     sample_matrix_html = ""
@@ -1589,6 +1686,38 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
         if positioning_rows
         else ""
     )
+    backlog_cards = "".join(
+        """
+        <article class="backlog-card priority-{priority_class}">
+          <span class="priority-pill">{priority}</span>
+          <h3>{theme}</h3>
+          <p><strong>Competitor lesson:</strong> {competitor}</p>
+          <p><strong>Current evidence:</strong> {evidence}</p>
+          <p>{action}</p>
+          <p class="proof"><strong>Release proof:</strong> {proof}</p>
+        </article>
+        """.format(
+            priority_class=_html_escape(_sanitize_public_text(str(item.get("priority") or "P2")).lower()),
+            priority=_html_escape(_sanitize_public_text(str(item.get("priority") or "P2"))),
+            theme=_html_escape(_sanitize_public_text(str(item.get("theme") or ""))),
+            competitor=_html_escape(_sanitize_public_text(str(item.get("competitor") or ""))),
+            evidence=_html_escape(_sanitize_public_text(str(item.get("current_evidence") or ""))),
+            action=_html_escape(_sanitize_public_text(str(item.get("action") or ""))),
+            proof=_html_escape(_sanitize_public_text(str(item.get("release_proof") or ""))),
+        )
+        for item in opportunity_backlog
+    )
+    backlog_html = (
+        f"""
+        <section class="panel" data-market-opportunity-backlog>
+          <h2>Market Opportunity Backlog / 市场机会待办</h2>
+          <p class="panel-note">The positioning matrix becomes a prioritized product backlog: each item has an action and release proof, so market learning turns into product work.</p>
+          <div class="backlog-grid">{backlog_cards}</div>
+        </section>
+        """
+        if backlog_cards
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -1623,6 +1752,13 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     .gate-card {{ min-width:0; border:1px solid var(--line); border-radius:18px; padding:16px; background:#fff; }}
     .gate-card p {{ color:var(--muted); }}
     .gate-card strong {{ display:block; padding-top:8px; border-top:1px solid var(--line); }}
+    .backlog-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:14px; }}
+    .backlog-card {{ min-width:0; border:1px solid var(--line); border-radius:18px; padding:16px; background:#fff; position:relative; }}
+    .backlog-card.priority-p0 {{ border-color:#e7b46d; background:#fff8ec; }}
+    .backlog-card.priority-p1 {{ border-color:#9cc9c4; background:#f1fbf9; }}
+    .priority-pill {{ display:inline-flex; align-items:center; border-radius:999px; padding:5px 10px; background:var(--ink); color:white; font-size:.78rem; font-weight:900; }}
+    .backlog-card p {{ color:var(--muted); }}
+    .backlog-card .proof {{ color:var(--ink); }}
     .actions {{ margin:0; padding-left:22px; }}
     .actions li + li {{ margin-top:8px; }}
     .table-wrap {{ overflow-x:auto; }}
@@ -1653,6 +1789,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
       <div class="gate-grid">{gate_cards}</div>
     </section>
     {positioning_html}
+    {backlog_html}
     <section class="panel">
       <h2>Next Actions / 下一步</h2>
       <ol class="actions">{action_items}</ol>

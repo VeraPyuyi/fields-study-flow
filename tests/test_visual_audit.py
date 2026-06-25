@@ -544,13 +544,27 @@ def test_write_release_readiness_report_uses_market_sample_matrix(tmp_path):
     assert result["summary"]["decision"] == "needs_work"
     assert result["summary"]["market_sample_matrix_status"] == "warn"
     assert any(item["competitor"] == "PaperQA2 / scientific RAG" for item in result["summary"]["market_positioning"])
+    backlog = result["summary"]["market_opportunity_backlog"]
+    assert len(backlog) == len(result["summary"]["market_positioning"])
+    assert all(item.get("priority") and item.get("theme") and item.get("competitor") and item.get("action") and item.get("release_proof") for item in backlog)
+    assert any(item["priority"] == "P0" and item["theme"] == "Evidence-backed Paper Map" for item in backlog)
+    roadmap_item = next(item for item in backlog if item["theme"] == "Cross-scenario route proof")
+    assert roadmap_item["priority"] == "P0"
+    assert "single-paper, paper-set, and field/course" in roadmap_item["release_proof"]
     assert any("paper-set" in action for action in result["summary"]["next_actions"])
     text = (tmp_path / "release_readiness.md").read_text(encoding="utf-8")
     html = (tmp_path / "release_readiness.html").read_text(encoding="utf-8")
     assert "Market Positioning Matrix" in text
+    assert "Market Opportunity Backlog" in text
+    assert "not measured" in text
+    assert "Prove every core Paper Map and mastery task" in text
     assert "PaperQA2 / scientific RAG" in text
     assert "Get It / measurable mastery map" in text
     assert "data-market-positioning" in html
+    assert "data-market-opportunity-backlog" in html
+    assert "Evidence-backed Paper Map" in html
+    assert "市场机会待办" in html
+    assert "Current evidence" in html
     assert "Market Positioning Matrix" in html
     assert "Elicit / systematic review AI" in html
     assert "Market Sample Matrix" in text
@@ -605,7 +619,7 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
             "summary": {"recurring_blockers": 1},
             "trends": [
                 {
-                    "blocker": "Users could not find C:\\private\\paper.pdf",
+                    "blocker": "Users could not find C:\\private\\paper.pdf or \\\\server\\share\\paper.pdf",
                     "total_occurrences": 3,
                     "reports": 2,
                     "fix_ideas": ["Add local file entry"],
@@ -620,6 +634,7 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
     assert result["summary"]["path"] == "release_readiness.md"
     assert result["summary"]["html_path"] == "release_readiness.html"
     assert result["summary"]["decision"] == "needs_work"
+    assert any(item["theme"] == "Canvas interaction proof" for item in result["summary"]["market_opportunity_backlog"])
     text = (tmp_path / "release_readiness.md").read_text(encoding="utf-8")
     html = (tmp_path / "release_readiness.html").read_text(encoding="utf-8")
     assert "Release Readiness Dashboard" in text
@@ -627,10 +642,13 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
     assert "Elicit/SciSpace evidence transparency" in text
     assert "ResearchRabbit/roadmap.sh visual navigation" in text
     assert "React Flow canvas affordance" in text
+    assert "Market Opportunity Backlog" in text
+    assert "Canvas interaction proof" in text
     assert "actionability: 88" in text
     assert "Fix crowded Paper Map spacing." in text
     assert "[private path]" in text
     assert "C:\\private" not in text
+    assert "\\\\server\\share" not in text
     assert '<main class="release-readiness"' in html
     assert 'data-release-decision="needs_work"' in html
     assert "中文友好" in html
@@ -638,8 +656,11 @@ def test_write_release_readiness_report_combines_market_audit_and_fresh_user_tre
     assert "overflow-wrap:anywhere" in html
     assert "Microsoft YaHei UI" in html
     assert "Elicit/SciSpace evidence transparency" in html
+    assert "data-market-opportunity-backlog" in html
+    assert "Canvas interaction proof" in html
     assert "[private path]" in html
     assert "C:\\private" not in html
+    assert "\\\\server\\share" not in html
     index = (tmp_path / "index.html").read_text(encoding="utf-8")
     assert 'data-release-readiness-entry="true"' in index
     assert 'href="release_readiness.html"' in index
@@ -976,6 +997,8 @@ def test_write_release_readiness_report_ships_after_timing_visual_and_interactio
     assert result["summary"]["fresh_user_timing_status"] == "pass"
     assert result["summary"]["snapshot_status"] == "pass"
     assert result["summary"]["interaction_status"] == "pass"
+    assert result["summary"]["market_opportunity_backlog"]
+    assert not any(item["priority"] == "P0" for item in result["summary"]["market_opportunity_backlog"])
     assert not any("screenshot" in action.lower() for action in result["summary"]["next_actions"])
     assert not any("fresh-user" in action.lower() for action in result["summary"]["next_actions"])
 
