@@ -2949,7 +2949,7 @@ def _competitive_benchmark(
             "notebooklm_portable_study_outputs",
             "NotebookLM-style portable study outputs",
             _portable_study_output_count(root, roadmap, html) >= 3,
-            "Give learners study outputs they can carry away: presentation notes, concise reading exports, active-recall cards, or concrete mastery artifacts.",
+            "Give learners study outputs they can carry away: presentation notes, concise reading exports, active-recall cards, evidence-linked quizzes, or concrete mastery artifacts.",
             "NotebookLM / Elicit",
         ),
         _benchmark_check(
@@ -3202,6 +3202,8 @@ def _portable_study_output_count(root: Path, roadmap: dict[str, Any], html: dict
     roadmap_html = html.get("roadmap.html", "")
     if (root / "study_cards.md").exists() and _contains_any_text(index_html, ("study_cards.md", "Active Recall Study Cards", "主动回忆练习卡")):
         outputs += 1
+    if (root / "study_quiz.md").exists() and _contains_any_text(index_html, ("study_quiz.md", "Evidence-Linked Study Quiz", "证据链接学习小测")):
+        outputs += 1
     if _contains_any_text(
         paper_map_html,
         (
@@ -3330,6 +3332,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Portable active-recall cards",
             _has_portable_study_cards(root, html.get("index.html", "")),
             "Write study_cards.md and link it from index.html so learners can carry the recall set outside the browser.",
+        ),
+        _experience_check(
+            "portable_study_quiz",
+            "Portable evidence-linked quiz",
+            _has_portable_study_quiz(root, html.get("index.html", "")),
+            "Write study_quiz.md and link it from index.html so learners can test comprehension and self-grade with evidence.",
         ),
         _experience_check(
             "support_files_progressive_disclosure",
@@ -3785,6 +3793,20 @@ def _has_portable_study_cards(root: Path, index_html: str) -> bool:
     return _contains_any_text(content, ("Active Recall Study Cards", "主动回忆练习卡")) and _contains_any_text(
         content,
         ("Find evidence", "去找证据"),
+    )
+
+
+def _has_portable_study_quiz(root: Path, index_html: str) -> bool:
+    path = root / "study_quiz.md"
+    if not path.exists() or "study_quiz.md" not in index_html:
+        return False
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _contains_any_text(content, ("Evidence-Linked Study Quiz", "证据链接学习小测")) and _contains_any_text(
+        content,
+        ("Answer Key", "自查答案钥匙"),
     )
 
 

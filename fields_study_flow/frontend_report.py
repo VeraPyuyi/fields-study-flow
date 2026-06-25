@@ -394,6 +394,31 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
     }}
+    .active-recall-actions {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }}
+    .active-recall-actions a {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 36px;
+      padding: 7px 11px;
+      border: 1px solid rgba(47, 111, 115, 0.22);
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(255, 255, 255, 0.72);
+      text-decoration: none;
+      font-size: 0.88rem;
+      font-weight: 750;
+      overflow-wrap: anywhere;
+    }}
+    .active-recall-actions a:hover, .active-recall-actions a:focus-visible {{
+      border-color: rgba(47, 111, 115, 0.5);
+      box-shadow: 0 10px 22px rgba(47, 42, 35, 0.10);
+      outline: none;
+    }}
     .active-recall-grid {{
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1228,6 +1253,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <a href="roadmap.md">roadmap.md</a>
         <a href="roadmap.svg">roadmap.svg</a>
         <a href="study_cards.md">study_cards.md</a>
+        <a href="study_quiz.md">study_quiz.md</a>
       </div>
     </details>
   </main>
@@ -1788,7 +1814,8 @@ def _active_recall_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
         if is_zh
         else "Pause before reading more. Answer these cards from memory, then open the linked page to find evidence."
     )
-    badge = "先答再看" if is_zh else "answer first"
+    card_label = "下载练习卡" if is_zh else "Download cards"
+    quiz_label = "下载小测" if is_zh else "Download quiz"
     cards = "\n".join(_recall_card_html(card, is_zh) for card in _recall_cards(roadmap, is_zh))
     return f"""<section class="active-recall-panel" data-active-recall-panel="five-minute-check" aria-labelledby="active-recall-title">
       <header>
@@ -1797,7 +1824,10 @@ def _active_recall_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
           <h2 id="active-recall-title">{escape(title)}</h2>
           <p>{escape(body)}</p>
         </div>
-        <span class="quickstart-badge">{escape(badge)}</span>
+        <div class="active-recall-actions" data-active-recall-downloads>
+          <a href="study_cards.md">{escape(card_label)}</a>
+          <a href="study_quiz.md">{escape(quiz_label)}</a>
+        </div>
       </header>
       <div class="active-recall-grid">
         {cards}
@@ -1941,9 +1971,80 @@ def render_study_cards_markdown(roadmap: dict[str, Any]) -> str:
     return "\n".join(output)
 
 
+def render_study_quiz_markdown(roadmap: dict[str, Any]) -> str:
+    """Render a portable quiz with an evidence-linked answer key."""
+    is_zh = _html_lang(roadmap) != "en"
+    cards = _recall_cards(roadmap, is_zh)
+    title = "证据链接学习小测" if is_zh else "Evidence-Linked Study Quiz"
+    subtitle = (
+        "把它当成 5-10 分钟闭卷小测：先写答案，再按证据链接核对。"
+        if is_zh
+        else "Use this as a 5-10 minute closed-book check: write first, then verify through the evidence links."
+    )
+    score_title = "自评分规则" if is_zh else "Self-Scoring Rubric"
+    score_items = (
+        [
+            "0 分：答不出来，或只复述标题。",
+            "1 分：有大概方向，但没有论文逻辑或证据。",
+            "2 分：能说清核心观点，并能指向一个证据页面。",
+            "3 分：能用自己的话解释，并补上原文证据或复现动作。",
+        ]
+        if is_zh
+        else [
+            "0 points: no answer, or only repeats the title.",
+            "1 point: rough direction, but no paper logic or evidence.",
+            "2 points: clear core claim and one evidence page.",
+            "3 points: explains in your own words and adds source evidence or a reproduction action.",
+        ]
+    )
+    question_heading = "题目" if is_zh else "Questions"
+    key_heading = "自查答案钥匙" if is_zh else "Answer Key"
+    evidence_label = "证据入口" if is_zh else "Evidence"
+    answer_slot = "我的答案：" if is_zh else "My answer:"
+    output: list[str] = [
+        f"# {title}",
+        "",
+        subtitle,
+        "",
+        f"## {score_title}",
+        "",
+    ]
+    output.extend(f"- {item}" for item in score_items)
+    output.extend(["", f"## {question_heading}", ""])
+    for index, card in enumerate(cards, start=1):
+        prompt = _markdown_text(card.get("prompt", ""))
+        href = _safe_markdown_href(card.get("href", "roadmap.html"))
+        output.extend(
+            [
+                f"{index}. **{prompt}**",
+                f"   - {answer_slot} ________________________________",
+                f"   - [{evidence_label}]({href})",
+                "",
+            ]
+        )
+    output.extend([f"## {key_heading}", ""])
+    for index, card in enumerate(cards, start=1):
+        check = _markdown_text(card.get("check", ""))
+        href = _safe_markdown_href(card.get("href", "roadmap.html"))
+        output.extend(
+            [
+                f"{index}. {check}",
+                f"   - [{evidence_label}]({href})",
+                "",
+            ]
+        )
+    return "\n".join(output)
+
+
 def _markdown_cell(value: object) -> str:
+    return _markdown_text(value).replace("|", "\\|").replace("\n", "<br>")
+
+
+def _markdown_text(value: object) -> str:
     text = str(value or "")
-    return text.replace("|", "\\|").replace("\r", " ").replace("\n", "<br>")
+    text = PRIVATE_PATH_RE.sub("[private path]", text)
+    return text.replace("\r", " ").replace("\n", " ").strip()
+
 
 
 def _safe_markdown_href(value: object) -> str:

@@ -64,6 +64,8 @@ Export a generated plan:
 - `roadmap.svg`
 - `index.html`
 - `roadmap.html`
+- `study_cards.md`
+- `study_quiz.md`
 - `artifact_template/` when `generated_artifacts` is present in the plan
 
 Before writing shareable files, `exportPlan` sanitizes private values: `local_path` is cleared, `file://` URLs become redacted `local://` references, and private absolute paths embedded in notes are replaced.

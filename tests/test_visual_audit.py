@@ -1615,7 +1615,7 @@ def _market_ready_index_marker(*, paper_entries: bool = True, evidence_edges: in
         "Start Here Bring Your Own Paper "
         "data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session "
         "data-active-recall-panel data-recall-card 5-minute active recall Find evidence "
-        f"{entries} Local assets study_cards.md "
+        f"{entries} Local assets study_cards.md study_quiz.md "
         "<details data-secondary-guidance-panel>"
         '<section data-market-value-panel="true">Why this is more than a PDF summarizer</section>'
         '<section data-learning-outcome-contract="true">Outcome contract What you should be able to deliver</section>'
@@ -1636,6 +1636,13 @@ def _write_study_cards_file(root: Path) -> None:
     )
 
 
+def _write_study_quiz_file(root: Path) -> None:
+    (root / "study_quiz.md").write_text(
+        "# Evidence-Linked Study Quiz\n\n## Questions\n\n1. **Explain from memory**\n   - [Evidence](roadmap.html)\n\n## Answer Key\n\n1. Check: cite evidence\n",
+        encoding="utf-8",
+    )
+
+
 def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     for name, marker in {
         "index.html": _market_ready_index_marker(),
@@ -1650,6 +1657,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
             encoding="utf-8",
         )
     _write_study_cards_file(tmp_path)
+    _write_study_quiz_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "zh-CN"},
         "paper_map": {"nodes": [{"id": "background"}, {"id": "method"}]},
@@ -1841,6 +1849,7 @@ def test_fresh_user_flow_warning_prevents_market_ready_status(tmp_path):
             encoding="utf-8",
         )
     _write_study_cards_file(tmp_path)
+    _write_study_quiz_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "target"}, {"id": "method"}]},
@@ -1883,6 +1892,7 @@ def test_experience_warnings_prevent_market_ready_status(tmp_path):
             encoding="utf-8",
         )
     _write_study_cards_file(tmp_path)
+    _write_study_quiz_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "background"}]},
@@ -1942,6 +1952,7 @@ def test_first_session_plan_requires_panel_and_multiple_steps(tmp_path):
             encoding="utf-8",
         )
     _write_study_cards_file(tmp_path)
+    _write_study_quiz_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "background"}, {"id": "method"}]},
@@ -2236,6 +2247,7 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
             encoding="utf-8",
         )
     _write_study_cards_file(tmp_path)
+    _write_study_quiz_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "target"}, {"id": "background"}, {"id": "method"}, {"id": "experiment"}]},
@@ -2369,6 +2381,7 @@ def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_p
             encoding="utf-8",
         )
     _write_study_cards_file(tmp_path)
+    _write_study_quiz_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en", "target_kind": "field", "goal": "learn diffusion models"},
         "phases": [

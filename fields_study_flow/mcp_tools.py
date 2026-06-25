@@ -9,7 +9,7 @@ from fields_study_flow.language import (
     normalize_resource_language_preference,
 )
 from fields_study_flow.artifact_templates import write_artifact_template
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.live_search import search_live_resources
 from fields_study_flow.local_resources import analyze_local_resources
@@ -311,6 +311,8 @@ def exportPlan(
         outputs.insert(insert_at, "report_audit.json")
     if "study_cards.md" not in outputs:
         outputs.append("study_cards.md")
+    if "study_quiz.md" not in outputs:
+        outputs.append("study_quiz.md")
     public_plan["outputs"] = outputs
     if has_target_paper(public_plan):
         if "paper_map.html" not in outputs:
@@ -321,6 +323,7 @@ def exportPlan(
     json_target = output / "roadmap.json"
     md_target = output / "roadmap.md"
     cards_target = output / "study_cards.md"
+    quiz_target = output / "study_quiz.md"
     svg_target = output / "roadmap.svg"
     index_target = output / "index.html"
     audit_target = output / "report_audit.json"
@@ -341,6 +344,7 @@ def exportPlan(
     json_target.write_text(json.dumps(public_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     md_target.write_text(render_markdown(public_plan), encoding="utf-8")
     cards_target.write_text(render_study_cards_markdown(public_plan), encoding="utf-8")
+    quiz_target.write_text(render_study_quiz_markdown(public_plan), encoding="utf-8")
     svg_target.write_text(render_svg(public_plan), encoding="utf-8")
     index_target.write_text(render_report_index(public_plan), encoding="utf-8")
     html_target.write_text(
@@ -365,6 +369,7 @@ def exportPlan(
         "roadmap_json": str(json_target),
         "roadmap_md": str(md_target),
         "study_cards_md": str(cards_target),
+        "study_quiz_md": str(quiz_target),
         "roadmap_svg": str(svg_target),
         "roadmap_html": str(html_target),
     }

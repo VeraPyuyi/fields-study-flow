@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fields_study_flow import frontend_report
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 
 
 def test_checked_in_frontend_dist_has_package_visible_manifest():
@@ -220,6 +220,7 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "需要原始数据或导出文件时再展开" in html
     assert "roadmap.json" in html
     assert "study_cards.md" in html
+    assert "study_quiz.md" in html
     assert "C:/Users/example" not in html
 
 
@@ -236,6 +237,22 @@ def test_study_cards_markdown_reuses_active_recall_prompts():
     assert "Without the report, can you explain the paper's main chain in one sentence?" in markdown
     assert "[Find evidence](paper_map.html)" in markdown
     assert "Check:" in markdown
+    assert "C:/Users/example" not in markdown
+
+
+def test_study_quiz_markdown_reuses_cards_with_answer_key():
+    markdown = render_study_quiz_markdown(
+        {
+            "profile": {"output_language": "en"},
+            "paper_map": {"nodes": [{"id": "target"}]},
+            "paper_lens": {"segments": [{"id": "seg-1"}]},
+        }
+    )
+
+    assert "# Evidence-Linked Study Quiz" in markdown
+    assert "Without the report, can you explain the paper's main chain in one sentence?" in markdown
+    assert "## Answer Key" in markdown
+    assert "[Evidence](paper_map.html)" in markdown
     assert "C:/Users/example" not in markdown
 
 
