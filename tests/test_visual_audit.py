@@ -10,6 +10,7 @@ from fields_study_flow.visual_audit import (
     build_report_audit,
     capture_browser_snapshots,
     compare_browser_snapshot_baseline,
+    evaluate_market_sample_matrix,
     evaluate_fresh_user_timing,
     probe_browser_interactions,
     summarize_fresh_user_backlogs,
@@ -472,6 +473,85 @@ def test_cli_audit_report_writes_fresh_user_trend_report(tmp_path):
     assert (tmp_path / "fresh_user_trends.md").exists()
 
 
+def _write_market_sample(path, roadmap, *, market_status="market_ready", benchmark_status="pass"):
+    path.mkdir()
+    (path / "roadmap.json").write_text(json.dumps(roadmap), encoding="utf-8")
+    (path / "report_audit.json").write_text(
+        json.dumps(
+            {
+                "status": "pass",
+                "visual_audit": {"status": "pass"},
+                "market_readiness": {"status": market_status, "score": 96 if market_status == "market_ready" else 72},
+                "competitive_benchmark": {"status": benchmark_status, "checks": []},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_evaluate_market_sample_matrix_requires_cross_scenario_evidence(tmp_path):
+    single = tmp_path / "single-paper"
+    field = tmp_path / "field-course"
+    paper_set = tmp_path / "paper-set"
+    _write_market_sample(single, {"profile": {"target_kind": "paper"}, "paper_map": {"nodes": []}, "paper_lens": {"segments": []}})
+    _write_market_sample(field, {"profile": {"target_kind": "field"}, "phases": [{"name": "Core"}]})
+
+    partial = evaluate_market_sample_matrix([single, field])
+
+    assert partial["status"] == "warn"
+    assert partial["summary"]["covered_scenarios"] == ["single-paper", "field-course"]
+    assert partial["summary"]["missing_scenarios"] == ["paper-set"]
+    assert any(item["id"] == "scenario_coverage:paper-set" and item["status"] == "warn" for item in partial["checks"])
+
+    _write_market_sample(paper_set, {"profile": {"target_kind": "paper-set"}, "paper_set": {"papers": [{"title": "A"}, {"title": "B"}]}})
+    complete = evaluate_market_sample_matrix([single, field, paper_set])
+
+    assert complete["status"] == "pass"
+    assert complete["summary"]["missing_scenarios"] == []
+
+
+def test_write_release_readiness_report_uses_market_sample_matrix(tmp_path):
+    (tmp_path / "index.html").write_text(
+        '<html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
+        "<body><main><h1>Start Here</h1></main></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "report_audit.json").write_text(
+        json.dumps({"market_readiness": {"status": "market_ready", "score": 96, "dimensions": []}, "competitive_benchmark": {"status": "pass", "checks": []}}),
+        encoding="utf-8",
+    )
+    matrix = {
+        "status": "warn",
+        "summary": {
+            "covered_scenarios": ["single-paper", "field-course"],
+            "missing_scenarios": ["paper-set"],
+        },
+    }
+
+    result = write_release_readiness_report(
+        tmp_path,
+        {
+            "status": "pass",
+            "fresh_user_timing": {"status": "pass", "summary": {"minutes": 8.25, "target_minutes": 10}},
+            "browser_snapshot_capture": {"status": "pass", "summary": {"mode": "browser-backed", "checked_files": 3}},
+            "browser_interaction_probe": {"status": "pass", "summary": {"mode": "browser-interaction", "pages": 3, "failed_checks": 0}},
+            "market_sample_matrix": matrix,
+        },
+    )
+
+    assert result["status"] == "warn"
+    assert result["summary"]["decision"] == "needs_work"
+    assert result["summary"]["market_sample_matrix_status"] == "warn"
+    assert any("paper-set" in action for action in result["summary"]["next_actions"])
+    text = (tmp_path / "release_readiness.md").read_text(encoding="utf-8")
+    html = (tmp_path / "release_readiness.html").read_text(encoding="utf-8")
+    assert "Market Sample Matrix" in text
+    assert "paper-set" in text
+    assert "Market Sample Matrix" in html
+    assert "市场样本矩阵" in html
+
+
 def test_write_release_readiness_report_combines_market_audit_and_fresh_user_trends(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
@@ -770,6 +850,49 @@ def test_cli_audit_report_writes_release_readiness_report(tmp_path):
     assert (tmp_path / "release_readiness.md").exists()
     assert (tmp_path / "release_readiness.html").exists()
     assert 'href="release_readiness.html"' in (tmp_path / "index.html").read_text(encoding="utf-8")
+
+
+def test_cli_audit_report_includes_market_sample_matrix(tmp_path):
+    (tmp_path / "index.html").write_text(
+        '<html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "report_audit.json").write_text(
+        json.dumps({"market_readiness": {"status": "market_ready", "score": 96, "dimensions": []}}),
+        encoding="utf-8",
+    )
+    single = tmp_path / "single-paper-sample"
+    field = tmp_path / "field-course-sample"
+    _write_market_sample(single, {"profile": {"target_kind": "paper"}, "paper_map": {"nodes": []}})
+    _write_market_sample(field, {"profile": {"target_kind": "course"}, "phases": [{"name": "Core"}]})
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "audit-report",
+            "--report-dir",
+            str(tmp_path),
+            "--market-sample-dir",
+            str(single),
+            "--market-sample-dir",
+            str(field),
+            "--write-release-readiness",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["market_sample_matrix"]["status"] == "warn"
+    assert data["market_sample_matrix"]["summary"]["missing_scenarios"] == ["paper-set"]
+    assert data["release_readiness_report"]["summary"]["market_sample_matrix_status"] == "warn"
+    assert any("paper-set" in action for action in data["release_readiness_report"]["summary"]["next_actions"])
 
 
 def test_cli_audit_report_requires_visual_evidence_after_fresh_user_timing(tmp_path):

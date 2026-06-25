@@ -23,6 +23,7 @@ BROWSER_SNAPSHOT_VIEWPORTS = (
     {"id": "desktop-1280x720", "width": 1280, "height": 720},
     {"id": "mobile-390x844", "width": 390, "height": 844},
 )
+MARKET_SAMPLE_SCENARIOS = ("single-paper", "paper-set", "field-course")
 BrowserSnapshotRenderer = Callable[[Path, dict[str, int | str], Path], dict[str, Any] | None]
 BrowserInteractionRunner = Callable[[Path], dict[str, Any] | None]
 
@@ -97,6 +98,57 @@ def write_report_audit(report_dir: Path | str, roadmap: dict[str, Any]) -> dict[
     target = Path(report_dir) / "report_audit.json"
     target.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
     return audit
+
+
+def evaluate_market_sample_matrix(
+    report_dirs: list[Path | str],
+    *,
+    required_scenarios: tuple[str, ...] = MARKET_SAMPLE_SCENARIOS,
+) -> dict[str, Any]:
+    """Evaluate whether market-readiness evidence spans the core product scenarios.
+
+    A single polished demo is useful, but it is weak proof for a market-facing
+    product that promises single-paper, paper-set, and field/course learning.
+    This matrix keeps that claim honest without changing the default one-report
+    audit flow.
+    """
+
+    samples: list[dict[str, Any]] = []
+    checks: list[dict[str, Any]] = []
+    coverage = {scenario: 0 for scenario in required_scenarios}
+    for raw_dir in report_dirs:
+        sample = _market_sample_summary(Path(raw_dir))
+        samples.append(sample)
+        scenario = str(sample.get("scenario") or "unknown")
+        if scenario in coverage and sample.get("sample_status") == "pass":
+            coverage[scenario] += 1
+        checks.extend(_market_sample_checks(sample))
+    for scenario in required_scenarios:
+        checks.append(
+            _experience_check(
+                f"scenario_coverage:{scenario}",
+                f"{scenario} sample coverage",
+                coverage.get(scenario, 0) > 0,
+                f"Add at least one passing {scenario} report to the market sample matrix before claiming broad market readiness.",
+            )
+        )
+    failures = [item for item in checks if item.get("status") == "fail"]
+    warnings = [item for item in checks if item.get("status") == "warn"]
+    missing = [scenario for scenario in required_scenarios if coverage.get(scenario, 0) == 0]
+    return {
+        "status": "fail" if failures else ("warn" if warnings else "pass"),
+        "summary": {
+            "sample_count": len(samples),
+            "required_scenarios": list(required_scenarios),
+            "covered_scenarios": [scenario for scenario in required_scenarios if coverage.get(scenario, 0) > 0],
+            "missing_scenarios": missing,
+            "checks": len(checks),
+            "failures": len(failures),
+            "warnings": len(warnings),
+        },
+        "samples": samples,
+        "checks": checks,
+    }
 
 
 def capture_browser_snapshots(
@@ -1003,6 +1055,103 @@ def _load_report_audit(root: Path) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _load_json_file(path: Path) -> dict[str, Any]:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _market_sample_summary(root: Path) -> dict[str, Any]:
+    exists = root.exists() and root.is_dir()
+    roadmap = _load_json_file(root / "roadmap.json") if exists else {}
+    report_audit = _load_json_file(root / "report_audit.json") if exists else {}
+    if exists and roadmap and not report_audit:
+        try:
+            report_audit = build_report_audit(root, roadmap)
+        except Exception as exc:  # pragma: no cover - defensive for malformed exported reports.
+            report_audit = {"status": "warn", "error": str(exc)}
+    market = report_audit.get("market_readiness") if isinstance(report_audit.get("market_readiness"), dict) else {}
+    visual = report_audit.get("visual_audit") if isinstance(report_audit.get("visual_audit"), dict) else {}
+    benchmark = report_audit.get("competitive_benchmark") if isinstance(report_audit.get("competitive_benchmark"), dict) else {}
+    has_roadmap = bool(roadmap)
+    has_audit = bool(report_audit)
+    market_ready = str(market.get("status") or "") == "market_ready"
+    visual_pass = str(visual.get("status") or report_audit.get("status") or "") == "pass"
+    benchmark_pass = str(benchmark.get("status") or "pass") == "pass"
+    sample_status = "pass" if exists and has_roadmap and has_audit and market_ready and visual_pass and benchmark_pass else "warn"
+    if not exists or not has_roadmap:
+        sample_status = "fail"
+    return {
+        "report": _sanitize_public_text(root.name or "."),
+        "scenario": _infer_market_sample_scenario(roadmap),
+        "sample_status": sample_status,
+        "exists": exists,
+        "has_roadmap": has_roadmap,
+        "has_report_audit": has_audit,
+        "market_status": str(market.get("status") or "unknown"),
+        "visual_status": str(visual.get("status") or report_audit.get("status") or "unknown"),
+        "benchmark_status": str(benchmark.get("status") or "unknown"),
+        "score": int(market.get("score") or 0),
+    }
+
+
+def _infer_market_sample_scenario(roadmap: dict[str, Any]) -> str:
+    if not roadmap:
+        return "unknown"
+    if _has_paper_set(roadmap):
+        return "paper-set"
+    if _is_field_or_course_target(roadmap):
+        return "field-course"
+    profile = roadmap.get("profile") if isinstance(roadmap.get("profile"), dict) else {}
+    target_kind = str(profile.get("target_kind") or roadmap.get("target_kind") or "").lower()
+    if target_kind == "paper" or roadmap.get("paper_map") or roadmap.get("paper_lens"):
+        return "single-paper"
+    return "unknown"
+
+
+def _has_paper_set(roadmap: dict[str, Any]) -> bool:
+    if isinstance(roadmap.get("paper_set"), dict):
+        return True
+    target_papers = _list_at(roadmap, "paper_lens", "target_papers")
+    if len(target_papers) > 1:
+        return True
+    profile = roadmap.get("profile") if isinstance(roadmap.get("profile"), dict) else {}
+    target_kind = str(profile.get("target_kind") or roadmap.get("target_kind") or "").lower()
+    return target_kind in {"paper-set", "multi-paper", "papers"}
+
+
+def _market_sample_checks(sample: dict[str, Any]) -> list[dict[str, Any]]:
+    label = str(sample.get("report") or "sample")
+    return [
+        _experience_check(
+            f"sample_exists:{label}",
+            f"{label} exists",
+            bool(sample.get("exists")),
+            "Remove missing sample directories or regenerate the market sample report before release review.",
+        ),
+        _experience_check(
+            f"sample_roadmap:{label}",
+            f"{label} has roadmap.json",
+            bool(sample.get("has_roadmap")),
+            "Every market sample must include roadmap.json so scenario and product-depth checks are auditable.",
+        ),
+        _experience_check(
+            f"sample_audit:{label}",
+            f"{label} has report_audit.json",
+            bool(sample.get("has_report_audit")),
+            "Run fields-study-flow audit-report for every market sample before aggregating the matrix.",
+        ),
+        _experience_check(
+            f"sample_ready:{label}",
+            f"{label} is market ready",
+            sample.get("sample_status") == "pass",
+            "Each sample should be market_ready with visual and competitor benchmark checks passing before it counts as proof.",
+        ),
+    ]
+
+
 def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[str, Any]) -> dict[str, Any]:
     market = report_audit.get("market_readiness") if isinstance(report_audit.get("market_readiness"), dict) else {}
     benchmark = report_audit.get("competitive_benchmark") if isinstance(report_audit.get("competitive_benchmark"), dict) else {}
@@ -1011,6 +1160,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
     snapshot = audit_result.get("browser_snapshot_capture") if isinstance(audit_result.get("browser_snapshot_capture"), dict) else {}
     baseline = audit_result.get("browser_snapshot_baseline") if isinstance(audit_result.get("browser_snapshot_baseline"), dict) else {}
     interaction = audit_result.get("browser_interaction_probe") if isinstance(audit_result.get("browser_interaction_probe"), dict) else {}
+    sample_matrix = audit_result.get("market_sample_matrix") if isinstance(audit_result.get("market_sample_matrix"), dict) else {}
     recurring = int(((trend.get("summary") if isinstance(trend.get("summary"), dict) else {}) or {}).get("recurring_blockers") or 0)
     visual_status = str(audit_result.get("status") or "unknown")
     market_status = str(market.get("status") or "unknown")
@@ -1019,6 +1169,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
     interaction_status = str(interaction.get("status") or "not_run")
     timing_status = str(timing.get("status") or "not_run")
     trend_status = str(trend.get("status") or "not_run")
+    sample_matrix_status = str(sample_matrix.get("status") or "not_run")
     has_visual_evidence = snapshot_status == "pass" or baseline_status == "pass"
     has_interaction_evidence = interaction_status == "pass"
     hard_fail = visual_status == "fail" or snapshot_status == "fail" or baseline_status == "fail" or interaction_status == "fail"
@@ -1028,6 +1179,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
         or not has_visual_evidence
         or not has_interaction_evidence
         or trend_status not in {"pass", "skipped", "not_run"}
+        or sample_matrix_status not in {"pass", "skipped", "not_run"}
         or recurring > 0
     )
     if hard_fail:
@@ -1051,6 +1203,8 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
         "interaction_status": interaction_status,
         "fresh_user_timing_status": timing_status,
         "fresh_user_trend_status": trend_status,
+        "market_sample_matrix_status": sample_matrix_status,
+        "market_sample_matrix_summary": sample_matrix.get("summary", {}) if isinstance(sample_matrix.get("summary"), dict) else {},
         "recurring_blockers": recurring,
         "dimensions": [item for item in market.get("dimensions", []) if isinstance(item, dict)],
         "benchmark_warnings": [
@@ -1058,7 +1212,7 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
             for item in benchmark.get("checks", [])
             if isinstance(item, dict) and item.get("status") not in {"pass", None}
         ],
-        "next_actions": _release_next_actions(market, benchmark, trend, timing, snapshot, baseline, interaction),
+        "next_actions": _release_next_actions(market, benchmark, trend, timing, snapshot, baseline, interaction, sample_matrix),
         "trends": [item for item in trend.get("trends", []) if isinstance(item, dict)],
     }
 
@@ -1071,6 +1225,7 @@ def _release_next_actions(
     snapshot: dict[str, Any] | None = None,
     baseline: dict[str, Any] | None = None,
     interaction: dict[str, Any] | None = None,
+    sample_matrix: dict[str, Any] | None = None,
 ) -> list[str]:
     actions: list[str] = []
     timing_status = str((timing or {}).get("status") or "not_run")
@@ -1086,6 +1241,15 @@ def _release_next_actions(
     has_interaction_evidence = interaction_status == "pass"
     if interaction_status != "pass":
         actions.append("Install the visual extra and run --probe-interactions to verify Paper Map, Paper Lens, and resource-library clicks before calling this report interaction-ready.")
+    sample_matrix_status = str((sample_matrix or {}).get("status") or "not_run")
+    if sample_matrix_status not in {"pass", "skipped", "not_run"}:
+        summary = (sample_matrix or {}).get("summary") if isinstance((sample_matrix or {}).get("summary"), dict) else {}
+        missing = summary.get("missing_scenarios") if isinstance(summary.get("missing_scenarios"), list) else []
+        missing_text = ", ".join(str(item) for item in missing) if missing else "single-paper, paper-set, or field-course"
+        actions.append(
+            "Run a market sample matrix with --market-sample-dir for single-paper, paper-set, and field/course reports before claiming broad market readiness. Missing: "
+            + missing_text
+        )
     for item in market.get("next_best_actions", []):
         if isinstance(item, dict) and item.get("action"):
             action = _sanitize_public_text(str(item["action"]))
@@ -1136,6 +1300,7 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
         f"| Browser interactions | {_markdown_cell(str(summary['interaction_status']))} |",
         f"| Fresh-user timing | {_markdown_cell(str(summary['fresh_user_timing_status']))} |",
         f"| Fresh-user trends | {_markdown_cell(str(summary['fresh_user_trend_status']))} |",
+        f"| Market sample matrix | {_markdown_cell(str(summary.get('market_sample_matrix_status', 'not_run')))} |",
         f"| Recurring blockers | {int(summary['recurring_blockers'])} |",
         "",
         "## Competitor-Inspired Gates",
@@ -1157,6 +1322,17 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
     else:
         rows.append("- No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.")
     trends = summary.get("trends", [])
+    sample_matrix_summary = summary.get("market_sample_matrix_summary") if isinstance(summary.get("market_sample_matrix_summary"), dict) else {}
+    if sample_matrix_summary:
+        rows.extend(
+            [
+                "",
+                "## Market Sample Matrix",
+                "",
+                f"- Covered scenarios: {_markdown_cell(', '.join(str(item) for item in sample_matrix_summary.get('covered_scenarios', [])) or '-')}",
+                f"- Missing scenarios: {_markdown_cell(', '.join(str(item) for item in sample_matrix_summary.get('missing_scenarios', [])) or '-')}",
+            ]
+        )
     if trends:
         rows.extend(["", "## Fresh-User Recurring Blockers", "", "| Reports | Occurrences | Blocker | Fix ideas |", "| ---: | ---: | --- | --- |"])
         for item in trends[:5]:
@@ -1183,6 +1359,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
         ("Browser interactions", summary.get("interaction_status")),
         ("Fresh-user timing", summary.get("fresh_user_timing_status")),
         ("Fresh-user trends", summary.get("fresh_user_trend_status")),
+        ("Market sample matrix", summary.get("market_sample_matrix_status", "not_run")),
         ("Recurring blockers", summary.get("recurring_blockers")),
     ]
     gate_rows = [
@@ -1215,6 +1392,20 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     actions = summary.get("next_actions", [])
     trends = summary.get("trends", [])
     action_items = "".join(f"<li>{_html_escape(_sanitize_public_text(str(action)))}</li>" for action in actions) or "<li>No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.</li>"
+    sample_matrix_summary = summary.get("market_sample_matrix_summary") if isinstance(summary.get("market_sample_matrix_summary"), dict) else {}
+    sample_matrix_html = ""
+    if sample_matrix_summary:
+        covered = ", ".join(str(item) for item in sample_matrix_summary.get("covered_scenarios", [])) or "-"
+        missing = ", ".join(str(item) for item in sample_matrix_summary.get("missing_scenarios", [])) or "-"
+        sample_matrix_html = f"""
+        <section class="panel">
+          <h2>Market Sample Matrix / 市场样本矩阵</h2>
+          <div class="status-grid">
+            <article><span>Covered scenarios</span><strong>{_html_escape(_sanitize_public_text(covered))}</strong></article>
+            <article><span>Missing scenarios</span><strong>{_html_escape(_sanitize_public_text(missing))}</strong></article>
+          </div>
+        </section>
+        """
     trend_rows = "".join(
         "<tr><td>{reports}</td><td>{occurrences}</td><td>{blocker}</td><td>{fixes}</td></tr>".format(
             reports=int(item.get("reports") or 0),
@@ -1324,6 +1515,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
       <h2>Next Actions / 下一步</h2>
       <ol class="actions">{action_items}</ol>
     </section>
+    {sample_matrix_html}
     {trends_html}
   </main>
 </body>

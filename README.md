@@ -125,6 +125,19 @@ fields-study-flow audit-report \
 The generated `release_readiness.md` and `release_readiness.html` combine `report_audit.json`, visual checks, screenshot/baseline status, browser interaction probes, fresh-user timing, and recurring blockers into a single `ship` / `needs_work` / `do_not_ship` decision. The HTML version is a single offline page for non-technical reviewers, and `index.html` automatically receives a single release-decision entry that links to it. A report is not marked `ship` unless measured fresh-user timing, real visual evidence, and browser interaction evidence pass. Its gates are explicitly inspired by Elicit/SciSpace evidence transparency, NotebookLM-style portable study outputs, ResearchRabbit/roadmap.sh visual navigation, React Flow canvas affordances, local-first resource bundles, and mastery proof.
 With `--write-release-history`, the audit also writes `release_readiness_history.jsonl`, `release_readiness_history.md`, and `release_readiness_history.html`, a sanitized cross-run decision log with a trend summary, score delta, and recurring-blocker delta for comparing whether report quality is actually improving across releases or CI runs. The report start page and release-readiness dashboard both receive a single quality-trend entry that links to the HTML dashboard.
 
+To avoid overfitting release confidence to one polished demo, pass multiple exported reports into a market sample matrix:
+
+```bash
+fields-study-flow audit-report \
+  --report-dir ./fields-study-flow-demo \
+  --market-sample-dir ./samples/single-paper \
+  --market-sample-dir ./samples/paper-set \
+  --market-sample-dir ./samples/field-course \
+  --write-release-readiness
+```
+
+The matrix checks whether the evidence covers the three product scenarios: single paper, paper set, and field/course route. Missing scenarios appear in `release_readiness.md` / `release_readiness.html` as `needs_work` next actions, so the project does not claim broad market readiness from a single cherry-picked report.
+
 The audit also emits `report_audit.json` with market-readiness, fresh-user-flow, experience, viewport, visual-snapshot-matrix, and competitor-benchmark checks so a report cannot be treated as product-ready while it lacks grounded evidence, portable study outputs, a measurable Paper Map, an intent-based first click, a clear first-10-minutes path, canvas affordances, dense-resource layout safety, or a local-first study bundle. When the command generates release dashboards, it adds `generated_artifact_audit` to the JSON output so the newly written HTML pages are checked in the same run.
 
 ```bash

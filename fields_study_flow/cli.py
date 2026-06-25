@@ -24,6 +24,7 @@ from fields_study_flow.visual_audit import (
     audit_report_directory,
     capture_browser_snapshots,
     compare_browser_snapshot_baseline,
+    evaluate_market_sample_matrix,
     evaluate_fresh_user_timing,
     probe_browser_interactions,
     summarize_fresh_user_worksheets,
@@ -198,6 +199,7 @@ def build_parser() -> argparse.ArgumentParser:
     audit.add_argument("--release-readiness-report", help="Optional output path for the release-readiness dashboard.")
     audit.add_argument("--write-release-history", action="store_true", help="Append the current release decision to a sanitized cross-run history.")
     audit.add_argument("--release-history-report", help="Optional output path for the release-readiness history Markdown file.")
+    audit.add_argument("--market-sample-dir", action="append", default=[], help="Additional exported report directory to include in the cross-scenario market sample matrix. Repeat for single-paper, paper-set, and field/course samples.")
 
     return parser
 
@@ -711,6 +713,9 @@ def _audit_report(args: argparse.Namespace) -> int:
             )
         else:
             result["fresh_user_trend_report"] = summarize_fresh_user_backlogs(backlog_inputs)
+    market_sample_dirs = [Path(item) for item in getattr(args, "market_sample_dir", [])]
+    if market_sample_dirs:
+        result["market_sample_matrix"] = evaluate_market_sample_matrix(market_sample_dirs)
     if getattr(args, "write_release_readiness", False) or getattr(args, "write_release_history", False):
         result["release_readiness_report"] = write_release_readiness_report(
             Path(args.report_dir),
@@ -733,10 +738,11 @@ def _audit_report(args: argparse.Namespace) -> int:
     worksheet_status = (result.get("fresh_user_worksheet") or {}).get("status", "pass")
     backlog_status = (result.get("fresh_user_backlog") or {}).get("status", "pass")
     trend_status = (result.get("fresh_user_trend_report") or {}).get("status", "pass")
+    matrix_status = (result.get("market_sample_matrix") or {}).get("status", "pass")
     release_status = (result.get("release_readiness_report") or {}).get("status", "pass")
     history_status = (result.get("release_readiness_history") or {}).get("status", "pass")
     generated_status = (result.get("generated_artifact_audit") or {}).get("status", "pass")
-    return 0 if result["status"] == "pass" and screenshot_status in {"pass", "skipped"} and interaction_status in {"pass", "skipped"} and baseline_status == "pass" and timing_status == "pass" and worksheet_status in {"pass", "warn"} and backlog_status in {"pass", "warn"} and trend_status in {"pass", "warn"} and release_status in {"pass", "warn"} and history_status in {"pass", "warn"} and generated_status == "pass" else 1
+    return 0 if result["status"] == "pass" and screenshot_status in {"pass", "skipped"} and interaction_status in {"pass", "skipped"} and baseline_status == "pass" and timing_status == "pass" and worksheet_status in {"pass", "warn"} and backlog_status in {"pass", "warn"} and trend_status in {"pass", "warn"} and matrix_status in {"pass", "warn"} and release_status in {"pass", "warn"} and history_status in {"pass", "warn"} and generated_status == "pass" else 1
 
 
 def _read_existing_snapshot_manifest(report_dir: Path, screenshot_dir: Path | None = None) -> dict[str, object]:
