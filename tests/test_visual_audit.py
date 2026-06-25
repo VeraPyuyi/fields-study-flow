@@ -1921,9 +1921,12 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
     check_ids = {item["id"] for item in benchmark["checks"]}
     assert {
         "paperqa_grounded_evidence",
+        "explainpaper_contextual_explanations",
+        "scholarcy_structured_review_cards",
         "get_it_measurable_mastery_map",
         "notebooklm_portable_study_outputs",
         "roadmap_interactive_first_step",
+        "litmaps_research_context_boundary",
         "xyflow_canvas_affordance",
         "local_first_bundle",
         "resource_purpose_badges",
@@ -1932,6 +1935,60 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
         "resource_evidence_review_links",
     } <= check_ids
     assert audit["market_readiness"]["status"] == "market_ready"
+
+
+def test_competitive_benchmark_requires_contextual_paper_lens_explanations(tmp_path):
+    for name, marker in {
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
+        "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
+        "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence paper_lens.html#detail-seg-1",
+    }.items():
+        (tmp_path / name).write_text(
+            '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+            "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}.flow-shell{min-height:560px}@media (max-width: 820px){body{max-width:100%}}</style></head>"
+            f"<body>{marker}</body></html>",
+            encoding="utf-8",
+        )
+    roadmap = {
+        "profile": {"output_language": "en"},
+        "paper_map": {"nodes": [{"id": "target"}, {"id": "method"}]},
+        "paper_lens": {
+            "segments": [{"id": "seg-1"}],
+            "inline_explanations": [],
+        },
+        "study_tasks": [{"type": "explain"}, {"type": "derive"}, {"type": "reproduce"}, {"type": "critique"}],
+        "mastery_evidence": {"required_evidence": [{"task_id": "explain"}]},
+        "knowledge_graph": {"summary": {"edges": 12, "evidence_backed_edges": 5}},
+        "study_bundle": {
+            "resources": [
+                {"title": "Target paper", "local_href": "assets/paper.pdf", "status": "downloaded"},
+                {"title": "Support code", "local_href": "assets/code.zip", "status": "copied"},
+            ]
+        },
+        "resource_library": [
+            {
+                "title": "Target paper",
+                "metadata": {
+                    "rag": {
+                        "evidence_chunks": [
+                            {
+                                "snippet": "The paper evidence explains why the target resource is selected.",
+                                "detail_anchor": "detail-seg-1",
+                            }
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+
+    audit = build_report_audit(tmp_path, roadmap)
+
+    statuses = {item["id"]: item["status"] for item in audit["competitive_benchmark"]["checks"]}
+    assert statuses["explainpaper_contextual_explanations"] == "warn"
+    assert statuses["scholarcy_structured_review_cards"] == "warn"
+    assert audit["market_readiness"]["status"] == "needs_improvement"
 
 
 def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_path):

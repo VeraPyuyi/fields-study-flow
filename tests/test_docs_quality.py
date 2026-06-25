@@ -18,3 +18,12 @@ def test_user_facing_docs_do_not_use_decorative_ellipsis_placeholders() -> None:
         text = path.read_text(encoding="utf-8")
         assert "..." not in text, f"{path} should use explicit placeholders instead of ..."
         assert "…" not in text, f"{path} should not use decorative ellipsis"
+
+
+def test_user_facing_docs_do_not_contain_visible_mojibake() -> None:
+    markers = ("�", "鈥", "脙", "脗", "Ã", "Â")
+    for path in USER_FACING_DOCS:
+        assert path.exists(), f"{path} should exist and be checked"
+        text = path.read_text(encoding="utf-8")
+        for marker in markers:
+            assert marker not in text, f"{path} contains visible mojibake marker {marker!r}"

@@ -2209,6 +2209,20 @@ def _competitive_benchmark(
             "PaperQA2",
         ),
         _benchmark_check(
+            "explainpaper_contextual_explanations",
+            "Explainpaper-style contextual explanations",
+            _paper_lens_contextual_explanations(roadmap, html),
+            "Provide paragraph-level explanations that are grounded in the target paper context, not only generic summaries.",
+            "Explainpaper",
+        ),
+        _benchmark_check(
+            "scholarcy_structured_review_cards",
+            "Scholarcy-style structured review cards",
+            _structured_quick_review_surface(roadmap, html),
+            "Give learners a structured skim surface: paper logic, paragraph focus, and portable notes or worksheet output.",
+            "Scholarcy",
+        ),
+        _benchmark_check(
             "get_it_measurable_mastery_map",
             "Get It-style measurable mastery map",
             bool(roadmap.get("paper_map"))
@@ -2235,6 +2249,14 @@ def _competitive_benchmark(
             ),
             "Give new users one obvious first action before they face the full report.",
             "roadmap.sh",
+        ),
+        _benchmark_check(
+            "litmaps_research_context_boundary",
+            "Litmaps-style research context boundary",
+            _resource_evidence_review_link_count(roadmap, html) > 0
+            and _contains_any_text(html.get("paper_map.html", ""), ("Evidence coverage", "证据覆盖", "璇佹嵁瑕嗙洊")),
+            "Show which supporting literature or resource evidence belongs to the target-paper map, rather than leaving discovery as a loose graph.",
+            "Litmaps / ResearchRabbit",
         ),
         _benchmark_check(
             "xyflow_canvas_affordance",
@@ -2290,7 +2312,7 @@ def _competitive_benchmark(
             "Resource evidence review links",
             _resource_evidence_review_link_count(roadmap, html) > 0,
             "Link the strongest resource evidence back to Paper Lens, a downloaded file, or the original source so learners can review the citation trail.",
-            "Elicit / PaperQA",
+            "Elicit / PaperQA / PaperQA2",
         ),
     ]
     warnings = [item for item in checks if item["status"] == "warn"]
@@ -2307,6 +2329,14 @@ def _competitive_benchmark(
                 "lesson": "Scientific readers win trust when answers are grounded in retrievable evidence.",
             },
             {
+                "project": "Explainpaper",
+                "lesson": "Fast paper readers need contextual explanations at the confusing passage, not generic summaries.",
+            },
+            {
+                "project": "Scholarcy",
+                "lesson": "Structured review cards and exports make skimming useful when learners must explain the paper later.",
+            },
+            {
                 "project": "Get It",
                 "lesson": "Single-document learning is strongest when it becomes a measurable mastery map.",
             },
@@ -2321,6 +2351,10 @@ def _competitive_benchmark(
             {
                 "project": "React Flow / xyflow",
                 "lesson": "Node-based learning maps need mature canvas affordances: pan, zoom, drag, and fit-to-view.",
+            },
+            {
+                "project": "Litmaps / ResearchRabbit",
+                "lesson": "Literature context is most useful when it stays connected to the target paper's logic, not as a loose discovery graph.",
             },
         ],
         "checks": checks,
@@ -2904,6 +2938,31 @@ def _local_resource_ratio(roadmap: dict[str, Any]) -> float:
         return 0.0
     local_count = sum(1 for item in resources if item.get("local_href") or str(item.get("status") or "") in {"downloaded", "copied", "snapshotted", "generated"})
     return local_count / len(resources)
+
+
+def _paper_lens_contextual_explanations(roadmap: dict[str, Any], html: dict[str, str]) -> bool:
+    lens = roadmap.get("paper_lens") if isinstance(roadmap.get("paper_lens"), dict) else {}
+    segments = [item for item in lens.get("segments", []) if isinstance(item, dict)]
+    explanations = [item for item in lens.get("inline_explanations", []) if isinstance(item, dict)]
+    if not segments or not explanations:
+        return False
+    explanatory_fields = ("plain_meaning", "why_it_matters", "method_note", "related_map_nodes", "evidence_refs")
+    has_specific_explanation = any(any(item.get(field) for field in explanatory_fields) for item in explanations)
+    return has_specific_explanation and _contains_any_text(
+        html.get("paper_lens.html", ""),
+        ("paragraph", "段落", "Explanation support", "解释支撑度"),
+    )
+
+
+def _structured_quick_review_surface(roadmap: dict[str, Any], html: dict[str, str]) -> bool:
+    if not roadmap.get("paper_map") or not roadmap.get("paper_lens"):
+        return False
+    has_map_structure = _contains_any_text(
+        html.get("paper_map.html", ""),
+        ("Core Chain", "速览主链", "Download presentation notes", "presentation.md"),
+    )
+    has_lens_structure = _paper_lens_contextual_explanations(roadmap, html)
+    return has_map_structure and has_lens_structure and _portable_study_output_count(roadmap, html) >= 2
 
 
 def _resource_library_marker(roadmap: dict[str, Any], html: str, terms: tuple[str, ...]) -> bool:

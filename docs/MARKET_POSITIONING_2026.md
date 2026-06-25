@@ -1,6 +1,6 @@
 # fields-study-flow 市场定位与产品优化备忘
 
-更新时间：2026-06-20
+更新时间：2026-06-25
 
 ## 一句话定位
 
@@ -16,6 +16,16 @@ fields-study-flow 不是“再给你一份论文摘要”，而是把目标论�
 | 本地掌握地图 | [get-it](https://github.com/beltromatti/get-it) | 围绕 PDF 做掌握地图、学习工具、评分和本地化体验 | 更偏单文档学习工具，资源下载、论文逻辑因果和领域路线仍可扩展 | 吸收“可衡量掌握”思想，同时保留资料包、RAG 证据和 Paper Map |
 | 深度研究 Agent | [GPT Researcher](https://github.com/assafelovic/gpt-researcher)、[STORM](https://github.com/stanford-oval/storm) | 自动研究、报告生成、引用和多来源汇总 | 产物偏研究报告，不一定转化成学习路径和复现任务 | 研究材料只作为证据来源，最终输出仍是学习、复现和汇报动作 |
 | RAG / KG 基础设施 | [GraphRAG](https://github.com/microsoft/graphrag) | 从非结构文本抽取图结构，适合复杂知识检索 | 基础设施强，但终端学习体验和任务验收需要产品层设计 | 只采用轻量 RAG/KG，把证据直接挂到概念、资料、任务和验收上 |
+
+## 2026-06-25 竞品复核摘要
+
+- [Elicit](https://elicit.com/) 当前强调大规模学术检索、可定制研究报告、系统综述、句级证据引用，以及可审计的系统综述流程。它给我们的启发是：报告里的每个关键结论都必须能追溯证据，但我们的差异点必须继续放在“最快掌握这篇论文并完成验收”。
+- [Explainpaper](https://www.explainpaper.com/) 当前强调划词解释、上下文解释、多语言解释和 Chat with paper。它说明用户确实需要直白解释，但我们不能退回逐句碎片化解释，而要用段落级解释加 Paper Map 主链告诉用户“这段在整篇论文里起什么作用”。
+- [Scholarcy](https://www.scholarcy.com/) 当前强调摘要 flashcard、Spotlight 关键发现、结构化阅读、导出和 Zotero 等工具连接。它说明“快速复习卡片”和“可带走产物”很重要，所以我们的 Paper Map 汇报稿、Paper Lens PDF/LaTeX、mastery worksheet 需要被审计为发布门槛。
+- [ResearchRabbit](https://www.researchrabbit.ai/) 和 [Litmaps](https://www.litmaps.com/) 当前强调从一篇或一组论文出发的可视化文献发现、主题关系和监控更新。它们擅长发现“还该看什么”，但我们的学习路线必须继续回答“先看什么、为什么看、看到什么程度算掌握”。
+- [PaperQA2](https://github.com/Future-House/paper-qa) 是高星开源科学文档 RAG 项目，强调带引用回答和可复用索引。它给我们的底线是：RAG 不能只是装饰，每个关键解释、资源入选理由和验收任务都要尽量有 evidence chunk 或明确证据不足。
+
+因此，本项目的市场突破口不是做更大的搜索引擎，也不是做另一个 PDF 聊天框，而是做“目标论文掌握中控台”：图形化理解主链、段落级直白解释、本地资料包、证据追踪、可导出的汇报和验收产物。这几个东西必须同时出现，才足以和单点工具拉开差距。
 
 ## 我们真正要赢的点
 
