@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import hashlib
 from collections.abc import Callable
@@ -23,6 +24,7 @@ BROWSER_SNAPSHOT_VIEWPORTS = (
     {"id": "mobile-390x844", "width": 390, "height": 844},
 )
 BrowserSnapshotRenderer = Callable[[Path, dict[str, int | str], Path], dict[str, Any] | None]
+BrowserInteractionRunner = Callable[[Path], dict[str, Any] | None]
 
 
 class BrowserSnapshotUnavailable(RuntimeError):
@@ -244,11 +246,60 @@ def compare_browser_snapshot_baseline(current: dict[str, Any], baseline: Path | 
     }
 
 
+def probe_browser_interactions(
+    report_dir: Path | str,
+    *,
+    surfaces: list[str] | None = None,
+    runner: BrowserInteractionRunner | None = None,
+) -> dict[str, Any]:
+    """Optionally smoke-test exported report interactions in a real browser."""
+
+    root = Path(report_dir)
+    html_names = surfaces or _report_surfaces(root)
+    interactive_names = {"paper_map.html", "paper_lens.html", "roadmap.html"}
+    html_files = [
+        root / name
+        for name in html_names
+        if name in interactive_names and name.endswith(".html") and (root / name).is_file()
+    ]
+    checks: list[dict[str, Any]] = []
+    probes: list[dict[str, Any]] = []
+    if not html_files:
+        return _browser_interaction_result(
+            "skipped",
+            checks,
+            probes,
+            "No interactive report surfaces were found to probe.",
+        )
+    runner = runner or _playwright_interaction_runner
+    for html_file in html_files:
+        try:
+            metadata = runner(html_file) or {}
+        except BrowserSnapshotUnavailable as exc:
+            return _browser_interaction_result("skipped", checks, probes, str(exc))
+        except Exception as exc:  # pragma: no cover - exact browser failures vary by platform.
+            checks.append(
+                {
+                    "file": html_file.name,
+                    "check": "interaction_probe",
+                    "status": "fail",
+                    "message": str(exc),
+                }
+            )
+            continue
+        checks.extend(_browser_interaction_metadata_checks(html_file.name, metadata))
+        probes.append({"file": html_file.name, **_public_browser_interaction_metadata(metadata)})
+    failed = [item for item in checks if item.get("status") == "fail"]
+    return _browser_interaction_result("fail" if failed else "pass", checks, probes, "")
+
+
 def evaluate_fresh_user_timing(measured_minutes: float, *, target_minutes: float = 10.0) -> dict[str, Any]:
     """Evaluate whether a fresh learner reached the first mastery task quickly enough."""
 
     measured = round(float(measured_minutes), 2)
     target = round(float(target_minutes), 2)
+    if not math.isfinite(measured) or not math.isfinite(target) or measured <= 0 or target <= 0:
+        raise ValueError("fresh-user timing values must be positive finite minutes")
     within_target = measured <= target
     checks = [
         {
@@ -659,9 +710,10 @@ def _release_readiness_history_entry(summary: dict[str, Any]) -> dict[str, Any]:
         "visual_status": _sanitize_public_text(str(summary.get("visual_status") or "unknown")),
         "benchmark_status": _sanitize_public_text(str(summary.get("benchmark_status") or "unknown")),
         "snapshot_status": _sanitize_public_text(str(summary.get("snapshot_status") or "not_run")),
-        "baseline_status": _sanitize_public_text(str(summary.get("baseline_status") or "pass")),
-        "fresh_user_timing_status": _sanitize_public_text(str(summary.get("fresh_user_timing_status") or "pass")),
-        "fresh_user_trend_status": _sanitize_public_text(str(summary.get("fresh_user_trend_status") or "pass")),
+        "baseline_status": _sanitize_public_text(str(summary.get("baseline_status") or "not_run")),
+        "interaction_status": _sanitize_public_text(str(summary.get("interaction_status") or "not_run")),
+        "fresh_user_timing_status": _sanitize_public_text(str(summary.get("fresh_user_timing_status") or "not_run")),
+        "fresh_user_trend_status": _sanitize_public_text(str(summary.get("fresh_user_trend_status") or "not_run")),
         "recurring_blockers": int(summary.get("recurring_blockers") or 0),
         "release_report": _sanitize_public_text(str(summary.get("html_path") or summary.get("path") or "release_readiness.html")),
         "next_actions": [_sanitize_public_text(str(action)) for action in next_actions[:3] if action],
@@ -958,17 +1010,24 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
     trend = audit_result.get("fresh_user_trend_report") if isinstance(audit_result.get("fresh_user_trend_report"), dict) else {}
     snapshot = audit_result.get("browser_snapshot_capture") if isinstance(audit_result.get("browser_snapshot_capture"), dict) else {}
     baseline = audit_result.get("browser_snapshot_baseline") if isinstance(audit_result.get("browser_snapshot_baseline"), dict) else {}
+    interaction = audit_result.get("browser_interaction_probe") if isinstance(audit_result.get("browser_interaction_probe"), dict) else {}
     recurring = int(((trend.get("summary") if isinstance(trend.get("summary"), dict) else {}) or {}).get("recurring_blockers") or 0)
     visual_status = str(audit_result.get("status") or "unknown")
     market_status = str(market.get("status") or "unknown")
-    baseline_status = str(baseline.get("status") or "pass")
-    timing_status = str(timing.get("status") or "pass")
-    trend_status = str(trend.get("status") or "pass")
-    hard_fail = visual_status == "fail" or baseline_status == "fail"
+    snapshot_status = str(snapshot.get("status") or "not_run")
+    baseline_status = str(baseline.get("status") or "not_run")
+    interaction_status = str(interaction.get("status") or "not_run")
+    timing_status = str(timing.get("status") or "not_run")
+    trend_status = str(trend.get("status") or "not_run")
+    has_visual_evidence = snapshot_status == "pass" or baseline_status == "pass"
+    has_interaction_evidence = interaction_status == "pass"
+    hard_fail = visual_status == "fail" or snapshot_status == "fail" or baseline_status == "fail" or interaction_status == "fail"
     needs_work = (
         market_status != "market_ready"
         or timing_status not in {"pass", "skipped"}
-        or trend_status not in {"pass", "skipped"}
+        or not has_visual_evidence
+        or not has_interaction_evidence
+        or trend_status not in {"pass", "skipped", "not_run"}
         or recurring > 0
     )
     if hard_fail:
@@ -987,8 +1046,9 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
         "market_status": market_status,
         "visual_status": visual_status,
         "benchmark_status": str(benchmark.get("status") or "unknown"),
-        "snapshot_status": str(snapshot.get("status") or "not_run"),
+        "snapshot_status": snapshot_status,
         "baseline_status": baseline_status,
+        "interaction_status": interaction_status,
         "fresh_user_timing_status": timing_status,
         "fresh_user_trend_status": trend_status,
         "recurring_blockers": recurring,
@@ -998,16 +1058,45 @@ def _release_readiness_summary(report_audit: dict[str, Any], audit_result: dict[
             for item in benchmark.get("checks", [])
             if isinstance(item, dict) and item.get("status") not in {"pass", None}
         ],
-        "next_actions": _release_next_actions(market, benchmark, trend),
+        "next_actions": _release_next_actions(market, benchmark, trend, timing, snapshot, baseline, interaction),
         "trends": [item for item in trend.get("trends", []) if isinstance(item, dict)],
     }
 
 
-def _release_next_actions(market: dict[str, Any], benchmark: dict[str, Any], trend: dict[str, Any]) -> list[str]:
+def _release_next_actions(
+    market: dict[str, Any],
+    benchmark: dict[str, Any],
+    trend: dict[str, Any],
+    timing: dict[str, Any] | None = None,
+    snapshot: dict[str, Any] | None = None,
+    baseline: dict[str, Any] | None = None,
+    interaction: dict[str, Any] | None = None,
+) -> list[str]:
     actions: list[str] = []
+    timing_status = str((timing or {}).get("status") or "not_run")
+    has_timing_evidence = timing_status in {"pass", "skipped"}
+    if timing_status not in {"pass", "skipped"}:
+        actions.append("Run a fresh-user timing test with --fresh-user-minutes before calling this report release-ready.")
+    snapshot_status = str((snapshot or {}).get("status") or "not_run")
+    baseline_status = str((baseline or {}).get("status") or "not_run")
+    has_visual_evidence = snapshot_status == "pass" or baseline_status == "pass"
+    if snapshot_status != "pass" and baseline_status != "pass":
+        actions.append("Install the visual extra and run --capture-screenshots, or compare a passing screenshot baseline, before calling this report visually release-ready.")
+    interaction_status = str((interaction or {}).get("status") or "not_run")
+    has_interaction_evidence = interaction_status == "pass"
+    if interaction_status != "pass":
+        actions.append("Install the visual extra and run --probe-interactions to verify Paper Map, Paper Lens, and resource-library clicks before calling this report interaction-ready.")
     for item in market.get("next_best_actions", []):
         if isinstance(item, dict) and item.get("action"):
-            actions.append(_sanitize_public_text(str(item["action"])))
+            action = _sanitize_public_text(str(item["action"]))
+            normalized_action = action.lower()
+            if has_timing_evidence and "fresh-user" in normalized_action and "time" in normalized_action:
+                continue
+            if has_visual_evidence and "screenshot" in normalized_action:
+                continue
+            if has_interaction_evidence and ("interaction" in normalized_action or "canvas" in normalized_action):
+                continue
+            actions.append(action)
     for item in benchmark.get("checks", []):
         if isinstance(item, dict) and item.get("status") not in {"pass", None}:
             action = item.get("recommendation") or item.get("fix")
@@ -1044,6 +1133,7 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
         f"| Competitive benchmark | {_markdown_cell(str(summary['benchmark_status']))} |",
         f"| Browser screenshots | {_markdown_cell(str(summary['snapshot_status']))} |",
         f"| Snapshot baseline | {_markdown_cell(str(summary['baseline_status']))} |",
+        f"| Browser interactions | {_markdown_cell(str(summary['interaction_status']))} |",
         f"| Fresh-user timing | {_markdown_cell(str(summary['fresh_user_timing_status']))} |",
         f"| Fresh-user trends | {_markdown_cell(str(summary['fresh_user_trend_status']))} |",
         f"| Recurring blockers | {int(summary['recurring_blockers'])} |",
@@ -1054,7 +1144,7 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
         "| --- | --- | --- |",
         f"| Elicit/SciSpace evidence transparency | Every claim should point back to evidence, not just a summary. | {_dimension_signal(summary, 'learning_depth', 'plain_explanation')} |",
         f"| ResearchRabbit/roadmap.sh visual navigation | Learners should see a clear map and know the first click. | {_dimension_signal(summary, 'onboarding', 'visual_polish')} |",
-        f"| React Flow canvas affordance | The Paper Map should feel draggable, zoomable, and stable. | {_benchmark_signal(summary, 'xyflow_canvas_affordance')} |",
+        f"| React Flow canvas affordance | The Paper Map should feel draggable, zoomable, and stable. | {_release_status_signal(summary.get('interaction_status')) or _benchmark_signal(summary, 'xyflow_canvas_affordance')} |",
         f"| Local-first study bundle | Resources should open locally when possible, with links as fallback. | {_dimension_signal(summary, 'resource_completeness')} |",
         f"| Mastery proof | Understanding should end in explain/derive/reproduce/critique evidence. | {_dimension_signal(summary, 'actionability', 'mastery_actionability')} |",
         "",
@@ -1065,7 +1155,7 @@ def _release_readiness_markdown(summary: dict[str, Any]) -> str:
     if actions:
         rows.extend(f"- {_markdown_cell(_sanitize_public_text(str(action)))}" for action in actions)
     else:
-        rows.append("- No urgent release blockers recorded. Keep a fresh-user timing run and screenshot baseline before public launch.")
+        rows.append("- No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.")
     trends = summary.get("trends", [])
     if trends:
         rows.extend(["", "## Fresh-User Recurring Blockers", "", "| Reports | Occurrences | Blocker | Fix ideas |", "| ---: | ---: | --- | --- |"])
@@ -1090,6 +1180,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
         ("Competitive benchmark", summary.get("benchmark_status")),
         ("Browser screenshots", summary.get("snapshot_status")),
         ("Snapshot baseline", summary.get("baseline_status")),
+        ("Browser interactions", summary.get("interaction_status")),
         ("Fresh-user timing", summary.get("fresh_user_timing_status")),
         ("Fresh-user trends", summary.get("fresh_user_trend_status")),
         ("Recurring blockers", summary.get("recurring_blockers")),
@@ -1108,7 +1199,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
         (
             "React Flow canvas affordance",
             "The Paper Map should feel draggable, zoomable, and stable.",
-            _benchmark_signal(summary, "xyflow_canvas_affordance"),
+            _release_status_signal(summary.get("interaction_status")) or _benchmark_signal(summary, "xyflow_canvas_affordance"),
         ),
         (
             "Local-first study bundle",
@@ -1123,7 +1214,7 @@ def _release_readiness_html(summary: dict[str, Any]) -> str:
     ]
     actions = summary.get("next_actions", [])
     trends = summary.get("trends", [])
-    action_items = "".join(f"<li>{_html_escape(_sanitize_public_text(str(action)))}</li>" for action in actions) or "<li>No urgent release blockers recorded.</li>"
+    action_items = "".join(f"<li>{_html_escape(_sanitize_public_text(str(action)))}</li>" for action in actions) or "<li>No urgent release blockers recorded. Keep the timing, screenshot, and interaction gates in future release checks.</li>"
     trend_rows = "".join(
         "<tr><td>{reports}</td><td>{occurrences}</td><td>{blocker}</td><td>{fixes}</td></tr>".format(
             reports=int(item.get("reports") or 0),
@@ -1266,6 +1357,13 @@ def _benchmark_signal(summary: dict[str, Any], id_: str) -> str:
         if isinstance(item, dict) and item.get("id") == id_:
             return f"{item.get('status', 'warn')}: {item.get('label') or item.get('recommendation') or item.get('fix') or id_}"
     return "pass or not explicitly warned"
+
+
+def _release_status_signal(status: Any) -> str:
+    value = str(status or "").strip()
+    if not value or value == "not_run":
+        return "not measured"
+    return value
 
 
 def _fresh_user_blocker_entries(text: str) -> list[dict[str, str]]:
@@ -1449,6 +1547,8 @@ def _public_browser_render_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
         "rendered_text_length",
         "root_width",
         "root_height",
+        "render_width",
+        "render_height",
         "visible_marker_count",
         "rendered_decorative_ellipsis_count",
     ):
@@ -1481,19 +1581,23 @@ def _browser_render_metadata_checks(file_name: str, viewport_id: str, metadata: 
     )
     root_width = int(metadata.get("root_width") or 0)
     root_height = int(metadata.get("root_height") or 0)
+    render_width = int(metadata.get("render_width") or root_width or 0)
+    render_height = int(metadata.get("render_height") or root_height or 0)
     checks.append(
         {
             "file": file_name,
             "viewport": viewport_id,
             "check": "root_box",
-            "status": "pass" if root_width > 0 and root_height > 0 else "fail",
+            "status": "pass" if render_width > 0 and render_height > 0 else "fail",
             "message": (
-                f"Root container rendered at {root_width}x{root_height}."
-                if root_width > 0 and root_height > 0
-                else "Root container has no measurable rendered size."
+                f"Rendered container measured at {render_width}x{render_height}."
+                if render_width > 0 and render_height > 0
+                else "Rendered container has no measurable size."
             ),
             "root_width": root_width,
             "root_height": root_height,
+            "render_width": render_width,
+            "render_height": render_height,
         }
     )
     ellipsis_count = int(metadata.get("rendered_decorative_ellipsis_count") or 0)
@@ -1512,6 +1616,186 @@ def _browser_render_metadata_checks(file_name: str, viewport_id: str, metadata: 
         }
     )
     return checks
+
+
+def _public_browser_interaction_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    output: dict[str, Any] = {}
+    for key in (
+        "console_errors",
+        "paper_map_nodes_before",
+        "paper_map_nodes_after_branch",
+        "paper_lens_paragraphs",
+        "roadmap_resources_before",
+        "roadmap_resources_after_filter",
+        "roadmap_filter_attempts",
+        "paper_lens_active_before",
+        "paper_lens_active_after",
+        "roadmap_filter_method",
+    ):
+        value = metadata.get(key)
+        if isinstance(value, bool):
+            output[key] = value
+        elif isinstance(value, (int, float)):
+            output[key] = int(value)
+        elif isinstance(value, str):
+            output[key] = _sanitize_public_text(value)
+    for key in (
+        "paper_map_canvas_present",
+        "paper_map_branch_toggle_available",
+        "paper_map_branch_revealed",
+        "paper_map_detail_changed",
+        "paper_map_zoom_changed",
+        "paper_map_zoom_method",
+        "roadmap_filter_changed",
+        "paper_lens_detail_changed",
+    ):
+        if isinstance(metadata.get(key), bool):
+            output[key] = bool(metadata[key])
+        elif isinstance(metadata.get(key), str):
+            output[key] = _sanitize_public_text(str(metadata[key]))
+    return output
+
+
+def _browser_interaction_metadata_checks(file_name: str, metadata: dict[str, Any]) -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
+    console_errors = int(metadata.get("console_errors") or 0)
+    checks.append(
+        {
+            "file": file_name,
+            "check": "console_errors",
+            "status": "pass" if console_errors == 0 else "fail",
+            "message": (
+                "No browser console errors were recorded during the interaction probe."
+                if console_errors == 0
+                else f"Browser recorded {console_errors} console error(s) during the interaction probe."
+            ),
+            "console_errors": console_errors,
+        }
+    )
+    if file_name == "paper_map.html":
+        nodes_before = int(metadata.get("paper_map_nodes_before") or 0)
+        branch_applicable = (
+            bool(metadata.get("paper_map_branch_toggle_available"))
+            or bool(metadata.get("paper_map_branch_revealed"))
+            or (
+                "paper_map_branch_toggle_available" not in metadata
+                and nodes_before > 1
+            )
+        )
+        checks.extend(
+            [
+                _interaction_bool_check(
+                    file_name,
+                    "paper_map_canvas_present",
+                    bool(metadata.get("paper_map_canvas_present")),
+                    "Paper Map canvas rendered in the browser.",
+                    "Paper Map canvas did not render in the browser.",
+                ),
+                _interaction_bool_check(
+                    file_name,
+                    "paper_map_branch_revealed",
+                    bool(metadata.get("paper_map_branch_revealed")) if branch_applicable else None,
+                    "Paper Map branch toggle revealed supporting nodes.",
+                    "Paper Map branch toggle did not reveal supporting nodes.",
+                    skip_message="Paper Map has no enabled branch toggle in this concise layout, so branch expansion is not applicable.",
+                ),
+                _interaction_bool_check(
+                    file_name,
+                    "paper_map_detail_changed",
+                    bool(metadata.get("paper_map_detail_changed")) if nodes_before > 1 else None,
+                    "Clicking a Paper Map node updated the detail panel.",
+                    "Clicking a Paper Map node did not update the detail panel.",
+                    skip_message="Paper Map has fewer than two nodes, so node-to-node detail switching is not applicable.",
+                ),
+                _interaction_bool_check(
+                    file_name,
+                    "paper_map_zoom_changed",
+                    bool(metadata.get("paper_map_zoom_changed")),
+                    "Paper Map zoom/pan viewport transform changed after a zoom control or wheel input.",
+                    "Paper Map zoom/pan viewport transform did not change after zoom controls or wheel input.",
+                ),
+            ]
+        )
+    elif file_name == "roadmap.html":
+        resources_before = int(metadata.get("roadmap_resources_before") or 0)
+        checks.append(
+            _interaction_bool_check(
+                file_name,
+                "roadmap_resources_present",
+                resources_before > 0,
+                "Roadmap resource library rendered at least one resource row before filtering.",
+                "Roadmap resource library had no rendered resource rows to filter.",
+            )
+        )
+        checks.append(
+            _interaction_bool_check(
+                file_name,
+                "roadmap_filter_changed",
+                resources_before > 0 and bool(metadata.get("roadmap_filter_changed")),
+                "Roadmap resource filtering changed the visible resource set.",
+                "Roadmap resource filtering did not change the visible resource set.",
+            )
+        )
+    elif file_name == "paper_lens.html":
+        paragraphs_value = metadata.get("paper_lens_paragraphs")
+        paragraphs = int(paragraphs_value or 0)
+        lens_detail_applicable = paragraphs > 1 or "paper_lens_paragraphs" not in metadata
+        checks.append(
+            _interaction_bool_check(
+                file_name,
+                "paper_lens_detail_changed",
+                bool(metadata.get("paper_lens_detail_changed")) if lens_detail_applicable else None,
+                "Clicking a Paper Lens paragraph updated the detail panel.",
+                "Clicking a Paper Lens paragraph did not update the detail panel.",
+                skip_message="Paper Lens has fewer than two paragraphs, so paragraph-to-paragraph detail switching is not applicable.",
+            )
+        )
+    return checks
+
+
+def _interaction_bool_check(
+    file_name: str,
+    check: str,
+    passed: bool | None,
+    pass_message: str,
+    fail_message: str,
+    *,
+    skip_message: str | None = None,
+) -> dict[str, Any]:
+    if passed is None:
+        return {
+            "file": file_name,
+            "check": check,
+            "status": "skipped",
+            "message": skip_message or "Interaction check is not applicable for this report.",
+        }
+    return {
+        "file": file_name,
+        "check": check,
+        "status": "pass" if passed else "fail",
+        "message": pass_message if passed else fail_message,
+    }
+
+
+def _browser_interaction_result(
+    status: str,
+    checks: list[dict[str, Any]],
+    probes: list[dict[str, Any]],
+    reason: str,
+) -> dict[str, Any]:
+    failed = sum(1 for item in checks if item.get("status") == "fail")
+    return {
+        "status": status,
+        "summary": {
+            "mode": "browser-interaction",
+            "pages": len(probes),
+            "checks": len(checks),
+            "failed_checks": failed,
+            "reason": reason,
+        },
+        "probes": probes,
+        "checks": checks,
+    }
 
 
 def _browser_snapshot_result(
@@ -1572,7 +1856,10 @@ def _playwright_snapshot_renderer(html_file: Path, viewport: dict[str, int | str
             render_metadata = page.evaluate(
                 """() => {
                     const root = document.getElementById("root");
-                    const rect = root ? root.getBoundingClientRect() : { width: 0, height: 0 };
+                    const fallback = document.querySelector("main") || document.body || document.documentElement;
+                    const container = root || fallback;
+                    const rect = container ? container.getBoundingClientRect() : { width: 0, height: 0 };
+                    const rootRect = root ? root.getBoundingClientRect() : { width: 0, height: 0 };
                     const renderedText = (document.body && document.body.innerText || "").trim();
                     const ellipsisMatches = renderedText.match(/\\.{3}|…/g) || [];
                     const visibleMarkers = document.querySelectorAll(
@@ -1580,8 +1867,10 @@ def _playwright_snapshot_renderer(html_file: Path, viewport: dict[str, int | str
                     ).length;
                     return {
                         rendered_text_length: renderedText.length,
-                        root_width: Math.round(rect.width || 0),
-                        root_height: Math.round(rect.height || 0),
+                        root_width: Math.round(rootRect.width || 0),
+                        root_height: Math.round(rootRect.height || 0),
+                        render_width: Math.round(rect.width || 0),
+                        render_height: Math.round(rect.height || 0),
                         visible_marker_count: visibleMarkers,
                         rendered_decorative_ellipsis_count: ellipsisMatches.length,
                     };
@@ -1597,6 +1886,211 @@ def _playwright_snapshot_renderer(html_file: Path, viewport: dict[str, int | str
                 "Playwright is installed, but no browser binary is available; run the Playwright browser installer before capturing screenshots."
             ) from exc
         raise
+
+
+def _playwright_interaction_runner(html_file: Path) -> dict[str, Any]:
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception as exc:  # pragma: no cover - depends on optional local tooling.
+        raise BrowserSnapshotUnavailable(
+            "Python Playwright is not installed; install an optional browser runtime to probe real report interactions."
+        ) from exc
+    try:  # pragma: no cover - exercised only when optional browser runtime exists.
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch()
+            page = browser.new_page(viewport={"width": 1280, "height": 720})
+            console_errors: list[str] = []
+            page.on("console", lambda message: console_errors.append(message.text) if message.type == "error" else None)
+            page.on("pageerror", lambda exc: console_errors.append(str(exc)))
+            page.goto(html_file.resolve().as_uri(), wait_until="networkidle")
+            try:
+                page.wait_for_function("document.body && document.body.innerText.trim().length > 20", timeout=4000)
+            except Exception:
+                pass
+            page.wait_for_timeout(250)
+            metadata: dict[str, Any] = {"console_errors": len(console_errors)}
+            if html_file.name == "paper_map.html":
+                metadata.update(_probe_paper_map_page(page))
+            elif html_file.name == "roadmap.html":
+                metadata.update(_probe_roadmap_page(page))
+            elif html_file.name == "paper_lens.html":
+                metadata.update(_probe_paper_lens_page(page))
+            browser.close()
+            return metadata
+    except Exception as exc:  # pragma: no cover - exact browser install errors vary by machine.
+        message = str(exc)
+        if "Executable doesn't exist" in message or "playwright install" in message.lower():
+            raise BrowserSnapshotUnavailable(
+                "Playwright is installed, but no browser binary is available; run the Playwright browser installer before probing interactions."
+            ) from exc
+        raise
+
+
+def _probe_paper_map_page(page: Any) -> dict[str, Any]:
+    canvas = page.locator("[data-paper-map-canvas]")
+    canvas_present = canvas.count() > 0
+    node_locator = page.locator(".react-flow__node")
+    nodes_before = node_locator.count()
+    branch_revealed = False
+    branch_toggle = page.locator("[data-paper-map-branch-toggle]")
+    branch_toggle_available = branch_toggle.count() > 0 and branch_toggle.first.is_enabled()
+    if branch_toggle_available:
+        try:
+            branch_toggle.first.click()
+            page.wait_for_timeout(250)
+            branch_revealed = node_locator.count() > nodes_before or branch_toggle.first.get_attribute("aria-pressed") == "true"
+        except Exception:
+            branch_revealed = False
+    nodes_after_branch = node_locator.count()
+    detail_before = _safe_locator_text(page, ".detail-rail h2")
+    detail_changed = False
+    if node_locator.count() > 1:
+        try:
+            node_locator.nth(1).click()
+            page.wait_for_timeout(200)
+            detail_changed = _safe_locator_text(page, ".detail-rail h2") != detail_before
+        except Exception:
+            detail_changed = False
+    transform_before = _paper_map_viewport_transform(page)
+    zoom_changed = False
+    zoom_method = ""
+    zoom_button = page.locator(".react-flow__controls-zoomin, [data-paper-map-zoom-in]")
+    if zoom_button.count() > 0:
+        try:
+            zoom_button.first.click()
+            page.wait_for_timeout(250)
+            zoom_changed = _paper_map_viewport_transform(page) != transform_before
+            if zoom_changed:
+                zoom_method = "button"
+        except Exception:
+            zoom_changed = False
+    if not zoom_changed and canvas_present:
+        try:
+            box = canvas.first.bounding_box()
+            if box:
+                page.mouse.move(float(box["x"]) + float(box["width"]) / 2, float(box["y"]) + float(box["height"]) / 2)
+            else:
+                page.mouse.move(640, 360)
+            page.mouse.wheel(0, -500)
+            page.wait_for_timeout(250)
+            zoom_changed = _paper_map_viewport_transform(page) != transform_before
+            if zoom_changed:
+                zoom_method = "wheel"
+        except Exception:
+            zoom_changed = False
+    return {
+        "paper_map_canvas_present": canvas_present,
+        "paper_map_nodes_before": nodes_before,
+        "paper_map_nodes_after_branch": nodes_after_branch,
+        "paper_map_branch_toggle_available": branch_toggle_available,
+        "paper_map_branch_revealed": branch_revealed,
+        "paper_map_detail_changed": detail_changed,
+        "paper_map_zoom_changed": zoom_changed,
+        "paper_map_zoom_method": zoom_method,
+    }
+
+
+def _probe_roadmap_page(page: Any) -> dict[str, Any]:
+    resource_cards = page.locator("#resource-library .resource-row, #resource-library article, [data-library-card]")
+    before = resource_cards.count()
+    filter_changed = False
+    filter_method = ""
+    filter_attempts = 0
+    after = before
+    filter_chips = page.locator('#resource-library [data-resource-filter]:not([data-resource-filter="all"])')
+    for index in range(filter_chips.count()):
+        try:
+            chip = filter_chips.nth(index)
+            chip.click()
+            page.wait_for_timeout(200)
+            after = resource_cards.count()
+            filter_attempts += 1
+            if after != before:
+                filter_changed = True
+                filter_method = str(chip.get_attribute("data-resource-filter") or "chip")
+                break
+        except Exception:
+            after = resource_cards.count()
+    if not filter_changed and before > 0:
+        search = page.locator("#resource-library input")
+        if search.count() > 0:
+            try:
+                search.first.fill("__fields_study_flow_no_match__")
+                page.wait_for_timeout(200)
+                after = resource_cards.count()
+                filter_attempts += 1
+                if after != before:
+                    filter_changed = True
+                    filter_method = "search"
+            except Exception:
+                after = resource_cards.count()
+    return {
+        "roadmap_resources_before": before,
+        "roadmap_resources_after_filter": after,
+        "roadmap_filter_changed": filter_changed,
+        "roadmap_filter_method": filter_method,
+        "roadmap_filter_attempts": filter_attempts,
+    }
+
+
+def _probe_paper_lens_page(page: Any) -> dict[str, Any]:
+    paragraphs = page.locator(".paragraph-card")
+    paragraph_count = paragraphs.count()
+    active_before = _safe_locator_text(page, ".detail-rail h2")
+    detail_changed = False
+    if paragraph_count > 1:
+        try:
+            paragraphs.nth(1).click()
+            page.wait_for_timeout(200)
+            detail_changed = _safe_locator_text(page, ".detail-rail h2") != active_before
+        except Exception:
+            detail_changed = False
+    return {
+        "paper_lens_paragraphs": paragraph_count,
+        "paper_lens_active_before": active_before,
+        "paper_lens_active_after": _safe_locator_text(page, ".detail-rail h2"),
+        "paper_lens_detail_changed": detail_changed,
+    }
+
+
+def _paper_map_viewport_transform(page: Any) -> str:
+    try:
+        return str(
+            page.evaluate(
+                """() => {
+                    const el = document.querySelector(".react-flow__viewport, [data-paper-map-viewport]");
+                    if (!el) return "";
+                    const style = el.getAttribute("style") || "";
+                    const transform = el.getAttribute("transform") || "";
+                    const computed = window.getComputedStyle(el).transform || "";
+                    return `${style}|${transform}|${computed}`;
+                }"""
+            )
+        )
+    except Exception:
+        try:
+            return _safe_locator_attribute(page.locator(".react-flow__viewport, [data-paper-map-viewport]"), "style")
+        except Exception:
+            return ""
+
+
+def _safe_locator_text(page: Any, selector: str) -> str:
+    try:
+        locator = page.locator(selector)
+        if locator.count() <= 0:
+            return ""
+        return str(locator.first.inner_text(timeout=500))
+    except Exception:
+        return ""
+
+
+def _safe_locator_attribute(locator: Any, name: str) -> str:
+    try:
+        if locator.count() <= 0:
+            return ""
+        return str(locator.first.get_attribute(name) or "")
+    except Exception:
+        return ""
 
 
 def _report_surfaces(root: Path) -> list[str]:
@@ -1764,21 +2258,30 @@ def _competitive_benchmark(
         _benchmark_check(
             "resource_purpose_badges",
             "Resource purpose badges",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-purpose-badge", "为什么读", "Why read")),
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-purpose-badge", "为什么读", "Why read")),
             "Explain why each resource is in the path, not only where to open it.",
             "roadmap.sh / study-product UX",
         ),
         _benchmark_check(
             "resource_strength_signals",
             "Resource strength and provenance signals",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-strength-badge", "证据强度", "Evidence strength")),
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-strength-badge", "证据强度", "Evidence strength")),
             "Show whether a resource is core evidence, recommended support, or a fallback link.",
             "PaperQA-style trust / study-product UX",
         ),
         _benchmark_check(
+            "resource_provenance_coverage",
+            "Resource provenance and paper-logic coverage",
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-provenance-badge", "来源", "Provenance"))
+            and _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-coverage-badge", "覆盖范围", "Coverage")),
+            "Show where each resource comes from and which paper-logic surface it helps cover.",
+            "Elicit / PaperQA / ResearchRabbit",
+        ),
+        _benchmark_check(
             "resource_evidence_snippets",
             "Resource evidence snippets",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-evidence-snippet", "最强证据", "Strongest evidence")),
+            _resource_library_has_evidence(roadmap)
+            and _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-evidence-snippet", "最强证据", "Strongest evidence")),
             "Expose the strongest supporting snippet for high-value resources so learners can verify why a source was selected.",
             "Elicit / citation-backed research UX",
         ),
@@ -1877,21 +2380,30 @@ def _field_course_competitive_benchmark(roadmap: dict[str, Any], surfaces: list[
         _benchmark_check(
             "resource_purpose_badges",
             "Resource purpose badges",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-purpose-badge", "为什么读", "Why read")),
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-purpose-badge", "为什么读", "Why read")),
             "Explain why each resource is in the path, not only where to open it.",
             "roadmap.sh / study-product UX",
         ),
         _benchmark_check(
             "resource_strength_signals",
             "Resource strength and provenance signals",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-strength-badge", "证据强度", "Evidence strength")),
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-strength-badge", "证据强度", "Evidence strength")),
             "Show whether each resource is core evidence, recommended support, or a fallback link.",
             "Elicit / study-product UX",
         ),
         _benchmark_check(
+            "resource_provenance_coverage",
+            "Resource provenance and learning-surface coverage",
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-provenance-badge", "来源", "Provenance"))
+            and _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-coverage-badge", "覆盖范围", "Coverage")),
+            "Show where each resource comes from and which concept, task, or validation surface it covers.",
+            "Elicit / PaperQA / ResearchRabbit",
+        ),
+        _benchmark_check(
             "resource_evidence_snippets",
             "Resource evidence snippets",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-evidence-snippet", "最强证据", "Strongest evidence")),
+            _resource_library_has_evidence(roadmap)
+            and _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-evidence-snippet", "最强证据", "Strongest evidence")),
             "Expose the strongest supporting snippet for high-value resources so learners can verify why a source was selected.",
             "Elicit / citation-backed research UX",
         ),
@@ -1970,14 +2482,17 @@ def _portable_study_output_count(roadmap: dict[str, Any], html: dict[str, str]) 
     if (
         len(task_types & {"explain", "derive", "reproduce", "critique"}) >= 3
         and bool(required_evidence)
-    ) or _contains_any_text(
-        roadmap_html,
-        (
-            "mastery-checklist",
-            "mastery-task",
-            "掌握验收",
-            "checklist",
-        ),
+        and _contains_any_text(
+            roadmap_html,
+            (
+                "data-mastery-export",
+                "mastery_worksheet.md",
+                "复制证据清单",
+                "下载 worksheet",
+                "Copy evidence worksheet",
+                "Download worksheet",
+            ),
+        )
     ):
         outputs += 1
     return outputs
@@ -1991,6 +2506,15 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "First-screen quickstart",
             _contains_any_text(html.get("index.html", ""), ("10 分钟入门", "10-minute quickstart")),
             "Add a visible 10-minute quickstart so a new learner knows the first three actions.",
+        ),
+        _experience_check(
+            "intent_router_choice",
+            "Intent-based entry choice",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("intent-router-panel", "data-intent-router", "按你的目的选择入口", "Choose by what you need"),
+            ),
+            "Add an intent-based router on index.html so learners can choose fastest understanding, presentation preparation, or mastery validation without learning the report structure first.",
         ),
         _experience_check(
             "fresh_user_one_minute_start",
@@ -2109,14 +2633,21 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
         _experience_check(
             "resource_purpose_badges",
             "Resource purpose badges",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-purpose-badge", "为什么读", "Why read")),
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-purpose-badge", "为什么读", "Why read")),
             "Show why each resource matters: primary evidence, background, implementation, or validation.",
         ),
         _experience_check(
             "resource_strength_signals",
             "Resource strength and provenance signals",
-            _contains_any_text(html.get("roadmap.html", ""), ("resource-strength-badge", "证据强度", "Evidence strength")),
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-strength-badge", "证据强度", "Evidence strength")),
             "Show whether each resource is a core source, recommended supplement, or manual fallback.",
+        ),
+        _experience_check(
+            "resource_provenance_coverage",
+            "Resource provenance and coverage",
+            _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-provenance-badge", "来源", "Provenance"))
+            and _resource_library_marker(roadmap, html.get("roadmap.html", ""), ("resource-coverage-badge", "覆盖范围", "Coverage")),
+            "Show source provenance and which learning surface each resource supports, so learners can decide what to open first.",
         ),
         _experience_check(
             "mobile_wrap_layout",
@@ -2373,6 +2904,14 @@ def _local_resource_ratio(roadmap: dict[str, Any]) -> float:
         return 0.0
     local_count = sum(1 for item in resources if item.get("local_href") or str(item.get("status") or "") in {"downloaded", "copied", "snapshotted", "generated"})
     return local_count / len(resources)
+
+
+def _resource_library_marker(roadmap: dict[str, Any], html: str, terms: tuple[str, ...]) -> bool:
+    return bool(_all_resource_entries(roadmap)) and _contains_any_text(html, terms)
+
+
+def _resource_library_has_evidence(roadmap: dict[str, Any]) -> bool:
+    return any(_resource_evidence_chunks(item) for item in _all_resource_entries(roadmap) if isinstance(item, dict))
 
 
 def _resource_evidence_review_link_count(roadmap: dict[str, Any], html: dict[str, str]) -> int:

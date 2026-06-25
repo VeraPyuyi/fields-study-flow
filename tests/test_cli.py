@@ -85,10 +85,77 @@ def test_cli_demo_generates_zero_setup_single_paper_report(tmp_path):
     assert roadmap["profile"]["route_depth"] == "fastest"
     assert roadmap["paper_map"]["layout"]["kind"] == "xmind-flow"
     assert roadmap["paper_lens"]["explanation_summary"]["granularity"] == "paragraph"
+    assert "study_bundle" in roadmap
+    assert roadmap["study_bundle"]["summary"]["completed"] >= 4
+    assert all(item.get("local_href") for item in roadmap["study_bundle"]["resources"][:4])
+    assert (output_dir / "study-assets" / "study_bundle_manifest.json").exists()
+    bundle_readme = (output_dir / "study-assets" / "README.md").read_text(encoding="utf-8")
+    assert "10 分钟开始" in bundle_readme
+    assert "Attention Is All You Need" in bundle_readme
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
     assert "从这里开始" in index_html
     assert "paper_map.html" in index_html
     assert "Attention Is All You Need" in index_html
+    roadmap_html = (output_dir / "roadmap.html").read_text(encoding="utf-8")
+    assert "打开资料包说明" in roadmap_html
+    assert "data-mastery-export" in roadmap_html
+    dumped = json.dumps(roadmap, ensure_ascii=False)
+    assert str(output_dir) not in dumped
+
+
+def test_cli_demo_market_check_writes_release_readiness_summary(tmp_path):
+    output_dir = tmp_path / "demo-market"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "demo",
+            "--output-dir",
+            str(output_dir),
+            "--market-check",
+            "--market-fresh-user-minutes",
+            "8.5",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (output_dir / "demo_market_check.json").exists()
+    assert (output_dir / "release_readiness.html").exists()
+    data = json.loads((output_dir / "demo_market_check.json").read_text(encoding="utf-8"))
+    assert data["report_audit"]["market_readiness"]["status"] == "market_ready"
+    assert data["release_readiness_report"]["summary"]["decision"] == "needs_work"
+    assert any("--market-check-screenshots" in action for action in data["market_check_summary"]["next_actions"])
+    assert any("--market-check-interactions" in action for action in data["market_check_summary"]["next_actions"])
+    dumped = json.dumps(data, ensure_ascii=False)
+    assert str(output_dir) not in dumped
+    assert "demo_market_check.json" in result.stdout
+
+
+def test_cli_demo_market_check_rejects_invalid_fresh_user_minutes(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "demo",
+            "--output-dir",
+            str(tmp_path / "demo-market"),
+            "--market-check",
+            "--market-fresh-user-minutes",
+            "-1",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "positive finite" in result.stderr
 
 
 def test_cli_discover_sources_outputs_language_filtered_sources():

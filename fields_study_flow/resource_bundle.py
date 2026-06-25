@@ -6,7 +6,7 @@ import os
 import re
 import mimetypes
 import shutil
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any, Callable
 from urllib.parse import unquote, urlparse
 
@@ -149,11 +149,24 @@ def bundle_study_resources(
 
 def public_bundle_summary(manifest: dict[str, Any], *, report_dir: Path | None = None) -> dict[str, Any]:
     resource_dir = _manifest_resource_dir(manifest)
+    download_manager = dict(manifest.get("download_manager", {}))
+    readme_file = "README.md"
+    links_file = "links.md"
+    manifest_file = "study_bundle_manifest.json"
+    retry_file = _safe_bundle_artifact_name(download_manager.get("retry_file"), "retry_failed.md")
+    queue_file = _safe_bundle_artifact_name(download_manager.get("download_queue_file"), "download_queue.json")
+    download_manager["retry_file"] = retry_file
+    download_manager["download_queue_file"] = queue_file
     return {
-        "manifest_file": "study_bundle_manifest.json",
-        "links_file": "links.md",
-        "readme_file": "README.md",
-        "download_manager": dict(manifest.get("download_manager", {})),
+        "manifest_file": manifest_file,
+        "links_file": links_file,
+        "readme_file": readme_file,
+        "manifest_href": _bundle_artifact_href(manifest_file, resource_dir=resource_dir, report_dir=report_dir),
+        "links_href": _bundle_artifact_href(links_file, resource_dir=resource_dir, report_dir=report_dir),
+        "readme_href": _bundle_artifact_href(readme_file, resource_dir=resource_dir, report_dir=report_dir),
+        "retry_href": _bundle_artifact_href(retry_file, resource_dir=resource_dir, report_dir=report_dir),
+        "download_queue_href": _bundle_artifact_href(queue_file, resource_dir=resource_dir, report_dir=report_dir),
+        "download_manager": download_manager,
         "bundle_scope": manifest.get("bundle_scope", "all"),
         "policy": manifest.get("policy", ""),
         "summary": dict(manifest.get("summary", {})),
@@ -177,6 +190,32 @@ def attach_study_bundle(roadmap: dict[str, Any], manifest: dict[str, Any], *, re
     updated = copy.deepcopy(roadmap)
     updated["study_bundle"] = public_bundle_summary(manifest, report_dir=report_dir)
     return updated
+
+
+def _safe_bundle_artifact_name(value: Any, default: str) -> str:
+    raw = str(value or default).strip()
+    if not raw or raw.lower().startswith("file:"):
+        return default
+    normalized = raw.replace("\\", "/")
+    posix = PurePosixPath(normalized)
+    windows = PureWindowsPath(raw)
+    parts = [part for part in posix.parts if part not in {"", "."}]
+    if windows.drive or normalized.startswith("/") or ".." in parts or len(parts) != 1:
+        return default
+    if "/" in normalized:
+        return default
+    return parts[0] or default
+
+
+def _bundle_artifact_href(file_name: str, *, resource_dir: Path | None, report_dir: Path | None) -> str:
+    if not file_name or resource_dir is None or report_dir is None:
+        return ""
+    target = resource_dir / file_name
+    try:
+        relative = os.path.relpath(target.resolve(), report_dir.resolve())
+    except Exception:
+        relative = file_name
+    return Path(relative).as_posix()
 
 
 def _public_bundle_entry(entry: dict[str, Any], *, resource_dir: Path | None = None, report_dir: Path | None = None) -> dict[str, Any]:
@@ -1000,6 +1039,8 @@ def _render_bundle_readme(manifest: dict[str, Any]) -> str:
     total = int(summary.get("total", 0) or 0)
     completed = int(summary.get("completed", 0) or 0)
     percent = round((completed / total) * 100) if total else 0
+    retryable = int(summary.get("retryable", 0) or 0)
+    scope = _readme_bundle_scope_label(str(manifest.get("bundle_scope", "all")))
     selected = [
         item
         for item in manifest.get("resources", [])
@@ -1013,21 +1054,28 @@ def _render_bundle_readme(manifest: dict[str, Any]) -> str:
     lines = [
         "# 学习资料包",
         "",
-        f"- 完成度：{completed} / {total}（{percent}%）",
-        f"- 路线资料：{len(selected)}",
-        f"- 补充资料：{len(supplemental)}",
-        f"- 已下载：{summary.get('downloaded', 0)}",
-        f"- 已复制：{summary.get('copied', 0)}",
-        f"- 已快照：{summary.get('snapshotted', 0)}",
-        f"- 仅保留链接：{summary.get('link-only', 0)}",
-        f"- 失败：{summary.get('failed', 0)}",
+        "这不是普通下载目录，而是本次学习路线的本地资料工作台。先按下面的顺序打开，能最快进入论文逻辑、关键段落和验收任务。",
         "",
-        "## 如何开始",
+        "## 资料包仪表盘",
+        "",
+        f"- 打包范围：{scope}",
+        f"- 完成率：{completed} / {total}（{percent}%）{_readme_progress_bar(percent)}",
+        f"- 路线资料：{len(selected)}；补充资料：{len(supplemental)}",
+        f"- 已下载：{summary.get('downloaded', 0)}；已复制：{summary.get('copied', 0)}；已快照：{summary.get('snapshotted', 0)}；已生成：{summary.get('generated', 0)}",
+        f"- 仅链接：{summary.get('link-only', 0)}；失败：{summary.get('failed', 0)}；可重试：{retryable}",
+        "",
+        "## 10 分钟开始",
         "",
         "1. 先打开报告目录中的 `index.html`，按推荐顺序进入论文逻辑图、段落精读或学习路线。",
-        "2. 按学习路线中的验收清单完成解释、推导、复现和批判任务。",
-        "3. 在报告的资料库中优先点击“打开本地资料”。",
-        "4. 如果有失败项，查看 `retry_failed.md` 后重新运行同一条 fields-study-flow 命令。",
+        "2. 如果是单篇论文，先看 `paper_map.html` 建立背景 -> 动机 -> 方法 -> 实验 -> 贡献的主链。",
+        "3. 再看 `paper_lens.html` 的关键段落解释，优先打开本地资料，不必重新回到网页搜索。",
+        "4. 最后回到 `roadmap.html` 勾选解释、推导、复现和批判任务，留下可检查的学习证据。",
+        "",
+        "## 失败或仅链接怎么处理",
+        "",
+        f"- 如果失败数为 0，可以直接学习；如果失败数为 {summary.get('failed', 0)}，先看 `retry_failed.md`。",
+        "- 网络、权限或服务器限制导致的失败不会阻断报告使用；这些资料会继续保留在 `links.md`。",
+        "- 重新运行同一条 fields-study-flow 命令会复用已下载文件，只补齐缺失或失败项。",
         "",
         "## 路线资料",
         "",
@@ -1040,6 +1088,7 @@ def _render_bundle_readme(manifest: dict[str, Any]) -> str:
             "",
             "## 文件说明",
             "",
+            "- `README.md`：当前这份开始学习说明。",
             "- `study_bundle_manifest.json`：机器可读清单。",
             "- `links.md`：所有资料的原始链接和下载备注。",
             "- `download_queue.json`：下载管理与重试队列。",
@@ -1048,6 +1097,19 @@ def _render_bundle_readme(manifest: dict[str, Any]) -> str:
         ]
     )
     return "\n".join(lines)
+
+
+def _readme_bundle_scope_label(scope: str) -> str:
+    return {
+        "all": "完整资料包（尝试落地全部可获取候选资料）",
+        "selected": "最短路线资料包（只落地已选主路径资料）",
+    }.get(scope, scope or "未知")
+
+
+def _readme_progress_bar(percent: int) -> str:
+    clamped = max(0, min(100, percent))
+    filled = round(clamped / 10)
+    return f"  [{'█' * filled}{'░' * (10 - filled)}]"
 
 
 def _readme_resource_lines(resources: list[dict[str, Any]]) -> list[str]:
@@ -1063,6 +1125,8 @@ def _readme_resource_lines(resources: list[dict[str, Any]]) -> list[str]:
             lines.append(f"  - 本地文件：`{item['file']}`")
         elif item.get("url"):
             lines.append(f"  - 链接：{item['url']}")
+        if item.get("route_reason"):
+            lines.append(f"  - 入选说明：{_readme_reason_label(str(item['route_reason']))}")
         if item.get("reason"):
             lines.append(f"  - 备注：{_readme_reason_label(str(item['reason']))}")
     return lines

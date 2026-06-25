@@ -32,6 +32,44 @@ function countByStatus(resources: ResourceLink[], status: string) {
   return resources.filter((resource) => resource.status === status).length;
 }
 
+function buildMasteryWorksheet(roadmap: Roadmap, tasks: StudyTask[], completedTaskIds: Set<string>) {
+  const title = roadmap.title || roadmap.profile?.goal || "fields-study-flow 学习路线";
+  const completed = tasks.filter((task, index) => completedTaskIds.has(taskId(task, index))).length;
+  const lines = [
+    `# ${title} 掌握证据清单`,
+    "",
+    `- 学习目标：${roadmap.profile?.goal || title}`,
+    `- 当前进度：${completed}/${tasks.length}`,
+    "- 使用方式：每完成一项任务，就在“我的证据”下面填写讲解、推导、实验输出、截图、Notebook 链接或批判笔记。",
+    "",
+  ];
+  if (!tasks.length) {
+    lines.push("暂无验收任务。请重新生成包含 explain / derive / reproduce / critique 的学习路线。", "");
+    return lines.join("\n");
+  }
+  tasks.forEach((task, index) => {
+    const id = taskId(task, index);
+    const status = completedTaskIds.has(id) ? "已完成" : "待完成";
+    const type = TASK_TYPE_LABELS[task.type || ""] || task.type || "任务";
+    const resources = (task.resource_titles ?? []).length ? (task.resource_titles ?? []).join(" / ") : "未绑定资料";
+    lines.push(
+      `## ${index + 1}. ${task.title || `验收任务 ${index + 1}`}`,
+      "",
+      `- 类型：${type}`,
+      `- 状态：${status}`,
+      `- 预计耗时：${task.estimated_minutes ? `${task.estimated_minutes} 分钟` : "待估计"}`,
+      `- 相关资料：${resources}`,
+      `- 验收标准：${task.acceptance || "能解释给别人听，并能回到论文证据。"}`,
+      `- 任务证据要求：${task.evidence || "完成后留下可复查的学习证据。"}`,
+      "",
+      "我的证据：",
+      "- ",
+      "",
+    );
+  });
+  return lines.join("\n");
+}
+
 function summaryCount(summary: Record<string, number | string>, resources: ResourceLink[], key: string) {
   const fromSummary = numeric(summary[key]);
   return fromSummary || countByStatus(resources, key);
@@ -49,22 +87,32 @@ function resourceStatusLabel(status?: string) {
   return labels[status || ""] || status || "待处理";
 }
 
-function resourceSearchText(resource: ResourceLink) {
+function resourceSearchText(resource: ResourceLink, roadmap?: Roadmap) {
   const purpose = resourcePurpose(resource);
   const strength = resourceStrength(resource);
+  const provenance = resourceProvenance(resource);
+  const coverage = roadmap ? resourceCoverage(resource, roadmap) : { items: [], detail: "" };
   return [
     resource.title,
     resource.label,
     resource.source,
     resource.type,
+    resource.language,
     resource.status,
     resource.url,
     resource.href,
     resource.local_href,
+    ...(resource.concepts ?? []),
+    ...(resource.learning_key_points ?? []),
+    ...(resource.focus_areas ?? []),
     purpose.label,
     purpose.reason,
     strength.label,
     strength.evidenceLabel,
+    provenance.label,
+    provenance.detail,
+    ...(coverage.items ?? []),
+    coverage.detail,
     resourceStrengthReason(resource),
     strongestEvidenceSnippet(resource),
     resource.why_recommended,
@@ -178,14 +226,16 @@ function resourcePurpose(resource: ResourceLink) {
   ) {
     return { label: "代码/复现", reason: "为什么读：把理解变成可运行或可检查的结果。" };
   }
+  if (metadataIsTargetPaper(resource)) {
+    return { label: "主证据", reason: "为什么读：定位论文原始论点、方法和实验结论。" };
+  }
   if (
     type.includes("paper") ||
     type.includes("arxiv") ||
     type.includes("doi") ||
-    combined.includes("paper.pdf") ||
-    combined.includes("target paper")
+    combined.includes("paper.pdf")
   ) {
-    return { label: "主证据", reason: "为什么读：定位论文原始论点、方法和实验结论。" };
+    return { label: "论文资料", reason: "为什么读：用于补充相关论点或对比证据，进入核心路径前需要结合证据核验。" };
   }
   if (
     type.includes("book") ||
@@ -287,6 +337,148 @@ function resourceStrength(resource: ResourceLink) {
     return { label: "推荐补充", evidenceLabel: best >= 0.78 ? "证据强度：中高" : "证据强度：中" };
   }
   return { label: "手动兜底", evidenceLabel: "证据强度：待核验" };
+}
+
+function lowerResourceText(resource: ResourceLink) {
+  const metadata = resource.metadata && typeof resource.metadata === "object" ? JSON.stringify(resource.metadata) : "";
+  return [
+    resource.title,
+    resource.label,
+    resource.source,
+    resource.type,
+    resource.status,
+    resource.url,
+    resource.href,
+    resource.local_href,
+    resource.language,
+    resource.why_recommended,
+    resource.critical_path_role,
+    ...(resource.concepts ?? []),
+    ...(resource.learning_key_points ?? []),
+    ...(resource.focus_areas ?? []),
+    strongestEvidenceSnippet(resource),
+    metadata,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function sourceKey(resource: ResourceLink) {
+  return [
+    resource.source,
+    resource.type,
+    resource.status,
+    resource.url,
+    resource.href,
+    resource.local_href,
+    resource.title,
+    resource.label,
+    resource.critical_path_role,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+}
+
+function resourceProvenance(resource: ResourceLink) {
+  const key = sourceKey(resource);
+  const metadata = resource.metadata && typeof resource.metadata === "object" ? resource.metadata : {};
+  if (metadata.target_paper || key.includes("target paper")) {
+    return {
+      label: "目标论文",
+      detail: "这份资料是路线的中心证据，优先用于核对原始论点、方法和实验。",
+      level: "core",
+    };
+  }
+  if (resource.status === "generated" || key.includes("template") || key.includes("artifact_template")) {
+    return {
+      label: "生成模板",
+      detail: "由 fields-study-flow 生成，用来记录复现过程和验收证据，不替代真实实验结果。",
+      level: "template",
+    };
+  }
+  if (key.includes("arxiv") || key.includes("semantic-scholar") || key.includes("openalex") || key.includes("doi")) {
+    return {
+      label: "开放学术源",
+      detail: "来自开放论文索引或 DOI 元数据，适合做论文级证据入口。",
+      level: "academic",
+    };
+  }
+  if (key.includes("github") || key.includes("repository") || key.includes("code") || key.includes("notebook")) {
+    return {
+      label: "代码来源",
+      detail: "适合验证实现、运行示例或检查复现实验线索；仍需看维护状态。",
+      level: "code",
+    };
+  }
+  if (resource.local_href || key.includes("local-library") || key.includes("local://")) {
+    return {
+      label: "本地资料",
+      detail: "已经进入本地资料包，适合离线阅读和回到证据片段复核。",
+      level: "local",
+    };
+  }
+  if (resource.status === "link-only" || resource.status === "failed") {
+    return {
+      label: "待手动核验",
+      detail: "当前主要是链接入口，需要手动打开或补下载后再作为核心证据。",
+      level: "manual",
+    };
+  }
+  return {
+    label: "候选来源",
+    detail: "可作为补充资料；建议结合证据片段和任务需求判断是否必读。",
+    level: "candidate",
+  };
+}
+
+const COVERAGE_LABELS: Record<string, string> = {
+  background: "背景",
+  motivation: "动机/缺口",
+  problem: "问题",
+  methodology: "方法",
+  experiment: "实验",
+  result: "结果",
+  contribution: "贡献",
+  limitation: "局限",
+  formula: "公式",
+  resource: "资料",
+  task: "任务",
+  assessment: "验收",
+};
+
+function metadataIsTargetPaper(resource: ResourceLink) {
+  const metadata = resource.metadata && typeof resource.metadata === "object" ? resource.metadata : {};
+  return Boolean(metadata.target_paper || lowerResourceText(resource).includes("target paper"));
+}
+
+function resourceCoverage(resource: ResourceLink, roadmap: Roadmap) {
+  const text = lowerResourceText(resource);
+  const labels = new Set<string>();
+  const targetPaper = metadataIsTargetPaper(resource);
+  (roadmap.paper_map?.nodes ?? []).forEach((node) => {
+    const kind = String(node.kind || node.role || "").toLowerCase();
+    const label = String(node.label || node.kind_label || "").toLowerCase();
+    const display = COVERAGE_LABELS[kind] || node.kind_label || node.label;
+    if (!display) return;
+    if (kind && text.includes(kind)) labels.add(String(display));
+    else if (label.length >= 4 && text.includes(label.slice(0, Math.min(label.length, 24)))) labels.add(String(display));
+  });
+  const type = resourceType(resource);
+  if (targetPaper) ["背景", "方法", "实验"].forEach((item) => labels.add(item));
+  if (type.includes("repository") || type.includes("code") || type.includes("notebook")) ["方法", "实验", "复现"].forEach((item) => labels.add(item));
+  if (type.includes("book") || type.includes("course") || type.includes("textbook") || type.includes("tutorial")) labels.add("背景");
+  if (resource.status === "generated" || type.includes("template") || text.includes("checklist")) labels.add("验收");
+  const snippet = strongestEvidenceSnippet(resource).toLowerCase();
+  if (snippet.includes("limitation") || snippet.includes("future work")) labels.add("局限");
+  if (snippet.includes("contribution") || snippet.includes("claim")) labels.add("贡献");
+  const items = [...labels].slice(0, 5);
+  const prefix = targetPaper ? "覆盖" : "推断覆盖";
+  return {
+    items,
+    detail: items.length ? `${prefix} ${items.length} 个学习面：${items.join(" / ")}` : "尚未匹配到明确论文环节，适合作为补充阅读或手动核验资料。",
+  };
 }
 
 function taskProgressKey(roadmap: Roadmap) {
@@ -400,7 +592,8 @@ function PaperSetPanel({ paperSet }: { paperSet: NonNullable<Roadmap["paper_set"
 export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
   const phases = roadmap.phases ?? [];
   const studyTasks = roadmap.study_tasks ?? [];
-  const bundle = roadmap.study_bundle?.summary ?? {};
+  const studyBundle = roadmap.study_bundle;
+  const bundle = studyBundle?.summary ?? {};
   const resources = useMemo(
     () => mergeResourceLists(roadmap.study_bundle?.resources, roadmap.resource_library),
     [roadmap.study_bundle?.resources, roadmap.resource_library],
@@ -409,6 +602,7 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
   const [resourceFilter, setResourceFilter] = useState<ResourceFilterId>("all");
   const progressKey = useMemo(() => taskProgressKey(roadmap), [roadmap]);
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(() => readTaskProgress(progressKey));
+  const [worksheetState, setWorksheetState] = useState<"idle" | "copied" | "downloaded" | "failed">("idle");
   const hasPaperMap = Boolean(roadmap.paper_map);
   const hasPaperLens = Boolean(roadmap.paper_lens);
   const localResourceCount = resources.filter((resource) => resource.local_href).length;
@@ -427,6 +621,12 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
     { label: "下载失败", value: summaryCount(bundle, resources, "failed") },
     { label: "仅链接", value: summaryCount(bundle, resources, "link-only") },
   ];
+  const bundleFileLinks = [
+    { label: "打开资料包说明", href: studyBundle?.readme_href, meta: studyBundle?.readme_file || "README.md" },
+    { label: "原始链接清单", href: studyBundle?.links_href, meta: studyBundle?.links_file || "links.md" },
+    { label: "重试失败项", href: studyBundle?.retry_href, meta: studyBundle?.download_manager?.retry_file || "retry_failed.md" },
+    { label: "下载队列", href: studyBundle?.download_queue_href, meta: studyBundle?.download_manager?.download_queue_file || "download_queue.json" },
+  ].filter((item) => item.href);
   const orderedResources = useMemo(() => [...resources].sort((a, b) => {
     const aLocal = a.local_href ? 0 : 1;
     const bLocal = b.local_href ? 0 : 1;
@@ -441,11 +641,15 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
     return orderedResources.filter((resource) => {
       if (!matchesResourceFilter(resource, resourceFilter)) return false;
       if (!query) return true;
-      return resourceSearchText(resource).includes(query);
+      return resourceSearchText(resource, roadmap).includes(query);
     });
-  }, [orderedResources, resourceFilter, resourceQuery]);
+  }, [orderedResources, resourceFilter, resourceQuery, roadmap.paper_map]);
   const completedTaskCount = studyTasks.filter((task, index) => completedTaskIds.has(taskId(task, index))).length;
   const taskProgressRate = studyTasks.length ? Math.round((completedTaskCount / studyTasks.length) * 100) : 0;
+  const masteryWorksheet = useMemo(
+    () => buildMasteryWorksheet(roadmap, studyTasks, completedTaskIds),
+    [roadmap, studyTasks, completedTaskIds],
+  );
   const missingPhases = phases.length === 0;
   const missingTasks = studyTasks.length === 0;
   const missingResources = resources.length === 0;
@@ -483,6 +687,34 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
       else next.add(taskKey);
       return next;
     });
+  }
+  async function copyMasteryWorksheet() {
+    try {
+      if (!navigator.clipboard?.writeText) {
+        setWorksheetState("failed");
+        return;
+      }
+      await navigator.clipboard.writeText(masteryWorksheet);
+      setWorksheetState("copied");
+    } catch {
+      setWorksheetState("failed");
+    }
+  }
+  function downloadMasteryWorksheet() {
+    try {
+      const blob = new Blob([`${masteryWorksheet}\n`], { type: "text/markdown;charset=utf-8" });
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = "mastery_worksheet.md";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+      setWorksheetState("downloaded");
+    } catch {
+      setWorksheetState("failed");
+    }
   }
   const startSteps = [
     {
@@ -592,6 +824,16 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
             </article>
           ))}
         </div>
+        {bundleFileLinks.length ? (
+          <div className="bundle-action-row" aria-label="资料包文件入口">
+            {bundleFileLinks.map((item) => (
+              <a href={item.href} key={item.label}>
+                <strong>{item.label}</strong>
+                <span>{item.meta}</span>
+              </a>
+            ))}
+          </div>
+        ) : null}
       </section>
       <section className="dashboard-grid">
         <article className="metric-card">
@@ -633,7 +875,18 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
               <h2 id="mastery-checklist-title">把学习变成可检查证据</h2>
               <p>勾选只保存在当前浏览器；正式掌握仍以解释、推导、复现和批判产物为准。</p>
             </div>
-            <strong>{completedTaskCount}/{studyTasks.length} · {taskProgressRate}%</strong>
+            <div className="mastery-progress-box">
+              <strong>{completedTaskCount}/{studyTasks.length} · {taskProgressRate}%</strong>
+              <div className="mastery-export-actions" data-mastery-export>
+                <button type="button" onClick={copyMasteryWorksheet}>复制证据清单</button>
+                <button type="button" onClick={downloadMasteryWorksheet}>下载 worksheet.md</button>
+              </div>
+              <span aria-live="polite">
+                {worksheetState === "copied" ? "已复制，可粘贴到笔记或汇报文档。" : null}
+                {worksheetState === "downloaded" ? "已生成 mastery_worksheet.md 下载。" : null}
+                {worksheetState === "failed" ? "当前浏览器限制自动操作，可手动复制任务内容。" : null}
+              </span>
+            </div>
           </div>
           <div className="mastery-task-grid">
             {studyTasks.map((task, index) => {
@@ -727,6 +980,8 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
               const strength = resourceStrength(resource);
               const strengthReason = resourceStrengthReason(resource);
               const evidence = strongestEvidence(resource);
+              const provenance = resourceProvenance(resource);
+              const coverage = resourceCoverage(resource, roadmap);
               return (
                 <div className="resource-row" key={`${resource.title}-${index}`}>
                   <div>
@@ -741,6 +996,15 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
                       <span>{strength.evidenceLabel}</span>
                       <span className="resource-strength-reason">{strengthReason}</span>
                       {resource.why_recommended ? <span>推荐理由：{resource.why_recommended}</span> : null}
+                    </div>
+                    <div className="resource-provenance-line">
+                      <span className={`resource-provenance-badge ${provenance.level}`}>{provenance.label}</span>
+                      <span>{provenance.detail}</span>
+                    </div>
+                    <div className="resource-coverage-line">
+                      <span className="resource-coverage-badge">覆盖范围</span>
+                      {coverage.items.map((item) => <span className="resource-coverage-chip" key={item}>{item}</span>)}
+                      <span>{coverage.detail}</span>
                     </div>
                     {evidence ? (
                       <p className="resource-evidence-snippet">

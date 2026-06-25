@@ -13,6 +13,10 @@ def test_checked_in_frontend_dist_has_package_visible_manifest():
     assert frontend_report.frontend_assets_available()
     data = json.loads(manifest.read_text(encoding="utf-8"))
     assert data["index.html"]["file"].startswith("assets/")
+    assert (frontend_report.FRONTEND_DIST_DIR / data["index.html"]["file"]).exists()
+    for css_file in data["index.html"].get("css", []):
+        assert css_file.startswith("assets/")
+        assert (frontend_report.FRONTEND_DIST_DIR / css_file).exists()
 
 
 def test_frontend_report_shell_copies_assets_and_embeds_payload(tmp_path, monkeypatch):
@@ -106,6 +110,15 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
     assert 'data-fresh-user-flow="first-10-minutes"' in html
+    assert 'class="intent-router-panel"' in html
+    assert 'data-intent-router="learning-goal"' in html
+    assert "按你的目的选择入口" in html
+    assert "我只想先看懂这篇" in html
+    assert "我要能讲给别人听" in html
+    assert "我要留下可检查结果" in html
+    assert 'data-intent="quick-understand" href="paper_map.html"' in html
+    assert 'data-intent="presentation-ready" href="paper_lens.html"' in html
+    assert 'data-intent="mastery-proof" href="roadmap.html"' in html
     assert "10 分钟入门" in html
     assert "适合单篇论文" in html
     assert "先看主图" in html

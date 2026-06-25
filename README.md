@@ -28,8 +28,11 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Route audit: every plan explains coverage, omitted resources, time saved, and why the chosen route is the shortest visible path under the selected depth.
 - Actionability: reports include study tasks, next actions, quality gates, final evidence, and runnable artifact enforcement.
 - Folder entry: `index.html` is the first file to open after export. It routes learners to Paper Map, Paper Lens, or the roadmap checklist depending on what the plan contains.
+- Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.
 - Interactive learning console: `roadmap.html` contains the roadmap, draggable/zoomable KG network, right-side task guide with local progress checks, local-first resource links, multi-dimensional resource filter chips, evidence expand/collapse, and collapsible phases.
-- Resource purpose and strength badges: roadmap resources explain whether they are primary evidence, background, implementation/reproduction help, or validation material, plus a short "why read" hint and core/support/fallback strength signal.
+- Resource purpose, strength, provenance, and coverage badges: roadmap resources explain whether they are primary evidence, background, implementation/reproduction help, or validation material, where they came from, which paper-logic or learning surface they cover, plus a short "why read" hint and core/support/fallback strength signal.
+- Portable mastery worksheet: the roadmap checklist can be copied or downloaded as `mastery_worksheet.md`, turning explain/derive/reproduce/critique tasks into a shareable evidence log.
+- Study bundle start page: the local resource folder includes a Chinese-first `README.md` dashboard with a 10-minute start path, local file groups, link-only resources, and retry guidance.
 
 ## Quick Start
 
@@ -40,8 +43,15 @@ python -m pip install -e .
 fields-study-flow demo --output-dir ./fields-study-flow-demo
 ```
 
-Then open `fields-study-flow-demo/index.html`. The demo uses a bundled Transformer-paper route, so you can evaluate the Paper Map, Paper Lens, local report structure, and mastery checklist before bringing your own PDF.
+Then open `fields-study-flow-demo/index.html`. The demo uses a bundled Transformer-paper route and local `study-assets/` bundle, so you can evaluate the Paper Map, Paper Lens, local report structure, local-first resources, and mastery checklist before bringing your own PDF.
 The start page also shows the exact next commands for replacing the demo with a public paper URL or a local PDF.
+To generate the demo and a compact market-readiness summary in one step:
+
+```bash
+fields-study-flow demo --output-dir ./fields-study-flow-demo --market-check
+```
+
+This writes `demo_market_check.json`, `release_readiness.md`, and `release_readiness.html`, and adds a release-decision entry to `index.html`. Add `--market-fresh-user-minutes`, `--market-check-screenshots`, and `--market-check-interactions` when you have measured timing and the optional browser runtime available.
 
 Audit the exported HTML for common visual and privacy risks:
 
@@ -55,9 +65,10 @@ When Python Playwright and a browser binary are available, add real desktop/mobi
 python -m pip install -e ".[visual]"
 python -m playwright install chromium
 fields-study-flow audit-report --report-dir ./fields-study-flow-demo --capture-screenshots
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo --probe-interactions
 ```
 
-Screenshots and a relative-path manifest are written under `visual-snapshots/`. If the optional browser runtime is not installed, the command reports a clear skipped screenshot check while keeping the lightweight static audit usable.
+Screenshots and a relative-path manifest are written under `visual-snapshots/`. The interaction probe opens the offline report in a browser and smoke-tests the Paper Map branch toggle, node detail panel, zoom/pan surface, Paper Lens paragraph selection, and roadmap resource filters. If the optional browser runtime is not installed, these commands report clear skipped browser checks while keeping the lightweight static audit usable.
 Once a report looks good and screenshot capture has produced real `pass` captures, save that manifest as a golden baseline and compare future exports against it:
 
 ```bash
@@ -103,16 +114,18 @@ Write a human-readable release decision dashboard after the machine checks:
 ```bash
 fields-study-flow audit-report \
   --report-dir ./fields-study-flow-demo \
+  --capture-screenshots \
+  --probe-interactions \
   --fresh-user-backlog-input ./fields-study-flow-demo/fresh_user_backlog.md \
   --write-fresh-user-trend-report \
   --write-release-readiness \
   --write-release-history
 ```
 
-The generated `release_readiness.md` and `release_readiness.html` combine `report_audit.json`, visual checks, screenshot baseline status, fresh-user timing, and recurring blockers into a single `ship` / `needs_work` / `do_not_ship` decision. The HTML version is a single offline page for non-technical reviewers, and `index.html` automatically receives a single release-decision entry that links to it. Its gates are explicitly inspired by Elicit/SciSpace evidence transparency, NotebookLM-style portable study outputs, ResearchRabbit/roadmap.sh visual navigation, React Flow canvas affordances, local-first resource bundles, and mastery proof.
+The generated `release_readiness.md` and `release_readiness.html` combine `report_audit.json`, visual checks, screenshot/baseline status, browser interaction probes, fresh-user timing, and recurring blockers into a single `ship` / `needs_work` / `do_not_ship` decision. The HTML version is a single offline page for non-technical reviewers, and `index.html` automatically receives a single release-decision entry that links to it. A report is not marked `ship` unless measured fresh-user timing, real visual evidence, and browser interaction evidence pass. Its gates are explicitly inspired by Elicit/SciSpace evidence transparency, NotebookLM-style portable study outputs, ResearchRabbit/roadmap.sh visual navigation, React Flow canvas affordances, local-first resource bundles, and mastery proof.
 With `--write-release-history`, the audit also writes `release_readiness_history.jsonl`, `release_readiness_history.md`, and `release_readiness_history.html`, a sanitized cross-run decision log with a trend summary, score delta, and recurring-blocker delta for comparing whether report quality is actually improving across releases or CI runs. The report start page and release-readiness dashboard both receive a single quality-trend entry that links to the HTML dashboard.
 
-The audit also emits `report_audit.json` with market-readiness, fresh-user-flow, experience, viewport, visual-snapshot-matrix, and competitor-benchmark checks so a report cannot be treated as product-ready while it lacks grounded evidence, portable study outputs, a measurable Paper Map, a clear first-10-minutes path, canvas affordances, dense-resource layout safety, or a local-first study bundle. When the command generates release dashboards, it adds `generated_artifact_audit` to the JSON output so the newly written HTML pages are checked in the same run.
+The audit also emits `report_audit.json` with market-readiness, fresh-user-flow, experience, viewport, visual-snapshot-matrix, and competitor-benchmark checks so a report cannot be treated as product-ready while it lacks grounded evidence, portable study outputs, a measurable Paper Map, an intent-based first click, a clear first-10-minutes path, canvas affordances, dense-resource layout safety, or a local-first study bundle. When the command generates release dashboards, it adds `generated_artifact_audit` to the JSON output so the newly written HTML pages are checked in the same run.
 
 ```bash
 fields-study-flow roadmap \
@@ -185,6 +198,7 @@ study-assets/
 ```
 
 When `--resource-dir` is used, downloaded/copied resources in `roadmap.html`, `paper_map.html`, `paper_lens.html`, and `roadmap.md` link to the local study bundle first. Original web links remain visible only as fallback/source links, and absolute local paths are still redacted from shareable outputs.
+The resource folder's `README.md` is meant to be opened directly: it shows bundle completion, the recommended first 10 minutes, route resources, supplemental resources, and how to retry failed downloads. In `roadmap.html`, the mastery checklist can also be copied or downloaded as `mastery_worksheet.md` for notes, reports, or review.
 
 Ask a question against the downloaded/copied bundle only:
 

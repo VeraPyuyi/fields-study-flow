@@ -36,7 +36,11 @@ fields-study-flow 可以把“掌握这篇论文”“学习 diffusion models”
 - 路线审计：每条路线都会说明覆盖度、省略资源、节省耗时，以及为什么这是当前候选和路线深度下的最短可行路径。
 - 可执行任务：报告包含学习任务、下一步行动、质量门、最终证据和可运行产物验收。
 - 文件夹入口：导出后优先打开 `index.html`，它会根据当前计划引导用户进入 Paper Map、Paper Lens 或路线验收清单。
+- 学习意图路由：`index.html` 会按“最快理解、准备汇报、验收/复现”给出入口，用户不需要先理解所有报告类型。
 - 交互式学习中控台：`roadmap.html` 提供学习路线、可拖动/缩放的 KG 学习路径网络、右侧任务向导、本地进度勾选、本地优先资料链接、多维资料筛选 chips、证据展开/收起和阶段折叠。
+- 资源来源与覆盖范围：`roadmap.html` 的资料卡会显示资料用途、证据强度、来源类型，以及它覆盖论文逻辑或学习任务的哪一部分，方便用户先打开最有用的资料。
+- 可带走的掌握证据：路线里的掌握验收清单可以复制或下载为 `mastery_worksheet.md`，把解释、推导、复现和批判任务变成可提交、可复查的学习证据表。
+- 资料包开始页：本地资料目录会生成中文优先的 `README.md` 仪表盘，包含 10 分钟开始路径、路线资料、补充资料、仅链接资源和失败重试说明。
 
 ## 快速开始
 
@@ -47,8 +51,15 @@ python -m pip install -e .
 fields-study-flow demo --output-dir ./fields-study-flow-demo
 ```
 
-然后打开 `fields-study-flow-demo/index.html`。这个 demo 使用内置 Transformer 论文样例，用户不需要先准备 PDF，就能评估 Paper Map、Paper Lens、本地报告结构和掌握验收清单是否有用。
+然后打开 `fields-study-flow-demo/index.html`。这个 demo 使用内置 Transformer 论文样例，并自带本地 `study-assets/` 资料包；用户不需要先准备 PDF，就能评估 Paper Map、Paper Lens、本地报告结构、本地优先资料和掌握验收清单是否有用。
 入口页里也会直接给出“换成自己的论文”的 URL 和本地 PDF 命令模板。
+如果想一条命令同时生成 demo 和市场化审计摘要：
+
+```bash
+fields-study-flow demo --output-dir ./fields-study-flow-demo --market-check
+```
+
+它会写出 `demo_market_check.json`、`release_readiness.md` 和 `release_readiness.html`，并在 `index.html` 加入发布决策入口。当你已经有真实新用户耗时，并且本机安装了可选浏览器运行时时，可以再加 `--market-fresh-user-minutes`、`--market-check-screenshots` 和 `--market-check-interactions`。
 
 检查导出的 HTML 是否存在常见排版和隐私风险：
 
@@ -62,9 +73,10 @@ fields-study-flow audit-report --report-dir ./fields-study-flow-demo
 python -m pip install -e ".[visual]"
 python -m playwright install chromium
 fields-study-flow audit-report --report-dir ./fields-study-flow-demo --capture-screenshots
+fields-study-flow audit-report --report-dir ./fields-study-flow-demo --probe-interactions
 ```
 
-截图和相对路径 manifest 会写入 `visual-snapshots/`；如果没有安装可选浏览器运行时，命令会明确显示截图检查被跳过，不影响基础静态审查。
+截图和相对路径 manifest 会写入 `visual-snapshots/`；交互探针会在浏览器里打开离线报告，冒烟测试 Paper Map 分支展开、节点详情、缩放/平移、Paper Lens 段落选择和 roadmap 资料筛选。如果没有安装可选浏览器运行时，命令会明确显示截图或交互检查被跳过，不影响基础静态审查。
 
 当你确认某次导出的页面足够好看，并且截图捕获已经产生真实 `pass` 截图后，可以把 manifest 保存成黄金基线，后续导出用它做 UI 回归比较：
 
@@ -111,15 +123,17 @@ fields-study-flow audit-report \
 ```bash
 fields-study-flow audit-report \
   --report-dir ./fields-study-flow-demo \
+  --capture-screenshots \
+  --probe-interactions \
   --fresh-user-backlog-input ./fields-study-flow-demo/fresh_user_backlog.md \
   --write-fresh-user-trend-report \
   --write-release-readiness \
   --write-release-history
 ```
 
-生成的 `release_readiness.md` 和 `release_readiness.html` 会把 `report_audit.json`、视觉检查、截图基线、新用户耗时和反复出现的卡点合成一个 `ship` / `needs_work` / `do_not_ship` 决策。HTML 版本是单文件离线页面，更适合非技术评审直接打开；`index.html` 也会自动出现一个不重复的发布决策入口，直接链接到这个面板。它的门槛明确对齐 Elicit/SciSpace 的证据透明、NotebookLM 式可带走学习产物、ResearchRabbit/roadmap.sh 的可视化导航、React Flow 的画布交互、本地优先资料包，以及可验收掌握证据。
+生成的 `release_readiness.md` 和 `release_readiness.html` 会把 `report_audit.json`、视觉检查、截图/基线状态、浏览器交互探针、新用户耗时和反复出现的卡点合成一个 `ship` / `needs_work` / `do_not_ship` 决策。HTML 版本是单文件离线页面，更适合非技术评审直接打开；`index.html` 也会自动出现一个不重复的发布决策入口，直接链接到这个面板。没有通过新用户计时、真实视觉证据和浏览器交互证据的报告不会被标记为 `ship`。它的门槛明确对齐 Elicit/SciSpace 的证据透明、NotebookLM 式可带走学习产物、ResearchRabbit/roadmap.sh 的可视化导航、React Flow 的画布交互、本地优先资料包，以及可验收掌握证据。
 加上 `--write-release-history` 后，还会生成 `release_readiness_history.jsonl`、`release_readiness_history.md` 和 `release_readiness_history.html`，用脱敏的跨版本发布决策记录、趋势摘要、分数变化和反复卡点变化来判断报告质量是否真的在持续变好。报告首页和发布准备度面板都会自动出现一个不重复的质量趋势入口，直接链接到 HTML 面板。
-当命令写出这些发布面板时，JSON 输出还会包含 `generated_artifact_audit`，同一次运行就会重新检查刚生成的 HTML 页面，避免新面板没有被视觉和隐私规则覆盖。
+当命令写出这些发布面板时，JSON 输出还会包含 `generated_artifact_audit`，同一次运行就会重新检查刚生成的 HTML 页面，避免新面板没有被视觉和隐私规则覆盖。审计还会检查首页是否有基于学习意图的入口选择，避免用户一打开报告就不知道该先点哪里。
 
 ```bash
 fields-study-flow roadmap \
@@ -192,6 +206,7 @@ study-assets/
 ```
 
 使用 `--resource-dir` 时，`roadmap.html`、`paper_map.html`、`paper_lens.html` 和 `roadmap.md` 中已下载/复制的资料会优先链接到本地资料包。原始网页链接仍作为来源或兜底入口展示，共享型输出仍不会暴露本地绝对路径。
+资料包里的 `README.md` 可以直接打开：它会显示完成率、推荐前 10 分钟怎么学、路线资料和补充资料分组，以及失败下载如何重试。`roadmap.html` 中的掌握验收清单也可以复制或下载为 `mastery_worksheet.md`，方便写笔记、做汇报或交给别人检查。
 
 只基于已经下载/复制的资料包提问：
 

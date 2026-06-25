@@ -260,6 +260,50 @@ summary {
   background: var(--rose-soft);
 }
 
+.bundle-action-row {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.bundle-action-row a {
+  min-width: 0;
+  border: 1px solid #d8cdb8;
+  background: #fffaf0;
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 9px 10px;
+  text-decoration: none;
+  display: grid;
+  gap: 4px;
+  transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.bundle-action-row a:hover,
+.bundle-action-row a:focus {
+  border-color: var(--teal);
+  box-shadow: var(--shadow-sm);
+  transform: translateY(-1px);
+}
+
+.bundle-action-row strong,
+.bundle-action-row span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.bundle-action-row strong {
+  color: var(--teal);
+  font-size: 13px;
+}
+
+.bundle-action-row span {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
 .route-recovery-panel {
   min-width: 0;
   border: 1px solid #d8cdb8;
@@ -372,6 +416,49 @@ summary {
   padding: 7px 12px;
   white-space: nowrap;
   font-size: 16px;
+}
+
+.mastery-progress-box {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+  justify-items: end;
+}
+
+.mastery-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.mastery-export-actions button {
+  border: 1px solid #d8cdb8;
+  background: var(--paper-strong);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 7px 10px;
+  font-size: 12px;
+  font-weight: 850;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.mastery-export-actions button:hover,
+.mastery-export-actions button:focus {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  transform: translateY(-1px);
+}
+
+.mastery-progress-box > span {
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .mastery-task-grid {
@@ -928,6 +1015,19 @@ blockquote p {
   overflow-wrap: anywhere;
 }
 
+.resource-provenance-line,
+.resource-coverage-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  color: #50616b;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .resource-purpose-badge {
   border: 1px solid rgba(47, 111, 115, 0.28);
   background: var(--teal-soft);
@@ -948,6 +1048,53 @@ blockquote p {
   font-size: 12px;
   font-weight: 900;
   white-space: nowrap;
+}
+
+.resource-provenance-badge,
+.resource-coverage-badge,
+.resource-coverage-chip {
+  border-radius: 999px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.resource-provenance-badge {
+  border: 1px solid rgba(91, 116, 170, 0.25);
+  background: rgba(229, 235, 249, 0.82);
+  color: var(--blue);
+}
+
+.resource-provenance-badge.academic,
+.resource-provenance-badge.core {
+  border-color: rgba(47, 111, 115, 0.28);
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.resource-provenance-badge.manual {
+  border-color: rgba(175, 79, 72, 0.24);
+  background: rgba(255, 238, 233, 0.92);
+  color: #a0473f;
+}
+
+.resource-provenance-badge.template {
+  border-color: rgba(195, 140, 39, 0.28);
+  background: rgba(255, 246, 222, 0.92);
+  color: #986b1d;
+}
+
+.resource-coverage-badge {
+  border: 1px solid rgba(195, 140, 39, 0.28);
+  background: rgba(255, 246, 222, 0.92);
+  color: #986b1d;
+}
+
+.resource-coverage-chip {
+  border: 1px solid rgba(47, 111, 115, 0.2);
+  background: #f5fbf8;
+  color: #2f6f73;
 }
 
 .resource-strength-reason {
@@ -1830,6 +1977,23 @@ blockquote {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
+  .bundle-action-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mastery-progress-box {
+    justify-items: start;
+  }
+
+  .mastery-export-actions {
+    justify-content: flex-start;
+  }
+
+  .mastery-progress-box > span {
+    max-width: none;
+    text-align: left;
+  }
+
   .start-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1881,6 +2045,10 @@ blockquote {
 
   .bundle-status-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bundle-action-row {
+    grid-template-columns: 1fr;
   }
 
   .paper-set-stats {

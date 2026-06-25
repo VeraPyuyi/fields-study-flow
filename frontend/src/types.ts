@@ -8,10 +8,15 @@ export type ResourceLink = {
   local_href?: string;
   source?: string;
   type?: string;
+  language?: string;
   status?: string;
   score?: number;
   trust_score?: number;
   why_recommended?: string;
+  concepts?: string[];
+  learning_key_points?: string[];
+  focus_areas?: string[];
+  critical_path_role?: string;
   metadata?: Record<string, unknown>;
 };
 
@@ -170,6 +175,23 @@ export type Roadmap = {
   }>;
   study_tasks?: StudyTask[];
   study_bundle?: {
+    manifest_file?: string;
+    links_file?: string;
+    readme_file?: string;
+    manifest_href?: string;
+    links_href?: string;
+    readme_href?: string;
+    retry_href?: string;
+    download_queue_href?: string;
+    download_manager?: {
+      download_queue_file?: string;
+      retry_file?: string;
+      completed?: number;
+      retryable?: number;
+      failed?: number;
+      total?: number;
+      retry_note?: string;
+    };
     summary?: Record<string, number | string>;
     resources?: ResourceLink[];
   };

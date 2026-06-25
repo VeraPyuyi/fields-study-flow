@@ -62,6 +62,23 @@ describe("fields-study-flow React report app", () => {
   });
 
   it("renders the roadmap learning console from embedded JSON", () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const createObjectURL = vi.fn(() => "blob:mastery-worksheet");
+    const revokeObjectURL = vi.fn();
+    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectURL,
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectURL,
+    });
+
     installPayload({
       reportKind: "roadmap",
       roadmap: {
@@ -92,6 +109,13 @@ describe("fields-study-flow React report app", () => {
           },
         ],
         study_bundle: {
+          readme_file: "README.md",
+          readme_href: "../study-assets/README.md",
+          links_file: "links.md",
+          links_href: "../study-assets/links.md",
+          retry_href: "../study-assets/retry_failed.md",
+          download_queue_href: "../study-assets/download_queue.json",
+          download_manager: { retry_file: "retry_failed.md", download_queue_file: "download_queue.json" },
           summary: { total: 4, completed: 2, downloaded: 1, copied: 1, failed: 1, "link-only": 1 },
           resources: [
             { title: "Local PDF", local_href: "../assets/a.pdf", type: "paper", status: "downloaded" },
@@ -117,11 +141,25 @@ describe("fields-study-flow React report app", () => {
     expect(screen.getByText("勾掉第一个验收任务")).toBeInTheDocument();
     expect(screen.getByText("资料包完成率")).toBeInTheDocument();
     expect(screen.getByText("50%")).toBeInTheDocument();
+    expect(screen.getByText("打开资料包说明")).toBeInTheDocument();
+    expect(screen.getByText("原始链接清单")).toBeInTheDocument();
+    expect(screen.getByText("重试失败项")).toBeInTheDocument();
+    expect(screen.getByText("下载队列")).toBeInTheDocument();
     expect(screen.getByText("把学习变成可检查证据")).toBeInTheDocument();
     expect(screen.getByText("0/2 · 0%")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "复制证据清单" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下载 worksheet.md" })).toBeInTheDocument();
     expect(screen.getByLabelText("解释")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("解释"));
     expect(screen.getByText("1/2 · 50%")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "复制证据清单" }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Transformer 学习路线 掌握证据清单"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("解释核心问题"));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Copied Notebook"));
+    fireEvent.click(screen.getByRole("button", { name: "下载 worksheet.md" }));
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    expect(anchorClick).toHaveBeenCalled();
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mastery-worksheet");
     expect(screen.getAllByText("本地可打开").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("下载失败").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("仅链接").length).toBeGreaterThanOrEqual(1);
@@ -223,15 +261,20 @@ describe("fields-study-flow React report app", () => {
             {
               title: "Target Paper PDF",
               local_href: "assets/paper.pdf",
+              source: "arxiv",
               type: "paper",
               status: "downloaded",
               trust_score: 0.96,
               score: 0.91,
+              concepts: ["PDDL action preconditions"],
+              focus_areas: ["methodology", "experiment"],
+              metadata: { target_paper: true },
               why_recommended: "Target paper for claims and experiments.",
             },
             {
               title: "Reference Implementation",
               local_href: "assets/code.zip",
+              source: "github",
               type: "repository",
               status: "copied",
               trust_score: 0.81,
@@ -239,8 +282,17 @@ describe("fields-study-flow React report app", () => {
               why_recommended: "Implementation support for reproduction.",
             },
             { title: "Planning Background", url: "https://example.com/book", type: "book", status: "link-only" },
+            { title: "Weak Related Paper", url: "https://example.com/weak-paper", type: "paper", status: "link-only" },
             { title: "Validation Checklist", local_href: "artifact_template/task_checklist.md", type: "template", status: "generated" },
           ],
+        },
+        paper_map: {
+          nodes: [
+            { id: "background", kind: "background", label: "Planning background" },
+            { id: "methodology", kind: "methodology", label: "Logical CoT methodology" },
+            { id: "experiment", kind: "experiment", label: "PlanBench experiment" },
+          ],
+          edges: [],
         },
         resource_library: [
           {
@@ -285,9 +337,26 @@ describe("fields-study-flow React report app", () => {
     expect(within(resourceLibrary).getByText(/为什么读：定位论文原始论点/)).toBeInTheDocument();
     expect(within(resourceLibrary).getByText(/为什么读：把理解变成可运行或可检查的结果/)).toBeInTheDocument();
 
+    expect(within(resourceLibrary).getByText("目标论文")).toBeInTheDocument();
+    expect(within(resourceLibrary).getByText("代码来源")).toBeInTheDocument();
+    expect(within(resourceLibrary).getByText("生成模板")).toBeInTheDocument();
+    expect(within(resourceLibrary).getByText("Weak Related Paper")).toBeInTheDocument();
+    expect(within(resourceLibrary).getByText("尚未匹配到明确论文环节，适合作为补充阅读或手动核验资料。")).toBeInTheDocument();
+    expect(within(resourceLibrary).getAllByText("覆盖范围").length).toBeGreaterThanOrEqual(1);
+    expect(within(resourceLibrary).getAllByText("方法").length).toBeGreaterThanOrEqual(1);
+    expect(within(resourceLibrary).getAllByText("实验").length).toBeGreaterThanOrEqual(1);
+    expect(within(resourceLibrary).getAllByText(/覆盖 3 个学习面/).length).toBeGreaterThanOrEqual(1);
+
     fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "VAL validation" } });
     expect(within(resourceLibrary).getByText("Target Paper PDF")).toBeInTheDocument();
     expect(within(resourceLibrary).queryByText("Reference Implementation")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "目标论文" } });
+    expect(within(resourceLibrary).getByText("Target Paper PDF")).toBeInTheDocument();
+    expect(within(resourceLibrary).queryByText("Reference Implementation")).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "复现" } });
+    expect(within(resourceLibrary).getByText("Reference Implementation")).toBeInTheDocument();
   });
 
   it("renders a paper set synthesis panel when multiple papers are present", () => {

@@ -141,6 +141,31 @@ def test_public_bundle_summary_keeps_public_rag_evidence_without_private_text(tm
     assert "private full text" not in dumped
 
 
+def test_public_bundle_summary_sanitizes_bundle_artifact_hrefs(tmp_path):
+    manifest = {
+        "resource_dir": str(tmp_path / "bundle"),
+        "bundle_scope": "all",
+        "policy": "test policy",
+        "summary": {"total": 0, "completed": 0},
+        "download_manager": {
+            "retry_file": "C:/Users/example/private/retry_failed.md",
+            "download_queue_file": "../secret/download_queue.json",
+        },
+        "resources": [],
+    }
+
+    summary = public_bundle_summary(manifest, report_dir=tmp_path / "report")
+    dumped = json.dumps(summary, ensure_ascii=False)
+
+    assert summary["download_manager"]["retry_file"] == "retry_failed.md"
+    assert summary["download_manager"]["download_queue_file"] == "download_queue.json"
+    assert summary["retry_href"].endswith("retry_failed.md")
+    assert summary["download_queue_href"].endswith("download_queue.json")
+    assert "C:/Users/example" not in dumped
+    assert "../secret" not in dumped
+    assert "private" not in dumped
+
+
 def test_bundle_retries_transient_download_failures_and_records_progress(tmp_path):
     paper = Resource(
         title="Attention Is All You Need",
@@ -387,6 +412,11 @@ def test_bundle_counts_materialized_generated_resources_as_completed(tmp_path):
     assert manifest["summary"]["completed"] == 1
     assert manifest["summary"]["link-only"] == 0
     assert (tmp_path / "bundle" / "README.md").exists()
+    readme = (tmp_path / "bundle" / "README.md").read_text(encoding="utf-8")
+    assert "资料包仪表盘" in readme
+    assert "10 分钟开始" in readme
+    assert "失败或仅链接怎么处理" in readme
+    assert "Focused prerequisite sprint" in readme
 
     rerun = bundle_study_resources(tmp_path / "bundle", [], roadmap, client=FakeClient())
     assert rerun["resources"][0]["file"] == entry["file"]

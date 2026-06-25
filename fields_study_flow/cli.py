@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -24,6 +25,7 @@ from fields_study_flow.visual_audit import (
     capture_browser_snapshots,
     compare_browser_snapshot_baseline,
     evaluate_fresh_user_timing,
+    probe_browser_interactions,
     summarize_fresh_user_worksheets,
     summarize_fresh_user_backlogs,
     write_report_audit,
@@ -44,6 +46,16 @@ PLANNER_PRESETS: dict[str, dict[str, str]] = {
     "field-project": {"target_kind": "field", "route_depth": "balanced", "learning_style": "practical"},
     "course-complete": {"target_kind": "course", "route_depth": "complete", "learning_style": "theory"},
 }
+
+
+def _positive_minutes(value: str) -> float:
+    try:
+        minutes = float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("minutes must be a positive finite number") from exc
+    if not math.isfinite(minutes) or minutes <= 0:
+        raise argparse.ArgumentTypeError("minutes must be a positive finite number")
+    return minutes
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -161,14 +173,19 @@ def build_parser() -> argparse.ArgumentParser:
     demo.add_argument("--sample", choices=["transformer-paper"], default="transformer-paper")
     demo.add_argument("--output-language", choices=["zh-CN", "en", "bilingual"], default="zh-CN")
     demo.add_argument("--output-dir", default="fields-study-flow-demo")
+    demo.add_argument("--market-check", action="store_true", help="After generating the demo, write a market-readiness audit summary into the demo folder.")
+    demo.add_argument("--market-fresh-user-minutes", type=_positive_minutes, help="Measured minutes for a fresh learner to reach the first mastery task in the demo market check.")
+    demo.add_argument("--market-check-screenshots", action="store_true", help="Include optional browser screenshots in --market-check when Playwright is available.")
+    demo.add_argument("--market-check-interactions", action="store_true", help="Include optional browser interaction probes in --market-check when Playwright is available.")
 
     audit = subparsers.add_parser("audit-report", help="Audit exported HTML reports for visual and privacy risks.")
     audit.add_argument("--report-dir", default="fields-study-flow-output")
     audit.add_argument("--capture-screenshots", action="store_true", help="Optionally capture desktop/mobile screenshots when Playwright is available.")
+    audit.add_argument("--probe-interactions", action="store_true", help="Optionally smoke-test exported report clicks, filters, and Paper Map canvas interactions when Playwright is available.")
     audit.add_argument("--screenshot-dir", help="Directory for optional audit screenshots; defaults to REPORT_DIR/visual-snapshots.")
     audit.add_argument("--snapshot-baseline", help="Compare browser screenshot metadata against a saved visual-snapshots/manifest.json baseline.")
-    audit.add_argument("--fresh-user-minutes", type=float, help="Measured minutes for a fresh learner to reach the first mastery task.")
-    audit.add_argument("--fresh-user-target-minutes", type=float, default=10.0, help="Maximum acceptable fresh-user time-to-first-mastery-task. Default: 10.")
+    audit.add_argument("--fresh-user-minutes", type=_positive_minutes, help="Measured minutes for a fresh learner to reach the first mastery task.")
+    audit.add_argument("--fresh-user-target-minutes", type=_positive_minutes, default=10.0, help="Maximum acceptable fresh-user time-to-first-mastery-task. Default: 10.")
     audit.add_argument("--write-fresh-user-worksheet", action="store_true", help="Write a manual first-run usability worksheet into the report directory.")
     audit.add_argument("--fresh-user-worksheet", help="Optional output path for the first-run usability worksheet.")
     audit.add_argument("--fresh-user-worksheet-input", action="append", default=[], help="Completed fresh-user worksheet to aggregate into a ranked blocker backlog. Repeat to add more.")
@@ -545,6 +562,7 @@ def _ask(args: argparse.Namespace) -> int:
 
 
 def _demo(args: argparse.Namespace) -> int:
+    output_dir = Path(args.output_dir)
     profile = LearnerProfile(
         goal="快速理解并能够汇报 Attention Is All You Need",
         output_language=normalize_output_language(args.output_language),
@@ -555,6 +573,7 @@ def _demo(args: argparse.Namespace) -> int:
         learning_style="practical",
     )
     resources = _demo_transformer_resources()
+    _materialize_demo_resources(output_dir / "demo-source-materials", resources)
     ranked = rank_resources(resources, profile)
     ranked, rag_index = apply_rag_to_resources(profile, ranked, mode="light")
     roadmap = build_roadmap(
@@ -563,9 +582,76 @@ def _demo(args: argparse.Namespace) -> int:
         live_search={"enabled": False, "status": "demo_offline"},
         rag_evidence=public_rag_evidence(rag_index, profile.goal),
     )
-    write_outputs(Path(args.output_dir), profile, ranked, roadmap, SourceRegistry.default().snapshot())
-    print((Path(args.output_dir) / "index.html").resolve())
+    resource_dir = output_dir / "study-assets"
+    manifest = bundle_study_resources(resource_dir, ranked, roadmap, bundle_scope="all", progress=None)
+    write_bundle_rag_index(resource_dir, manifest, query=profile.goal, mode="light")
+    roadmap = attach_study_bundle(roadmap, manifest, report_dir=output_dir)
+    write_outputs(output_dir, profile, ranked, roadmap, SourceRegistry.default().snapshot())
+    print((output_dir / "index.html").resolve())
+    if getattr(args, "market_check", False):
+        market_check = _run_demo_market_check(
+            output_dir,
+            fresh_user_minutes=getattr(args, "market_fresh_user_minutes", None),
+            capture_screenshots=bool(getattr(args, "market_check_screenshots", False)),
+            probe_interactions=bool(getattr(args, "market_check_interactions", False)),
+        )
+        market_check_path = output_dir / "demo_market_check.json"
+        market_check_path.write_text(json.dumps(market_check, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(market_check_path.resolve())
     return 0
+
+
+def _run_demo_market_check(
+    output_dir: Path,
+    *,
+    fresh_user_minutes: float | None = None,
+    capture_screenshots: bool = False,
+    probe_interactions: bool = False,
+) -> dict[str, object]:
+    result = audit_report_directory(output_dir)
+    roadmap_path = output_dir / "roadmap.json"
+    try:
+        roadmap = json.loads(roadmap_path.read_text(encoding="utf-8"))
+        result["report_audit"] = write_report_audit(output_dir, roadmap)
+    except (OSError, json.JSONDecodeError) as exc:
+        result["report_audit"] = {
+            "status": "warn",
+            "summary": {"path": "report_audit.json", "error": str(exc)},
+        }
+    if capture_screenshots:
+        result["browser_snapshot_capture"] = capture_browser_snapshots(output_dir)
+    if probe_interactions:
+        result["browser_interaction_probe"] = probe_browser_interactions(output_dir)
+    if fresh_user_minutes is not None:
+        result["fresh_user_timing"] = evaluate_fresh_user_timing(float(fresh_user_minutes))
+    result["release_readiness_report"] = write_release_readiness_report(output_dir, result)
+    result["generated_artifact_audit"] = audit_report_directory(output_dir)
+    release_summary = result.get("release_readiness_report", {}).get("summary", {})
+    next_actions = release_summary.get("next_actions", []) if isinstance(release_summary, dict) else []
+    result["market_check_summary"] = {
+        "decision": release_summary.get("decision", "needs_work") if isinstance(release_summary, dict) else "needs_work",
+        "score": release_summary.get("score", 0) if isinstance(release_summary, dict) else 0,
+        "next_actions": _demo_market_next_actions(next_actions),
+        "report": "release_readiness.html",
+    }
+    return result
+
+
+def _demo_market_next_actions(actions: object) -> list[str]:
+    if not isinstance(actions, list):
+        return []
+    replacements = {
+        "--fresh-user-minutes": "--market-fresh-user-minutes",
+        "--capture-screenshots": "--market-check-screenshots",
+        "--probe-interactions": "--market-check-interactions",
+    }
+    adapted: list[str] = []
+    for action in actions:
+        text = str(action)
+        for original, replacement in replacements.items():
+            text = text.replace(original, replacement)
+        adapted.append(text)
+    return adapted
 
 
 def _audit_report(args: argparse.Namespace) -> int:
@@ -588,6 +674,8 @@ def _audit_report(args: argparse.Namespace) -> int:
             output_dir=Path(args.screenshot_dir) if getattr(args, "screenshot_dir", None) else None,
         )
         result["browser_snapshot_capture"] = snapshot_result
+    if getattr(args, "probe_interactions", False):
+        result["browser_interaction_probe"] = probe_browser_interactions(Path(args.report_dir))
     if getattr(args, "snapshot_baseline", None):
         if snapshot_result is None:
             snapshot_result = _read_existing_snapshot_manifest(Path(args.report_dir), Path(args.screenshot_dir) if getattr(args, "screenshot_dir", None) else None)
@@ -639,6 +727,7 @@ def _audit_report(args: argparse.Namespace) -> int:
         result["generated_artifact_audit"] = audit_report_directory(Path(args.report_dir))
     print(json.dumps(result, ensure_ascii=False, indent=2))
     screenshot_status = (result.get("browser_snapshot_capture") or {}).get("status", "pass")
+    interaction_status = (result.get("browser_interaction_probe") or {}).get("status", "pass")
     baseline_status = (result.get("browser_snapshot_baseline") or {}).get("status", "pass")
     timing_status = (result.get("fresh_user_timing") or {}).get("status", "pass")
     worksheet_status = (result.get("fresh_user_worksheet") or {}).get("status", "pass")
@@ -647,7 +736,7 @@ def _audit_report(args: argparse.Namespace) -> int:
     release_status = (result.get("release_readiness_report") or {}).get("status", "pass")
     history_status = (result.get("release_readiness_history") or {}).get("status", "pass")
     generated_status = (result.get("generated_artifact_audit") or {}).get("status", "pass")
-    return 0 if result["status"] == "pass" and screenshot_status in {"pass", "skipped"} and baseline_status == "pass" and timing_status == "pass" and worksheet_status in {"pass", "warn"} and backlog_status in {"pass", "warn"} and trend_status in {"pass", "warn"} and release_status in {"pass", "warn"} and history_status in {"pass", "warn"} and generated_status == "pass" else 1
+    return 0 if result["status"] == "pass" and screenshot_status in {"pass", "skipped"} and interaction_status in {"pass", "skipped"} and baseline_status == "pass" and timing_status == "pass" and worksheet_status in {"pass", "warn"} and backlog_status in {"pass", "warn"} and trend_status in {"pass", "warn"} and release_status in {"pass", "warn"} and history_status in {"pass", "warn"} and generated_status == "pass" else 1
 
 
 def _read_existing_snapshot_manifest(report_dir: Path, screenshot_dir: Path | None = None) -> dict[str, object]:
@@ -693,7 +782,7 @@ def _demo_transformer_resources() -> list[Resource]:
                 "The original experiments focus on translation, so transfer to other tasks needs separate validation.",
             ],
             "metadata_status": "demo",
-            "warnings": ["This bundled demo uses public metadata-style hints and does not download the PDF."],
+            "warnings": ["This bundled demo uses public metadata-style hints plus local demo notes; it is not the full paper PDF."],
         },
     }
     return [
@@ -776,6 +865,72 @@ def _demo_transformer_resources() -> list[Resource]:
             critical_path_role="practice-validation",
         ),
     ]
+
+
+def _materialize_demo_resources(source_dir: Path, resources: list[Resource]) -> None:
+    source_dir.mkdir(parents=True, exist_ok=True)
+    for index, resource in enumerate(resources, start=1):
+        target = source_dir / f"{index:02d}-{_demo_slug(resource.title)}.md"
+        target.write_text(_render_demo_resource_note(resource), encoding="utf-8")
+        resource.local_path = str(target)
+        resource.license_or_access_note = (
+            f"{resource.license_or_access_note} Demo export includes a local note file so the zero-setup report works offline."
+        )
+
+
+def _demo_slug(value: str) -> str:
+    return re.sub(r"[^a-zA-Z0-9]+", "-", value).strip("-").lower()[:80] or "resource"
+
+
+def _render_demo_resource_note(resource: Resource) -> str:
+    lines = [
+        f"# {resource.title}",
+        "",
+        "This is a local demo note generated by fields-study-flow so the sample report has an offline study bundle.",
+        "",
+        f"- Original link: {resource.url}",
+        f"- Source: {resource.source}",
+        f"- Type: {resource.type}",
+        f"- Why it is in the demo: {resource.why_recommended}",
+        "",
+    ]
+    for heading, values in (
+        ("Concepts", resource.concepts),
+        ("Learning key points", resource.learning_key_points),
+        ("Focus areas", resource.focus_areas),
+    ):
+        if not values:
+            continue
+        lines.extend([f"## {heading}", ""])
+        lines.extend(f"- {value}" for value in values)
+        lines.append("")
+    paper_metadata = resource.metadata.get("paper_metadata") if isinstance(resource.metadata, dict) else None
+    if isinstance(paper_metadata, dict):
+        abstract = paper_metadata.get("abstract_snippet")
+        if abstract:
+            lines.extend(["## Target Paper Abstract Snippet", "", str(abstract), ""])
+        for heading, key in (
+            ("Method hints", "method_hints"),
+            ("Experiment hints", "experiment_hints"),
+            ("Limitation hints", "limitations_hints"),
+        ):
+            values = [str(item) for item in paper_metadata.get(key, []) if str(item)]
+            if not values:
+                continue
+            lines.extend([f"## {heading}", ""])
+            lines.extend(f"- {value}" for value in values)
+            lines.append("")
+    lines.extend(
+        [
+            "## Suggested evidence to collect",
+            "",
+            "- Explain the resource in your own words.",
+            "- Link it back to the Paper Map node it supports.",
+            "- Record one note, equation, code pointer, or limitation you can verify later.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def _infer_resource_dir_from_roadmap(roadmap_path: Path) -> Path | None:

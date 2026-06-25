@@ -91,6 +91,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     cards_html = "\n".join(_index_card_html(card) for card in cards)
     health_html = _report_health_panel_html(safe_roadmap, is_zh)
     scenario_html = _scenario_panel_html(is_zh)
+    intent_router_html = _intent_router_panel_html(safe_roadmap, is_zh)
     heading = "从这里开始" if is_zh else "Start Here"
     subtitle = (
         "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
@@ -221,7 +222,22 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       background: rgba(255, 255, 255, 0.76);
       box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
     }}
+    .intent-router-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+      background: rgba(255, 255, 255, 0.76);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
     .quickstart-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
+    .intent-router-panel header {{
       display: flex;
       justify-content: space-between;
       gap: 12px;
@@ -234,7 +250,18 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       line-height: 1.22;
       overflow-wrap: anywhere;
     }}
+    .intent-router-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
     .quickstart-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .intent-router-panel p {{
       margin: 4px 0 0;
       color: var(--muted);
       overflow-wrap: anywhere;
@@ -255,6 +282,11 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 10px;
     }}
+    .intent-router-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }}
     .quickstart-steps a, .quickstart-steps span {{
       display: block;
       min-height: 92px;
@@ -266,8 +298,27 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       text-decoration: none;
       overflow-wrap: anywhere;
     }}
+    .intent-card {{
+      display: grid;
+      gap: 7px;
+      min-height: 132px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.62);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+      transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+    }}
     .quickstart-steps a:hover, .quickstart-steps a:focus-visible {{
       border-color: rgba(47, 111, 115, 0.42);
+      outline: none;
+    }}
+    .intent-card:hover, .intent-card:focus-visible {{
+      transform: translateY(-2px);
+      border-color: rgba(47, 111, 115, 0.42);
+      background: rgba(255, 255, 255, 0.86);
       outline: none;
     }}
     .quickstart-steps small {{
@@ -275,10 +326,26 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       color: var(--accent-2);
       font-weight: 800;
     }}
+    .intent-card small {{
+      color: var(--accent);
+      font-weight: 900;
+    }}
     .quickstart-steps strong {{
       display: block;
       margin-top: 4px;
       font-size: 1rem;
+    }}
+    .intent-card strong {{
+      display: block;
+      font-size: 1rem;
+      line-height: 1.28;
+    }}
+    .intent-card em {{
+      align-self: end;
+      color: var(--accent-2);
+      font-size: 0.82rem;
+      font-style: normal;
+      font-weight: 800;
     }}
     .report-health-panel, .start-card {{
       display: flex;
@@ -519,9 +586,10 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
+      .intent-router-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
       .report-health-panel header {{ display: block; }}
       .quickstart-badge {{ display: inline-block; margin-top: 10px; }}
@@ -545,6 +613,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       </aside>
     </section>
     {quickstart_html}
+    {intent_router_html}
     {health_html}
     {scenario_html}
     <section class="start-grid" aria-label="{escape('推荐入口' if is_zh else 'Recommended entries')}">
@@ -606,6 +675,65 @@ def _index_card_html(card: dict[str, str]) -> str:
         <p>{escape(card['body'])}</p>
         <strong>{escape(card['cta'])}</strong>
       </a>"""
+
+
+def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    has_map = bool(roadmap.get("paper_map"))
+    has_lens = bool(roadmap.get("paper_lens"))
+    title = "按你的目的选择入口" if is_zh else "Choose by what you need now"
+    body = (
+        "不知道先点哪里时，直接按当前学习目的进入；每个入口都会保留本地资料和验收证据。"
+        if is_zh
+        else "If you are not sure where to click first, choose by your current goal; every path keeps local resources and mastery evidence nearby."
+    )
+    items = [
+        {
+            "intent": "quick-understand",
+            "href": "paper_map.html" if has_map else "roadmap.html",
+            "label": "最快理解" if is_zh else "Fastest understanding",
+            "title": "我只想先看懂这篇" if is_zh else "I just need the paper to make sense",
+            "body": "先看背景、动机、问题、方法、实验、贡献和局限的主链。" if is_zh else "Start with the main chain: background, motivation, problem, method, experiments, contributions, and limits.",
+            "time": "3-10 分钟" if is_zh else "3-10 min",
+        },
+        {
+            "intent": "presentation-ready",
+            "href": "paper_lens.html" if has_lens else ("paper_map.html" if has_map else "roadmap.html"),
+            "label": "汇报准备" if is_zh else "Presentation-ready",
+            "title": "我要能讲给别人听" if is_zh else "I need to explain it to someone",
+            "body": "把关键段落、直白解释、证据和汇报话术连起来。" if is_zh else "Connect key paragraphs, plain explanations, evidence, and presentation wording.",
+            "time": "20-40 分钟" if is_zh else "20-40 min",
+        },
+        {
+            "intent": "mastery-proof",
+            "href": "roadmap.html",
+            "label": "验收/复现" if is_zh else "Validation / reproduction",
+            "title": "我要留下可检查结果" if is_zh else "I need checkable output",
+            "body": "进入任务、资料库、进度勾选和 explain/derive/reproduce/critique 验收。" if is_zh else "Use tasks, the resource library, progress checks, and explain/derive/reproduce/critique validation.",
+            "time": "按路线完成" if is_zh else "follow the route",
+        },
+    ]
+    item_html = "\n".join(_intent_router_card_html(item) for item in items)
+    return f"""<section class="intent-router-panel" data-intent-router="learning-goal" aria-labelledby="intent-router-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('学习意图' if is_zh else 'Learning intent')}</p>
+          <h2 id="intent-router-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+      </header>
+      <div class="intent-router-grid">
+        {item_html}
+      </div>
+    </section>"""
+
+
+def _intent_router_card_html(item: dict[str, str]) -> str:
+    return f"""<a class="intent-card" data-intent="{escape(item['intent'])}" href="{escape(item['href'])}">
+          <small>{escape(item["label"])}</small>
+          <strong>{escape(item["title"])}</strong>
+          <p>{escape(item["body"])}</p>
+          <em>{escape(item["time"])}</em>
+        </a>"""
 
 
 def _report_health_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:

@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from fields_study_flow import visual_audit
 from fields_study_flow.visual_audit import (
     audit_report_directory,
@@ -9,6 +11,7 @@ from fields_study_flow.visual_audit import (
     capture_browser_snapshots,
     compare_browser_snapshot_baseline,
     evaluate_fresh_user_timing,
+    probe_browser_interactions,
     summarize_fresh_user_backlogs,
     summarize_fresh_user_worksheets,
     write_release_readiness_report,
@@ -197,6 +200,12 @@ def test_evaluate_fresh_user_timing_measures_time_to_first_mastery_task():
     assert slow["status"] == "fail"
     assert slow["summary"]["minutes_over_target"] == 2.25
     assert any(item["id"] == "first_mastery_within_target" and item["status"] == "fail" for item in slow["checks"])
+
+
+def test_evaluate_fresh_user_timing_rejects_non_positive_or_non_finite_values():
+    for measured, target in [(-1, 10), (0, 10), (float("nan"), 10), (8, 0), (8, float("inf"))]:
+        with pytest.raises(ValueError, match="positive finite"):
+            evaluate_fresh_user_timing(measured, target_minutes=target)
 
 
 def test_write_fresh_user_worksheet_creates_actionable_markdown(tmp_path):
@@ -557,7 +566,25 @@ def test_write_release_readiness_report_does_not_duplicate_index_entry(tmp_path)
         encoding="utf-8",
     )
     (tmp_path / "report_audit.json").write_text(
-        json.dumps({"market_readiness": {"status": "market_ready", "score": 96, "dimensions": []}}),
+        json.dumps(
+            {
+                "market_readiness": {
+                    "status": "market_ready",
+                    "score": 96,
+                    "dimensions": [],
+                    "next_best_actions": [
+                        {
+                            "dimension": "visual_polish",
+                            "action": "Optionally run browser-backed screenshot capture to validate the static visual snapshot matrix against real rendered pixels.",
+                        },
+                        {
+                            "dimension": "onboarding",
+                            "action": "Time a fresh-user run to measure how quickly a learner reaches the first mastery task.",
+                        },
+                    ],
+                }
+            }
+        ),
         encoding="utf-8",
     )
 
@@ -734,12 +761,93 @@ def test_cli_audit_report_writes_release_readiness_report(tmp_path):
 
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
-    assert data["release_readiness_report"]["status"] == "pass"
+    assert data["release_readiness_report"]["status"] == "warn"
+    assert data["release_readiness_report"]["summary"]["decision"] == "needs_work"
+    assert data["release_readiness_report"]["summary"]["fresh_user_timing_status"] == "not_run"
+    assert any("fresh-user timing" in action for action in data["release_readiness_report"]["summary"]["next_actions"])
     assert data["release_readiness_report"]["summary"]["path"] == "release_readiness.md"
     assert data["release_readiness_report"]["summary"]["html_path"] == "release_readiness.html"
     assert (tmp_path / "release_readiness.md").exists()
     assert (tmp_path / "release_readiness.html").exists()
     assert 'href="release_readiness.html"' in (tmp_path / "index.html").read_text(encoding="utf-8")
+
+
+def test_cli_audit_report_requires_visual_evidence_after_fresh_user_timing(tmp_path):
+    (tmp_path / "index.html").write_text(
+        '<html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "report_audit.json").write_text(
+        json.dumps({"market_readiness": {"status": "market_ready", "score": 96, "dimensions": []}}),
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "audit-report",
+            "--report-dir",
+            str(tmp_path),
+            "--fresh-user-minutes",
+            "8.25",
+            "--write-release-readiness",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    data = json.loads(result.stdout)
+    assert data["fresh_user_timing"]["status"] == "pass"
+    assert data["release_readiness_report"]["status"] == "warn"
+    assert data["release_readiness_report"]["summary"]["decision"] == "needs_work"
+    assert data["release_readiness_report"]["summary"]["fresh_user_timing_status"] == "pass"
+    assert data["release_readiness_report"]["summary"]["snapshot_status"] == "not_run"
+    assert data["release_readiness_report"]["summary"]["baseline_status"] == "not_run"
+    assert any("--capture-screenshots" in action for action in data["release_readiness_report"]["summary"]["next_actions"])
+    assert not any("fresh-user timing" in action for action in data["release_readiness_report"]["summary"]["next_actions"])
+
+
+def test_write_release_readiness_report_ships_after_timing_visual_and_interaction_evidence(tmp_path):
+    (tmp_path / "index.html").write_text(
+        '<html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "report_audit.json").write_text(
+        json.dumps({"market_readiness": {"status": "market_ready", "score": 96, "dimensions": []}}),
+        encoding="utf-8",
+    )
+
+    result = write_release_readiness_report(
+        tmp_path,
+        {
+            "status": "pass",
+            "fresh_user_timing": {"status": "pass", "summary": {"minutes": 8.25, "target_minutes": 10}},
+            "browser_snapshot_capture": {
+                "status": "pass",
+                "summary": {"mode": "browser-backed", "checked_files": 3},
+            },
+            "browser_interaction_probe": {
+                "status": "pass",
+                "summary": {"mode": "browser-interaction", "pages": 3, "failed_checks": 0},
+            },
+        },
+    )
+
+    assert result["status"] == "pass"
+    assert result["summary"]["decision"] == "ship"
+    assert result["summary"]["fresh_user_timing_status"] == "pass"
+    assert result["summary"]["snapshot_status"] == "pass"
+    assert result["summary"]["interaction_status"] == "pass"
+    assert not any("screenshot" in action.lower() for action in result["summary"]["next_actions"])
+    assert not any("fresh-user" in action.lower() for action in result["summary"]["next_actions"])
 
 
 def test_cli_audit_report_writes_release_readiness_history(tmp_path):
@@ -762,6 +870,8 @@ def test_cli_audit_report_writes_release_readiness_history(tmp_path):
             "audit-report",
             "--report-dir",
             str(tmp_path),
+            "--fresh-user-minutes",
+            "8.25",
             "--write-release-readiness",
             "--write-release-history",
         ],
@@ -772,7 +882,10 @@ def test_cli_audit_report_writes_release_readiness_history(tmp_path):
 
     assert result.returncode == 0, result.stderr
     data = json.loads(result.stdout)
-    assert data["release_readiness_history"]["status"] == "pass"
+    assert data["release_readiness_report"]["status"] == "warn"
+    assert data["release_readiness_report"]["summary"]["decision"] == "needs_work"
+    assert data["release_readiness_history"]["status"] == "warn"
+    assert data["release_readiness_history"]["summary"]["latest_decision"] == "needs_work"
     assert data["release_readiness_history"]["summary"]["path"] == "release_readiness_history.md"
     assert data["release_readiness_history"]["summary"]["jsonl_path"] == "release_readiness_history.jsonl"
     assert data["release_readiness_history"]["summary"]["html_path"] == "release_readiness_history.html"
@@ -785,7 +898,10 @@ def test_cli_audit_report_writes_release_readiness_history(tmp_path):
     assert (tmp_path / "release_readiness_history.html").exists()
     history = (tmp_path / "release_readiness_history.md").read_text(encoding="utf-8")
     assert "Release Readiness History" in history
-    assert "ship" in history
+    assert "needs_work" in history
+    assert "--capture-screenshots" in history
+    assert "--probe-interactions" in history
+    assert "fresh-user timing test" not in history
     assert "release_readiness.html" in history
 
 
@@ -912,6 +1028,33 @@ def test_capture_browser_snapshots_fails_when_rendered_page_is_blank(tmp_path):
     assert result["captures"][0]["rendered_text_length"] == 0
 
 
+def test_capture_browser_snapshots_accepts_static_body_render_box(tmp_path):
+    (tmp_path / "release_readiness.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        "<body><main>Release Readiness Dashboard with real rendered content</main></body></html>",
+        encoding="utf-8",
+    )
+
+    def static_renderer(html_file, viewport, screenshot_file):
+        screenshot_file.write_bytes(b"rendered png")
+        return {
+            "rendered_text_length": 58,
+            "root_width": 0,
+            "root_height": 0,
+            "render_width": 960,
+            "render_height": 540,
+            "visible_marker_count": 1,
+        }
+
+    result = capture_browser_snapshots(tmp_path, surfaces=["release_readiness.html"], renderer=static_renderer)
+
+    assert result["status"] == "pass"
+    box_checks = [item for item in result["checks"] if item["check"] == "root_box"]
+    assert box_checks and box_checks[0]["status"] == "pass"
+    assert result["captures"][0]["render_width"] == 960
+
+
 def test_capture_browser_snapshots_fails_when_rendered_text_has_ellipsis(tmp_path):
     (tmp_path / "paper_map.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -936,6 +1079,184 @@ def test_capture_browser_snapshots_fails_when_rendered_text_has_ellipsis(tmp_pat
     failed_checks = [item for item in result["checks"] if item["status"] == "fail"]
     assert any(item["check"] == "rendered_decorative_ellipsis" for item in failed_checks)
     assert result["captures"][0]["rendered_decorative_ellipsis_count"] == 2
+
+
+def test_probe_browser_interactions_passes_with_injected_runner(tmp_path):
+    for name in ("paper_map.html", "paper_lens.html", "roadmap.html"):
+        (tmp_path / name).write_text(
+            '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head>'
+            f"<body>{name}</body></html>",
+            encoding="utf-8",
+        )
+
+    def fake_runner(html_file):
+        if html_file.name == "paper_map.html":
+            return {
+                "console_errors": 0,
+                "paper_map_canvas_present": True,
+                "paper_map_nodes_before": 3,
+                "paper_map_nodes_after_branch": 7,
+                "paper_map_branch_revealed": True,
+                "paper_map_detail_changed": True,
+                "paper_map_zoom_changed": True,
+            }
+        if html_file.name == "roadmap.html":
+            return {
+                "console_errors": 0,
+                "roadmap_resources_before": 5,
+                "roadmap_resources_after_filter": 3,
+                "roadmap_filter_changed": True,
+            }
+        return {
+            "console_errors": 0,
+            "paper_lens_active_before": "Abstract",
+            "paper_lens_active_after": "Method",
+            "paper_lens_detail_changed": True,
+        }
+
+    result = probe_browser_interactions(tmp_path, runner=fake_runner)
+
+    assert result["status"] == "pass"
+    assert result["summary"]["mode"] == "browser-interaction"
+    assert result["summary"]["pages"] == 3
+    assert any(item["check"] == "paper_map_branch_revealed" and item["status"] == "pass" for item in result["checks"])
+    assert any(item["check"] == "roadmap_filter_changed" and item["status"] == "pass" for item in result["checks"])
+    assert any(item["check"] == "paper_lens_detail_changed" and item["status"] == "pass" for item in result["checks"])
+    dumped = json.dumps(result, ensure_ascii=False)
+    assert str(tmp_path) not in dumped
+
+
+def test_probe_browser_interactions_fails_when_paper_map_buttons_do_not_work(tmp_path):
+    (tmp_path / "paper_map.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head>'
+        "<body>paper map</body></html>",
+        encoding="utf-8",
+    )
+
+    def broken_runner(html_file):
+        return {
+            "console_errors": 0,
+            "paper_map_canvas_present": True,
+            "paper_map_nodes_before": 3,
+            "paper_map_nodes_after_branch": 3,
+            "paper_map_branch_revealed": False,
+            "paper_map_detail_changed": False,
+            "paper_map_zoom_changed": False,
+        }
+
+    result = probe_browser_interactions(tmp_path, runner=broken_runner)
+
+    assert result["status"] == "fail"
+    failed_checks = {item["check"] for item in result["checks"] if item["status"] == "fail"}
+    assert {"paper_map_branch_revealed", "paper_map_detail_changed", "paper_map_zoom_changed"} <= failed_checks
+
+
+def test_probe_browser_interactions_skips_paper_map_branch_checks_when_not_applicable(tmp_path):
+    (tmp_path / "paper_map.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head>'
+        "<body>paper map</body></html>",
+        encoding="utf-8",
+    )
+
+    def concise_runner(html_file):
+        return {
+            "console_errors": 0,
+            "paper_map_canvas_present": True,
+            "paper_map_nodes_before": 1,
+            "paper_map_nodes_after_branch": 1,
+            "paper_map_branch_toggle_available": False,
+            "paper_map_branch_revealed": False,
+            "paper_map_detail_changed": False,
+            "paper_map_zoom_changed": True,
+        }
+
+    result = probe_browser_interactions(tmp_path, runner=concise_runner)
+
+    assert result["status"] == "pass"
+    statuses = {item["check"]: item["status"] for item in result["checks"]}
+    assert statuses["paper_map_branch_revealed"] == "skipped"
+    assert statuses["paper_map_detail_changed"] == "skipped"
+
+
+def test_probe_browser_interactions_skips_paper_lens_detail_switch_for_single_paragraph(tmp_path):
+    (tmp_path / "paper_lens.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head>'
+        "<body>paper lens</body></html>",
+        encoding="utf-8",
+    )
+
+    def single_paragraph_runner(html_file):
+        return {
+            "console_errors": 0,
+            "paper_lens_paragraphs": 1,
+            "paper_lens_active_before": "段落 1",
+            "paper_lens_active_after": "段落 1",
+            "paper_lens_detail_changed": False,
+        }
+
+    result = probe_browser_interactions(tmp_path, runner=single_paragraph_runner)
+
+    assert result["status"] == "pass"
+    statuses = {item["check"]: item["status"] for item in result["checks"]}
+    assert statuses["paper_lens_detail_changed"] == "skipped"
+
+
+def test_resource_library_markers_require_actual_resource_data():
+    html = "<script>resource-purpose-badge resource-strength-badge resource-provenance-badge</script>"
+
+    assert not visual_audit._resource_library_marker({}, html, ("resource-purpose-badge",))
+    assert visual_audit._resource_library_marker({"resource_library": [{"title": "Target paper"}]}, html, ("resource-purpose-badge",))
+
+
+def test_probe_browser_interactions_fails_when_roadmap_filter_has_no_resources(tmp_path):
+    (tmp_path / "roadmap.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head>'
+        "<body>roadmap</body></html>",
+        encoding="utf-8",
+    )
+
+    def empty_resource_runner(html_file):
+        return {
+            "console_errors": 0,
+            "roadmap_resources_before": 0,
+            "roadmap_resources_after_filter": 0,
+            "roadmap_filter_changed": True,
+        }
+
+    result = probe_browser_interactions(tmp_path, runner=empty_resource_runner)
+
+    assert result["status"] == "fail"
+    failed_checks = {item["check"] for item in result["checks"] if item["status"] == "fail"}
+    assert {"roadmap_resources_present", "roadmap_filter_changed"} <= failed_checks
+
+
+def test_cli_audit_report_probe_interactions_degrades_without_browser_runtime(tmp_path):
+    (tmp_path / "paper_map.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width"></head>'
+        "<body>paper map</body></html>",
+        encoding="utf-8",
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "fields_study_flow.cli",
+            "audit-report",
+            "--report-dir",
+            str(tmp_path),
+            "--probe-interactions",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode in {0, 1}
+    data = json.loads(result.stdout)
+    assert "browser_interaction_probe" in data
+    assert data["browser_interaction_probe"]["summary"]["mode"] == "browser-interaction"
+    assert data["browser_interaction_probe"]["status"] in {"pass", "skipped", "fail"}
 
 
 def test_compare_browser_snapshot_baseline_detects_pixel_and_viewport_regressions(tmp_path):
@@ -1121,10 +1442,10 @@ def test_cli_audit_report_capture_screenshots_degrades_without_browser_runtime(t
 
 def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart paper_map.html paper_lens.html roadmap.html Local assets",
+        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart intent-router-panel data-intent-router Choose by what you need paper_map.html paper_lens.html roadmap.html Local assets",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
-        "roadmap.html": "learning console mastery 1-minute start resource-purpose-badge 为什么读 resource-strength-badge 证据强度 最强证据 resource-evidence-link 查看证据",
+            "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -1263,10 +1584,10 @@ def test_visual_snapshot_matrix_warns_on_dense_ugly_report(tmp_path):
         for index in range(14)
     ]
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health scenario-panel Three Learning Scenarios",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health scenario-panel Three Learning Scenarios",
         "paper_map.html": "Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback=\"paper_map\" data-paper-map-canvas",
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
-        "roadmap.html": "learning console mastery resource-purpose-badge Why read resource-strength-badge Evidence strength",
+        "roadmap.html": "learning console mastery resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -1306,7 +1627,7 @@ def test_fresh_user_flow_warning_prevents_market_ready_status(tmp_path):
         "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
-        "roadmap.html": "learning console mastery 1-minute start resource-purpose-badge Why read resource-strength-badge Evidence strength",
+        "roadmap.html": "learning console mastery 1-minute start resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -1344,7 +1665,7 @@ def test_fresh_user_flow_warning_prevents_market_ready_status(tmp_path):
 
 def test_experience_warnings_prevent_market_ready_status(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": "Reading Density Core Chain Full Exploration",
         "paper_lens.html": "paragraph evidence",
         "roadmap.html": "learning console mastery",
@@ -1497,7 +1818,7 @@ def test_experience_risks_require_three_scenario_coverage_on_start_page(tmp_path
 
 def test_viewport_warnings_prevent_market_ready_status(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence",
         "roadmap.html": "learning console mastery",
@@ -1538,10 +1859,10 @@ def test_viewport_warnings_prevent_market_ready_status(tmp_path):
 
 def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
-        "roadmap.html": "learning console mastery 1-minute start resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
+        "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -1615,8 +1936,8 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
 
 def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
-        "roadmap.html": "learning console mastery 1-minute start resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength Strongest evidence resource-evidence-link Review evidence",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -1700,9 +2021,37 @@ def test_competitive_benchmark_blocks_market_ready_when_core_wedge_is_missing(tm
     assert audit["market_readiness"]["status"] == "needs_improvement"
 
 
+def test_resource_provenance_coverage_requires_both_markers(tmp_path):
+    (tmp_path / "roadmap.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        "<body>learning console mastery 1-minute start resource-list "
+        "resource-purpose-badge Why read resource-strength-badge Evidence strength "
+        "resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence</body></html>",
+        encoding="utf-8",
+    )
+    roadmap = {
+        "profile": {"target_kind": "field", "output_language": "en"},
+        "study_tasks": [{"type": "explain"}, {"type": "reproduce"}],
+        "study_bundle": {
+            "resources": [
+                {"title": "Local paper", "local_href": "assets/paper.pdf", "status": "downloaded"},
+                {"title": "Local code", "local_href": "assets/code.zip", "status": "copied"},
+            ]
+        },
+    }
+
+    audit = build_report_audit(tmp_path, roadmap)
+
+    benchmark_statuses = {item["id"]: item["status"] for item in audit["competitive_benchmark"]["checks"]}
+    experience_statuses = {item["id"]: item["status"] for item in audit["experience_risks"]["checks"]}
+    assert benchmark_statuses["resource_provenance_coverage"] == "warn"
+    assert experience_statuses["resource_provenance_coverage"] == "warn"
+
+
 def test_competitive_benchmark_recognizes_chinese_react_report_terms(tmp_path):
     for name, marker in {
-        "index.html": "从这里开始 换成自己的论文 10 分钟入门",
+        "index.html": "从这里开始 换成自己的论文 10 分钟入门 intent-router-panel data-intent-router 按你的目的选择入口",
         "paper_map.html": "阅读密度 速览主链 完整探索 证据覆盖 下载汇报稿.md data-paper-map-canvas react-flow",
         "paper_lens.html": "段落精读 段落解释支撑度 不是资源可信度",
         "roadmap.html": "学习中控台 掌握验收 1-minute start resource-list",
