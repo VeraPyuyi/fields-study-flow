@@ -92,6 +92,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     health_html = _report_health_panel_html(safe_roadmap, is_zh)
     scenario_html = _scenario_panel_html(is_zh)
     intent_router_html = _intent_router_panel_html(safe_roadmap, is_zh)
+    market_value_html = _market_value_panel_html(safe_roadmap, is_zh)
     heading = "从这里开始" if is_zh else "Start Here"
     subtitle = (
         "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
@@ -347,6 +348,73 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       font-style: normal;
       font-weight: 800;
     }}
+    .market-value-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.78);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
+    .market-value-panel header {{
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }}
+    .market-value-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .market-value-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .market-value-badge {{
+      flex: 0 0 auto;
+      border: 1px solid rgba(47, 111, 115, 0.22);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--accent);
+      background: rgba(47, 111, 115, 0.08);
+      font-size: 0.84rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }}
+    .market-value-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .market-value-card {{
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.62);
+      overflow-wrap: anywhere;
+    }}
+    .market-value-card span {{
+      display: block;
+      color: var(--accent-2);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }}
+    .market-value-card strong {{
+      display: block;
+      margin-top: 5px;
+      font-size: 1rem;
+      line-height: 1.25;
+    }}
+    .market-value-card p {{
+      margin-top: 7px;
+      font-size: 0.92rem;
+      line-height: 1.52;
+    }}
     .report-health-panel, .start-card {{
       display: flex;
       flex-direction: column;
@@ -586,13 +654,15 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
+      .market-value-panel header {{ display: block; }}
       .report-health-panel header {{ display: block; }}
       .quickstart-badge {{ display: inline-block; margin-top: 10px; }}
+      .market-value-badge {{ display: inline-block; margin-top: 10px; }}
       .report-health-link {{ display: inline-block; margin-top: 10px; }}
     }}
   </style>
@@ -612,6 +682,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <div class="metric"><span>{escape(resource_label)}</span><strong>{escape(selected_resources)}</strong></div>
       </aside>
     </section>
+    {market_value_html}
     {quickstart_html}
     {intent_router_html}
     {health_html}
@@ -675,6 +746,91 @@ def _index_card_html(card: dict[str, str]) -> str:
         <p>{escape(card['body'])}</p>
         <strong>{escape(card['cta'])}</strong>
       </a>"""
+
+
+def _market_value_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    has_paper_map = bool(roadmap.get("paper_map"))
+    has_paper_lens = bool(roadmap.get("paper_lens"))
+    title = "为什么它不只是 PDF 总结器" if is_zh else "Why this is more than a PDF summarizer"
+    body = (
+        "它把论文或领域目标变成可点击的学习结构、证据、资料包和验收任务，减少“看过但讲不清、资料散落、无法复现”的学习摩擦。"
+        if is_zh
+        else "It turns a paper or field goal into a clickable learning structure, evidence, a local bundle, and checkable mastery tasks."
+    )
+    badge = "差异化价值" if is_zh else "Differentiated value"
+    map_title = "先看目标逻辑图" if is_zh else "Start with the target logic"
+    map_body = (
+        "像 roadmap.sh 和 React Flow 一样可视化，但节点来自你的论文或学习目标。"
+        if is_zh
+        else "Visual like roadmap.sh and React Flow, but generated from your paper or learning goal."
+    )
+    if has_paper_map:
+        map_title = "先看论文逻辑图" if is_zh else "Start with the Paper Map"
+        map_body = (
+            "把背景、动机、问题、方法、实验、贡献和局限串成一条可点击主链。"
+            if is_zh
+            else "Connect background, motivation, problem, method, experiments, contributions, and limits in one clickable chain."
+        )
+    evidence_title = "再读证据精读层" if is_zh else "Read with evidence nearby"
+    evidence_body = (
+        "吸收 Explainpaper 和 PaperQA2 的优点：解释要直白，结论要能回到证据。"
+        if is_zh
+        else "Borrow the best of Explainpaper and PaperQA2: plain explanations with traceable evidence."
+    )
+    if not has_paper_lens:
+        evidence_body = (
+            "把关键概念、资源和任务绑定到证据，避免只给一堆泛泛链接。"
+            if is_zh
+            else "Tie concepts, resources, and tasks to evidence instead of leaving learners with a loose link list."
+        )
+    items = [
+        {
+            "reference": "roadmap.sh / React Flow",
+            "title": map_title,
+            "body": map_body,
+        },
+        {
+            "reference": "Explainpaper / PaperQA2",
+            "title": evidence_title,
+            "body": evidence_body,
+        },
+        {
+            "reference": "NotebookLM / Elicit",
+            "title": "带走本地资料包" if is_zh else "Keep a local study bundle",
+            "body": (
+                "能下载、复制、快照或生成的资料优先落地到本地，减少反复找链接。"
+                if is_zh
+                else "Download, copy, snapshot, or generate usable resources locally so learners stop hunting links."
+            ),
+        },
+        {
+            "reference": "Get It",
+            "title": "最后留下验收证据" if is_zh else "End with mastery proof",
+            "body": (
+                "不是读完就结束，而是产出解释、推导、复现和批判这些可检查结果。"
+                if is_zh
+                else "Do not stop at reading; produce explain, derive, reproduce, and critique evidence."
+            ),
+        },
+    ]
+    cards = "\n".join(
+        f"""<article class="market-value-card">
+          <span>{escape(item["reference"])}</span>
+          <strong>{escape(item["title"])}</strong>
+          <p>{escape(item["body"])}</p>
+        </article>"""
+        for item in items
+    )
+    return f"""<section class="market-value-panel" data-market-value-panel="true" aria-labelledby="market-value-title">
+      <header>
+        <div>
+          <h2 id="market-value-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="market-value-badge">{escape(badge)}</span>
+      </header>
+      <div class="market-value-grid">{cards}</div>
+    </section>"""
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:

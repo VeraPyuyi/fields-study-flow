@@ -137,6 +137,12 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     )
 
     assert "从这里开始" in html
+    assert 'data-market-value-panel="true"' in html
+    assert "为什么它不只是 PDF 总结器" in html
+    assert "roadmap.sh / React Flow" in html
+    assert "Explainpaper / PaperQA2" in html
+    assert "NotebookLM / Elicit" in html
+    assert "Get It" in html
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
     assert 'data-fresh-user-flow="first-10-minutes"' in html

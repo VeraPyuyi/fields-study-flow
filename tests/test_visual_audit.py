@@ -26,7 +26,8 @@ def test_audit_report_directory_passes_complete_offline_report(tmp_path):
     (tmp_path / "index.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
-        '<body><h1>从这里开始</h1><section>10 分钟入门 适合单篇论文</section><section>换成自己的论文</section></body></html>',
+        '<body><h1>从这里开始</h1><section data-market-value-panel="true">为什么它不只是 PDF 总结器</section>'
+        '<section>10 分钟入门 适合单篇论文</section><section>换成自己的论文</section></body></html>',
         encoding="utf-8",
     )
     (tmp_path / "paper_map.html").write_text(
@@ -105,7 +106,7 @@ def test_audit_report_directory_flags_decorative_ellipsis_in_react_payload(tmp_p
     (tmp_path / "index.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart"
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer"
         '<script type="application/json" id="fields-study-flow-data">'
         '{"roadmap":{"title":"A clipped title...","summary":"A clipped summary…"}}'
         "</script></body></html>",
@@ -123,7 +124,7 @@ def test_audit_report_directory_does_not_echo_internal_marker_terms(tmp_path):
     (tmp_path / "index.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
 
@@ -137,7 +138,7 @@ def test_cli_audit_report_outputs_json(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>从这里开始 10 分钟入门 换成自己的论文</body></html>",
+        '<body>从这里开始 10 分钟入门 <section data-market-value-panel="true">为什么它不只是 PDF 总结器</section> 换成自己的论文</body></html>',
         encoding="utf-8",
     )
 
@@ -158,7 +159,7 @@ def test_cli_audit_report_refreshes_report_audit_json_when_roadmap_exists(tmp_pa
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "roadmap.html").write_text(
@@ -230,7 +231,7 @@ def test_cli_audit_report_writes_fresh_user_worksheet(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
 
@@ -325,7 +326,7 @@ def test_cli_audit_report_writes_fresh_user_backlog_from_inputs(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     worksheet = tmp_path / "fresh_user_test.md"
@@ -434,7 +435,7 @@ def test_cli_audit_report_writes_fresh_user_trend_report(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     backlog = tmp_path / "fresh_user_backlog.md"
@@ -858,7 +859,7 @@ def test_cli_audit_report_writes_release_readiness_report(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "report_audit.json").write_text(
@@ -898,7 +899,7 @@ def test_cli_audit_report_includes_market_sample_matrix(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "report_audit.json").write_text(
@@ -941,7 +942,7 @@ def test_cli_audit_report_requires_visual_evidence_after_fresh_user_timing(tmp_p
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "report_audit.json").write_text(
@@ -982,7 +983,7 @@ def test_write_release_readiness_report_ships_after_timing_visual_and_interactio
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "report_audit.json").write_text(
@@ -1021,7 +1022,7 @@ def test_cli_audit_report_writes_release_readiness_history(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "report_audit.json").write_text(
@@ -1076,7 +1077,7 @@ def test_cli_audit_report_fails_when_fresh_user_timing_exceeds_target(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
 
@@ -1108,7 +1109,7 @@ def test_cli_audit_report_accepts_fresh_user_timing_under_target(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
 
@@ -1137,7 +1138,7 @@ def test_capture_browser_snapshots_writes_manifest_with_injected_renderer(tmp_pa
     (tmp_path / "index.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     (tmp_path / "paper_map.html").write_text(
@@ -1473,7 +1474,7 @@ def test_cli_audit_report_can_compare_existing_snapshot_baseline(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     manifest = {
@@ -1521,7 +1522,7 @@ def test_cli_audit_report_fails_when_snapshot_baseline_differs(tmp_path):
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     current = {
@@ -1581,7 +1582,7 @@ def test_cli_audit_report_capture_screenshots_degrades_without_browser_runtime(t
     (tmp_path / "index.html").write_text(
         '<html><head><meta name="viewport" content="width=device-width">'
         "<style>body{overflow-wrap:anywhere;max-width:100%;font-family:Arial}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
 
@@ -1609,7 +1610,7 @@ def test_cli_audit_report_capture_screenshots_degrades_without_browser_runtime(t
 
 def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart intent-router-panel data-intent-router Choose by what you need paper_map.html paper_lens.html roadmap.html Local assets",
+        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need paper_map.html paper_lens.html roadmap.html Local assets",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
             "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据",
@@ -1751,7 +1752,7 @@ def test_visual_snapshot_matrix_warns_on_dense_ugly_report(tmp_path):
         for index in range(14)
     ]
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health scenario-panel Three Learning Scenarios",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health scenario-panel Three Learning Scenarios",
         "paper_map.html": "Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback=\"paper_map\" data-paper-map-canvas",
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
         "roadmap.html": "learning console mastery resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage",
@@ -1832,7 +1833,7 @@ def test_fresh_user_flow_warning_prevents_market_ready_status(tmp_path):
 
 def test_experience_warnings_prevent_market_ready_status(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": "Reading Density Core Chain Full Exploration",
         "paper_lens.html": "paragraph evidence",
         "roadmap.html": "learning console mastery",
@@ -1931,7 +1932,7 @@ def test_experience_risks_require_report_health_panel_on_start_page(tmp_path):
     (tmp_path / "index.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
     roadmap = {"profile": {"output_language": "en"}, "study_bundle": {"resources": [{"status": "downloaded", "local_href": "assets/paper.pdf"}]}}
@@ -1945,7 +1946,7 @@ def test_experience_risks_require_report_health_panel_on_start_page(tmp_path):
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
         '<body><section class="report-health-panel">Report Health Local assets Privacy redacted Layout safe report_audit.json</section>'
-        "Start Here Bring Your Own Paper 10-minute quickstart</body></html>",
+        "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer</body></html>",
         encoding="utf-8",
     )
 
@@ -1959,7 +1960,7 @@ def test_experience_risks_require_three_scenario_coverage_on_start_page(tmp_path
     (tmp_path / "index.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
-        "<body>Start Here Bring Your Own Paper 10-minute quickstart report-health-panel Report Health</body></html>",
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer report-health-panel Report Health</body></html>",
         encoding="utf-8",
     )
     roadmap = {"profile": {"output_language": "en"}}
@@ -1973,7 +1974,7 @@ def test_experience_risks_require_three_scenario_coverage_on_start_page(tmp_path
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
         '<body><section class="scenario-panel">Three Learning Scenarios Single paper Paper set Field / course route</section>'
-        "Start Here Bring Your Own Paper 10-minute quickstart report-health-panel Report Health</body></html>",
+        "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer report-health-panel Report Health</body></html>",
         encoding="utf-8",
     )
 
@@ -1983,9 +1984,41 @@ def test_experience_risks_require_three_scenario_coverage_on_start_page(tmp_path
     assert recovered_checks["scenario_coverage_panel"]["status"] == "pass"
 
 
+def test_experience_risks_require_market_value_panel_on_start_page(tmp_path):
+    (tmp_path / "index.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart report-health-panel Report Health scenario-panel Three Learning Scenarios Single paper Field / course route</body></html>",
+        encoding="utf-8",
+    )
+    roadmap = {"profile": {"output_language": "en"}}
+
+    audit = build_report_audit(tmp_path, roadmap)
+    checks = {item["id"]: item for item in audit["experience_risks"]["checks"]}
+    visual_checks = {(item["file"], item["check"]): item for item in audit["visual_audit"]["checks"]}
+
+    assert checks["market_value_panel"]["status"] == "warn"
+    assert visual_checks[("index.html", "market_value_panel")]["status"] == "fail"
+
+    (tmp_path / "index.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        '<body><section data-market-value-panel="true">Why this is more than a PDF summarizer Differentiated value</section>'
+        "Start Here Bring Your Own Paper 10-minute quickstart report-health-panel Report Health scenario-panel Three Learning Scenarios Single paper Field / course route</body></html>",
+        encoding="utf-8",
+    )
+
+    recovered = build_report_audit(tmp_path, roadmap)
+    recovered_checks = {item["id"]: item for item in recovered["experience_risks"]["checks"]}
+    recovered_visual_checks = {(item["file"], item["check"]): item for item in recovered["visual_audit"]["checks"]}
+
+    assert recovered_checks["market_value_panel"]["status"] == "pass"
+    assert recovered_visual_checks[("index.html", "market_value_panel")]["status"] == "pass"
+
+
 def test_viewport_warnings_prevent_market_ready_status(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence",
         "roadmap.html": "learning console mastery",
@@ -2026,7 +2059,7 @@ def test_viewport_warnings_prevent_market_ready_status(tmp_path):
 
 def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
@@ -2106,7 +2139,7 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
 
 def test_competitive_benchmark_requires_contextual_paper_lens_explanations(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence paper_lens.html#detail-seg-1",
@@ -2160,7 +2193,7 @@ def test_competitive_benchmark_requires_contextual_paper_lens_explanations(tmp_p
 
 def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
     }.items():
         (tmp_path / name).write_text(

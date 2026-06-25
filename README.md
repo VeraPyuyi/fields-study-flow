@@ -28,6 +28,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Route audit: every plan explains coverage, omitted resources, time saved, and why the chosen route is the shortest visible path under the selected depth.
 - Actionability: reports include study tasks, next actions, quality gates, final evidence, and runnable artifact enforcement.
 - Folder entry: `index.html` is the first file to open after export. It routes learners to Paper Map, Paper Lens, or the roadmap checklist depending on what the plan contains.
+- Market value panel: `index.html` explains the product wedge before learners open the detailed reports: Paper Map logic, evidence-backed reading, local resource bundles, and mastery proof.
 - Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.
 - Interactive learning console: `roadmap.html` contains the roadmap, draggable/zoomable KG network, right-side task guide with local progress checks, local-first resource links, multi-dimensional resource filter chips, evidence expand/collapse, and collapsible phases.
 - Resource purpose, strength, provenance, and coverage badges: roadmap resources explain whether they are primary evidence, background, implementation/reproduction help, or validation material, where they came from, which paper-logic or learning surface they cover, plus a short "why read" hint and core/support/fallback strength signal.

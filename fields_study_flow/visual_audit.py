@@ -3264,6 +3264,15 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Add an intent-based router on index.html so learners can choose fastest understanding, presentation preparation, or mastery validation without learning the report structure first.",
         ),
         _experience_check(
+            "market_value_panel",
+            "Market value proposition panel",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("data-market-value-panel", "为什么它不只是 PDF 总结器", "Why this is more than a PDF summarizer", "Differentiated value"),
+            ),
+            "Show a compact value proposition on index.html so new users understand the product wedge before opening the detailed reports.",
+        ),
+        _experience_check(
             "fresh_user_one_minute_start",
             "Fresh-user one-minute start",
             _contains_any_text(html.get("roadmap.html", ""), ("1分钟上手", "1 分钟上手", "1-minute start")),
@@ -4169,6 +4178,7 @@ def _file_specific_checks(file_name: str, html: str) -> list[dict[str, str]]:
             _contains_any(file_name, "start_entry", html, ("从这里开始", "Start Here")),
             _contains_any(file_name, "quickstart_path", html, ("10 分钟入门", "10-minute quickstart")),
             _contains_any(file_name, "bring_your_own_paper", html, ("换成自己的论文", "Bring Your Own Paper")),
+            _contains_any(file_name, "market_value_panel", html, ("data-market-value-panel", "Why this is more than a PDF summarizer", "为什么它不只是 PDF 总结器")),
         ]
     if file_name == "paper_map.html":
         return [
