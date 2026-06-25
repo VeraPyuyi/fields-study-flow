@@ -3273,6 +3273,19 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Show a compact value proposition on index.html so new users understand the product wedge before opening the detailed reports.",
         ),
         _experience_check(
+            "recommended_first_action_panel",
+            "Recommended first action panel",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("data-recommended-action-panel", "data-recommended-first-action", "推荐第一步", "Recommended first action"),
+            )
+            or (
+                _contains_any_text(html.get("index.html", ""), ("intent-router-panel", "data-intent-router"))
+                and _contains_any_text(html.get("index.html", ""), ("fresh-user-flow-panel", "data-fresh-user-flow", "10-minute quickstart", "10 分钟入门"))
+            ),
+            "Show one explicit recommended first click so new users do not need to compare every report surface before starting.",
+        ),
+        _experience_check(
             "fresh_user_one_minute_start",
             "Fresh-user one-minute start",
             _contains_any_text(html.get("roadmap.html", ""), ("1分钟上手", "1 分钟上手", "1-minute start")),

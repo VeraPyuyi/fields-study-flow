@@ -143,6 +143,13 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "Explainpaper / PaperQA2" in html
     assert "NotebookLM / Elicit" in html
     assert "Get It" in html
+    assert 'data-recommended-action-panel="true"' in html
+    assert 'data-recommended-first-action="true" href="paper_map.html"' in html
+    assert "推荐第一步" in html
+    assert "第一步：打开论文逻辑图" in html
+    assert "如果要汇报" in html
+    assert "如果要掌握" in html
+    assert "如果要换论文" in html
     assert "quickstart-panel" in html
     assert 'class="quickstart-panel fresh-user-flow-panel"' in html
     assert 'data-fresh-user-flow="first-10-minutes"' in html

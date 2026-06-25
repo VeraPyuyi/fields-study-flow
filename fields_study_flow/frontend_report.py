@@ -93,6 +93,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     scenario_html = _scenario_panel_html(is_zh)
     intent_router_html = _intent_router_panel_html(safe_roadmap, is_zh)
     market_value_html = _market_value_panel_html(safe_roadmap, is_zh)
+    recommended_action_html = _recommended_action_panel_html(safe_roadmap, is_zh)
     heading = "从这里开始" if is_zh else "Start Here"
     subtitle = (
         "先看论文逻辑图，再做段落精读，最后按学习路线完成验收。"
@@ -415,6 +416,103 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       font-size: 0.92rem;
       line-height: 1.52;
     }}
+    .recommended-action-panel {{
+      margin: 0 0 18px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      background: rgba(255, 255, 255, 0.80);
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.10);
+    }}
+    .recommended-action-panel header {{
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }}
+    .recommended-action-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .recommended-action-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .recommended-action-badge {{
+      flex: 0 0 auto;
+      border: 1px solid rgba(155, 90, 57, 0.22);
+      border-radius: 999px;
+      padding: 7px 11px;
+      color: var(--accent-2);
+      background: rgba(155, 90, 57, 0.08);
+      font-size: 0.84rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }}
+    .recommended-action-grid {{
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(280px, 0.85fr);
+      gap: 12px;
+      align-items: stretch;
+    }}
+    .recommended-action-primary {{
+      display: grid;
+      gap: 10px;
+      border: 1px solid rgba(47, 111, 115, 0.22);
+      border-radius: 18px;
+      padding: 16px;
+      color: inherit;
+      text-decoration: none;
+      background: linear-gradient(135deg, rgba(47, 111, 115, 0.10), rgba(255, 255, 255, 0.72));
+      overflow-wrap: anywhere;
+    }}
+    .recommended-action-primary:hover, .recommended-action-primary:focus-visible {{
+      transform: translateY(-1px);
+      border-color: rgba(47, 111, 115, 0.45);
+      outline: none;
+    }}
+    .recommended-action-primary small, .recommended-action-side small {{
+      color: var(--accent);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }}
+    .recommended-action-primary strong {{
+      font-size: 1.25rem;
+      line-height: 1.22;
+    }}
+    .recommended-action-primary em {{
+      color: var(--accent-2);
+      font-style: normal;
+      font-weight: 800;
+    }}
+    .recommended-action-side {{
+      display: grid;
+      gap: 9px;
+    }}
+    .recommended-action-side a {{
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 11px 12px;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.62);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }}
+    .recommended-action-side strong {{
+      line-height: 1.25;
+    }}
+    .recommended-action-side span {{
+      color: var(--muted);
+      font-size: 0.9rem;
+    }}
     .report-health-panel, .start-card {{
       display: flex;
       flex-direction: column;
@@ -654,15 +752,17 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
       .quickstart-panel header {{ display: block; }}
       .market-value-panel header {{ display: block; }}
+      .recommended-action-panel header {{ display: block; }}
       .report-health-panel header {{ display: block; }}
       .quickstart-badge {{ display: inline-block; margin-top: 10px; }}
       .market-value-badge {{ display: inline-block; margin-top: 10px; }}
+      .recommended-action-badge {{ display: inline-block; margin-top: 10px; }}
       .report-health-link {{ display: inline-block; margin-top: 10px; }}
     }}
   </style>
@@ -683,6 +783,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       </aside>
     </section>
     {market_value_html}
+    {recommended_action_html}
     {quickstart_html}
     {intent_router_html}
     {health_html}
@@ -830,6 +931,94 @@ def _market_value_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
         <span class="market-value-badge">{escape(badge)}</span>
       </header>
       <div class="market-value-grid">{cards}</div>
+    </section>"""
+
+
+def _recommended_action_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    has_paper_map = bool(roadmap.get("paper_map"))
+    has_paper_lens = bool(roadmap.get("paper_lens"))
+    if has_paper_map:
+        href = "paper_map.html"
+        title = "第一步：打开论文逻辑图" if is_zh else "First step: open the Paper Map"
+        reason = (
+            "先用一张图看清背景、动机、问题、方法、实验、贡献和局限，再决定要不要精读。"
+            if is_zh
+            else "Use one map to see background, motivation, problem, method, experiments, contributions, and limits before deep reading."
+        )
+        payoff = "最快建立论文主线" if is_zh else "Fastest way to build the paper logic"
+    elif has_paper_lens:
+        href = "paper_lens.html"
+        title = "第一步：读关键段落" if is_zh else "First step: read the key paragraphs"
+        reason = (
+            "从原文段落和直白解释开始，先把论文讲清楚，再进入任务验收。"
+            if is_zh
+            else "Start from source paragraphs plus plain explanations, then move into validation tasks."
+        )
+        payoff = "最快进入理解状态" if is_zh else "Fastest way to start understanding"
+    else:
+        href = "roadmap.html"
+        title = "第一步：打开学习路线" if is_zh else "First step: open the roadmap"
+        reason = (
+            "先看阶段、资料和验收任务，按最短路径补齐核心知识。"
+            if is_zh
+            else "Start with phases, resources, and validation tasks to fill the core knowledge path."
+        )
+        payoff = "最快开始执行" if is_zh else "Fastest way to start doing"
+    heading = "推荐第一步" if is_zh else "Recommended first action"
+    body = (
+        "如果你只想马上开始，不需要先研究报告结构，直接点下面这个入口。"
+        if is_zh
+        else "If you want to start immediately, use this entry before learning the report structure."
+    )
+    badge = "新用户优先" if is_zh else "Fresh-user priority"
+    alternatives = [
+        {
+            "href": "paper_lens.html" if has_paper_lens else "roadmap.html",
+            "label": "如果要汇报" if is_zh else "For presentation",
+            "title": "看段落解释和证据" if is_zh else "Use paragraph explanations",
+            "body": "把原文、解释、证据连起来。" if is_zh else "Connect source text, explanation, and evidence.",
+        },
+        {
+            "href": "roadmap.html",
+            "label": "如果要掌握" if is_zh else "For mastery",
+            "title": "做验收任务" if is_zh else "Do validation tasks",
+            "body": "留下解释、推导、复现和批判证据。" if is_zh else "Leave explain, derive, reproduce, and critique evidence.",
+        },
+        {
+            "href": "#next-paper-title",
+            "label": "如果要换论文" if is_zh else "For your own paper",
+            "title": "复制生成命令" if is_zh else "Copy the generation command",
+            "body": "把示例 URL 或 PDF 路径换成自己的。" if is_zh else "Replace the example URL or PDF path with yours.",
+        },
+    ]
+    alternative_html = "\n".join(
+        f"""<a href="{escape(item["href"])}">
+            <small>{escape(item["label"])}</small>
+            <strong>{escape(item["title"])}</strong>
+            <span>{escape(item["body"])}</span>
+          </a>"""
+        for item in alternatives
+    )
+    return f"""<section class="recommended-action-panel" data-recommended-action-panel="true" aria-labelledby="recommended-action-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape('下一步' if is_zh else 'Next click')}</p>
+          <h2 id="recommended-action-title">{escape(heading)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="recommended-action-badge">{escape(badge)}</span>
+      </header>
+      <div class="recommended-action-grid">
+        <a class="recommended-action-primary" data-recommended-first-action="true" href="{escape(href)}">
+          <small>{escape(payoff)}</small>
+          <strong>{escape(title)}</strong>
+          <p>{escape(reason)}</p>
+          <em>{escape('立即进入' if is_zh else 'Open now')}</em>
+        </a>
+        <div class="recommended-action-side">
+          {alternative_html}
+        </div>
+      </div>
     </section>"""
 
 
