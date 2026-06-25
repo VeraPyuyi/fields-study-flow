@@ -1256,6 +1256,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <a href="study_quiz.md">study_quiz.md</a>
         <a href="mastery_worksheet.md">mastery_worksheet.md</a>
         <a href="quick_brief.md">quick_brief.md</a>
+        <a href="evidence_coverage.md">evidence_coverage.md</a>
       </div>
     </details>
   </main>
@@ -2131,6 +2132,67 @@ def render_mastery_worksheet_markdown(roadmap: dict[str, Any]) -> str:
     return "\n".join(output)
 
 
+def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
+    """Render a portable evidence-coverage matrix for trust and study planning."""
+    is_zh = _html_lang(roadmap) != "en"
+    title = _markdown_text(roadmap.get("title") or _display_report_base_title(roadmap))
+    profile = roadmap.get("profile") if isinstance(roadmap.get("profile"), dict) else {}
+    goal = _markdown_text(profile.get("goal") or title)
+    map_rows = _coverage_paper_map_rows(roadmap, is_zh)
+    lens_rows = _coverage_paper_lens_rows(roadmap, is_zh)
+    task_rows = _coverage_task_rows(roadmap, is_zh)
+    resource_rows = _coverage_resource_rows(roadmap, is_zh)
+    all_rows = map_rows + lens_rows + task_rows + resource_rows
+    covered = sum(1 for item in all_rows if item.get("status") == "covered")
+    total = len(all_rows)
+    heading = "证据覆盖矩阵" if is_zh else "Evidence Coverage Matrix"
+    output: list[str] = [
+        f"# {title} - {heading}",
+        "",
+        f"- {'学习目标' if is_zh else 'Learning goal'}: {goal}",
+        f"- {'覆盖进度' if is_zh else 'Coverage'}: {covered}/{total}",
+        f"- {'用途' if is_zh else 'Use'}: "
+        + (
+            "先看哪里有证据，再决定是否继续读、补资料或重新生成路线。"
+            if is_zh
+            else "See what is evidence-backed before deciding whether to read, add sources, or regenerate the route."
+        ),
+        "",
+        f"## {'覆盖总览' if is_zh else 'Coverage Summary'}",
+        "",
+        "| {surface} | {covered_label} | {total_label} | {entry} |".format(
+            surface="学习面" if is_zh else "Surface",
+            covered_label="已覆盖" if is_zh else "Covered",
+            total_label="总数" if is_zh else "Total",
+            entry="优先入口" if is_zh else "First entry",
+        ),
+        "| --- | ---: | ---: | --- |",
+    ]
+    summary_items: list[tuple[str, list[dict[str, Any]], str]] = []
+    if map_rows or roadmap.get("paper_map"):
+        summary_items.append(("论文逻辑图" if is_zh else "Paper Map", map_rows, "paper_map.html"))
+    if lens_rows or roadmap.get("paper_lens"):
+        summary_items.append(("段落精读" if is_zh else "Paper Lens", lens_rows, "paper_lens.html"))
+    summary_items.extend(
+        [
+            ("掌握任务" if is_zh else "Mastery Tasks", task_rows, "roadmap.html#mastery-checklist-title"),
+            ("资料库" if is_zh else "Resource Library", resource_rows, "roadmap.html#resource-library"),
+        ]
+    )
+    for label, rows, entry in summary_items:
+        output.append(f"| {label} | {sum(1 for item in rows if item.get('status') == 'covered')} | {len(rows)} | [{_markdown_text(entry)}]({_safe_markdown_href(entry)}) |")
+    output.append("")
+    _append_coverage_table(output, "论文逻辑覆盖" if is_zh else "Paper Logic Coverage", map_rows, is_zh)
+    _append_coverage_table(output, "精读段落覆盖" if is_zh else "Reading Paragraph Coverage", lens_rows, is_zh)
+    _append_coverage_table(output, "验收任务覆盖" if is_zh else "Mastery Task Coverage", task_rows, is_zh)
+    _append_coverage_table(output, "资料证据覆盖" if is_zh else "Resource Evidence Coverage", resource_rows, is_zh)
+    gaps = _coverage_gap_lines(all_rows, is_zh)
+    output.extend([f"## {'下一步补证据' if is_zh else 'Evidence Gaps to Fix'}", ""])
+    output.extend(gaps or [("- 当前核心路径都有可追溯证据。" if is_zh else "- The current core path has traceable evidence.")])
+    output.append("")
+    return "\n".join(output)
+
+
 def render_quick_brief_markdown(roadmap: dict[str, Any]) -> str:
     """Render a one-page quick brief for first-read comprehension."""
     is_zh = _html_lang(roadmap) != "en"
@@ -2435,6 +2497,180 @@ def _quick_brief_resource_lines(roadmap: dict[str, Any], resource_links: dict[st
         reason = _truncate_markdown(_markdown_text(resource.get("why_recommended") or resource.get("reason") or resource.get("critical_path_role") or ""), 160)
         lines.append(f"- {link}" + (f": {reason}" if reason else ""))
     return lines
+
+
+def _coverage_paper_map_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, Any]]:
+    paper_map = roadmap.get("paper_map") if isinstance(roadmap.get("paper_map"), dict) else {}
+    nodes = paper_map.get("nodes") if isinstance(paper_map.get("nodes"), list) else []
+    rows: list[dict[str, Any]] = []
+    for node in nodes:
+        if not isinstance(node, dict) or node.get("role") != "core":
+            continue
+        evidence = [item for item in node.get("evidence") or [] if isinstance(item, dict)]
+        href = _coverage_first_href(evidence) or f"paper_map.html#{_safe_anchor(node.get('id') or node.get('kind') or 'node')}"
+        label = _markdown_text(node.get("label") or node.get("kind") or ("节点" if is_zh else "Node"))
+        detail = _truncate_markdown(_markdown_text(node.get("plain_explanation") or node.get("summary") or ""), 140)
+        rows.append(
+            {
+                "label": label,
+                "status": "covered" if evidence else "gap",
+                "evidence_count": len(evidence),
+                "detail": detail or ("需要补充证据片段" if is_zh else "Needs evidence snippets"),
+                "href": href,
+            }
+        )
+    return rows
+
+
+def _coverage_paper_lens_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, Any]]:
+    lens = roadmap.get("paper_lens") if isinstance(roadmap.get("paper_lens"), dict) else {}
+    segments = lens.get("segments") if isinstance(lens.get("segments"), list) else []
+    explanations = lens.get("inline_explanations") if isinstance(lens.get("inline_explanations"), list) else []
+    explanations_by_segment = {
+        str(item.get("segment_id") or item.get("id") or ""): item
+        for item in explanations
+        if isinstance(item, dict)
+    }
+    rows: list[dict[str, Any]] = []
+    for index, segment in enumerate(segments[:12], start=1):
+        if not isinstance(segment, dict):
+            continue
+        segment_id = str(segment.get("id") or "")
+        explanation = explanations_by_segment.get(segment_id, {})
+        refs = explanation.get("evidence_refs") if isinstance(explanation.get("evidence_refs"), list) else []
+        resources = explanation.get("related_resources") if isinstance(explanation.get("related_resources"), list) else []
+        evidence_count = len([item for item in refs if item]) + len([item for item in resources if item])
+        href = str(explanation.get("detail_anchor") or segment.get("detail_anchor") or f"paper_lens.html#detail-{_safe_anchor(segment_id or str(index))}")
+        label = _markdown_text(segment.get("section_kind") or segment.get("heading") or f"{'段落' if is_zh else 'Paragraph'} {index}")
+        detail = _truncate_markdown(_markdown_text(explanation.get("plain_meaning") or segment.get("original_text") or ""), 140)
+        rows.append(
+            {
+                "label": label,
+                "status": "covered" if evidence_count else "gap",
+                "evidence_count": evidence_count,
+                "detail": detail or ("未找到段落解释证据" if is_zh else "No paragraph evidence found"),
+                "href": href,
+            }
+        )
+    return rows
+
+
+def _coverage_task_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, Any]]:
+    tasks = [item for item in roadmap.get("study_tasks", []) if isinstance(item, dict)]
+    rows: list[dict[str, Any]] = []
+    for index, task in enumerate(tasks, start=1):
+        resources = task.get("resource_titles") if isinstance(task.get("resource_titles"), list) else []
+        chunks = task.get("evidence_chunks") if isinstance(task.get("evidence_chunks"), list) else []
+        evidence_count = len([item for item in resources if item]) + len([item for item in chunks if _is_traceable_evidence_chunk(item)])
+        task_type = str(task.get("type") or "")
+        href = _coverage_task_href(task_type, roadmap)
+        label = _markdown_text(task.get("title") or f"{'任务' if is_zh else 'Task'} {index}")
+        detail = _truncate_markdown(_markdown_text(task.get("evidence") or task.get("acceptance") or ""), 140)
+        rows.append(
+            {
+                "label": label,
+                "status": "covered" if evidence_count else "gap",
+                "evidence_count": evidence_count,
+                "detail": detail or ("需要绑定资料或证据片段" if is_zh else "Needs linked resources or evidence snippets"),
+                "href": href,
+            }
+        )
+    return rows
+
+
+def _coverage_resource_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for resource in _report_all_resource_entries(roadmap)[:12]:
+        chunks = _resource_evidence_chunks(resource)
+        href = str(resource.get("local_href") or resource.get("href") or resource.get("url") or "roadmap.html#resource-library")
+        if PRIVATE_PATH_RE.search(href):
+            href = "roadmap.html#resource-library"
+        status = "covered" if chunks or _resource_is_materialized(resource) else "gap"
+        title = _markdown_text(resource.get("title") or resource.get("label") or ("资料" if is_zh else "Resource"))
+        detail = _truncate_markdown(
+            _markdown_text(resource.get("why_recommended") or resource.get("reason") or resource.get("critical_path_role") or resource.get("status") or ""),
+            140,
+        )
+        rows.append(
+            {
+                "label": title,
+                "status": status,
+                "evidence_count": len(chunks),
+                "detail": detail or ("已落地本地资料" if status == "covered" and is_zh else "Local/openable resource" if status == "covered" else "Needs local file or evidence snippet"),
+                "href": href,
+            }
+        )
+    return rows
+
+
+def _append_coverage_table(output: list[str], heading: str, rows: list[dict[str, Any]], is_zh: bool) -> None:
+    output.extend([f"## {heading}", ""])
+    if not rows:
+        output.extend([("- 暂无可检查项目。" if is_zh else "- No checkable items yet."), ""])
+        return
+    status_label = "状态" if is_zh else "Status"
+    item_label = "项目" if is_zh else "Item"
+    evidence_label = "证据数" if is_zh else "Evidence"
+    detail_label = "说明" if is_zh else "Why it matters"
+    output.extend(
+        [
+            f"| {item_label} | {status_label} | {evidence_label} | {detail_label} |",
+            "| --- | --- | ---: | --- |",
+        ]
+    )
+    for row in rows:
+        label = _markdown_text(row.get("label") or "")
+        href = _safe_markdown_href(row.get("href") or "roadmap.html")
+        status = _coverage_status_label(str(row.get("status") or ""), is_zh)
+        evidence_count = _coerce_nonnegative_int(row.get("evidence_count"))
+        detail = _truncate_markdown(_markdown_text(row.get("detail") or ""), 180)
+        output.append(f"| [{_markdown_cell(label)}]({href}) | {status} | {evidence_count} | {_markdown_cell(detail)} |")
+    output.append("")
+
+
+def _coverage_gap_lines(rows: list[dict[str, Any]], is_zh: bool) -> list[str]:
+    gaps = [row for row in rows if row.get("status") != "covered"]
+    if not gaps:
+        return []
+    lines: list[str] = []
+    for row in gaps[:8]:
+        label = _markdown_text(row.get("label") or "")
+        href = _safe_markdown_href(row.get("href") or "roadmap.html")
+        detail = _truncate_markdown(_markdown_text(row.get("detail") or ""), 160)
+        if is_zh:
+            lines.append(f"- 补强 [{label}]({href})：{detail or '加入来源片段、资料链接或验收证据。'}")
+        else:
+            lines.append(f"- Strengthen [{label}]({href}): {detail or 'Add source snippets, resource links, or task evidence.'}")
+    return lines
+
+
+def _coverage_first_href(evidence: list[dict[str, Any]]) -> str:
+    for item in evidence:
+        href = str(item.get("detail_anchor") or item.get("local_href") or item.get("href") or item.get("url") or "").strip()
+        if href and not PRIVATE_PATH_RE.search(href):
+            return _safe_markdown_href(href)
+    return ""
+
+
+def _coverage_task_href(task_type: str, roadmap: dict[str, Any]) -> str:
+    has_map = bool(roadmap.get("paper_map"))
+    has_lens = bool(roadmap.get("paper_lens"))
+    if task_type in {"explain", "critique"} and has_map:
+        return "paper_map.html"
+    if task_type == "derive" and has_lens:
+        return "paper_lens.html"
+    return "roadmap.html#mastery-checklist-title"
+
+
+def _coverage_status_label(status: str, is_zh: bool) -> str:
+    if status == "covered":
+        return "已覆盖" if is_zh else "covered"
+    return "需补证据" if is_zh else "needs evidence"
+
+
+def _safe_anchor(value: object) -> str:
+    text = re.sub(r"[^A-Za-z0-9_-]+", "-", str(value or "").strip()).strip("-").lower()
+    return text or "item"
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:

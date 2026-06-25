@@ -1615,7 +1615,7 @@ def _market_ready_index_marker(*, paper_entries: bool = True, evidence_edges: in
         "Start Here Bring Your Own Paper "
         "data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session "
         "data-active-recall-panel data-recall-card 5-minute active recall Find evidence "
-        f"{entries} Local assets study_cards.md study_quiz.md mastery_worksheet.md quick_brief.md "
+        f"{entries} Local assets study_cards.md study_quiz.md mastery_worksheet.md quick_brief.md evidence_coverage.md "
         "<details data-secondary-guidance-panel>"
         '<section data-market-value-panel="true">Why this is more than a PDF summarizer</section>'
         '<section data-learning-outcome-contract="true">Outcome contract What you should be able to deliver</section>'
@@ -1661,6 +1661,18 @@ def _write_quick_brief_file(root: Path) -> None:
     )
 
 
+def _write_evidence_coverage_file(root: Path) -> None:
+    (root / "evidence_coverage.md").write_text(
+        "# Demo - Evidence Coverage Matrix\n\n"
+        "- Coverage: 3/3\n\n"
+        "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n"
+        "| Resource Library | 1 | 1 | [roadmap.html#resource-library](roadmap.html#resource-library) |\n\n"
+        "## Resource Evidence Coverage\n\n| Item | Status | Evidence | Why it matters |\n| --- | --- | ---: | --- |\n| [DDPM paper](roadmap.html#resource-library) | covered | 1 | Source-backed. |\n\n"
+        "## Evidence Gaps to Fix\n\n- The current core path has traceable evidence.\n",
+        encoding="utf-8",
+    )
+
+
 def test_portable_quick_brief_gate_rejects_private_paths_and_missing_paper_links(tmp_path):
     index_html = '<a href="quick_brief.md">quick_brief.md</a>'
     (tmp_path / "quick_brief.md").write_text(
@@ -1688,6 +1700,32 @@ def test_portable_quick_brief_gate_rejects_private_paths_and_missing_paper_links
     assert visual_audit._has_portable_quick_brief(tmp_path, index_html)
 
 
+def test_portable_evidence_coverage_gate_rejects_private_paths_and_missing_paper_links(tmp_path):
+    index_html = '<a href="evidence_coverage.md">evidence_coverage.md</a>'
+    (tmp_path / "evidence_coverage.md").write_text(
+        "# Demo - Evidence Coverage Matrix\n\n"
+        "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n| Paper Map | 1 | 1 | [paper_map.html](paper_map.html) |\n\n"
+        "## Paper Logic Coverage\n\nOpen C:/Users/example/private.pdf.\n",
+        encoding="utf-8",
+    )
+
+    assert not visual_audit._has_portable_evidence_coverage(tmp_path, index_html)
+
+    (tmp_path / "evidence_coverage.md").write_text(
+        "# Demo - Evidence Coverage Matrix\n\n"
+        "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n| Paper Map | 1 | 1 | [paper_map.html](paper_map.html) |\n\n"
+        "## Paper Logic Coverage\n\n| Item | Status | Evidence | Why it matters |\n| --- | --- | ---: | --- |\n| [Problem](paper_map.html) | covered | 1 | Source-backed. |\n\n"
+        "## Evidence Gaps to Fix\n\n- Done.\n",
+        encoding="utf-8",
+    )
+
+    assert not visual_audit._has_portable_evidence_coverage(tmp_path, index_html)
+
+    (tmp_path / "paper_map.html").write_text("<html></html>", encoding="utf-8")
+
+    assert visual_audit._has_portable_evidence_coverage(tmp_path, index_html)
+
+
 def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     for name, marker in {
         "index.html": _market_ready_index_marker(),
@@ -1705,6 +1743,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     _write_study_quiz_file(tmp_path)
     _write_mastery_worksheet_file(tmp_path)
     _write_quick_brief_file(tmp_path)
+    _write_evidence_coverage_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "zh-CN"},
         "paper_map": {"nodes": [{"id": "background"}, {"id": "method"}]},
@@ -1899,6 +1938,7 @@ def test_fresh_user_flow_warning_prevents_market_ready_status(tmp_path):
     _write_study_quiz_file(tmp_path)
     _write_mastery_worksheet_file(tmp_path)
     _write_quick_brief_file(tmp_path)
+    _write_evidence_coverage_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "target"}, {"id": "method"}]},
@@ -1944,6 +1984,7 @@ def test_experience_warnings_prevent_market_ready_status(tmp_path):
     _write_study_quiz_file(tmp_path)
     _write_mastery_worksheet_file(tmp_path)
     _write_quick_brief_file(tmp_path)
+    _write_evidence_coverage_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "background"}]},
@@ -2006,6 +2047,7 @@ def test_first_session_plan_requires_panel_and_multiple_steps(tmp_path):
     _write_study_quiz_file(tmp_path)
     _write_mastery_worksheet_file(tmp_path)
     _write_quick_brief_file(tmp_path)
+    _write_evidence_coverage_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "background"}, {"id": "method"}]},
@@ -2303,6 +2345,7 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
     _write_study_quiz_file(tmp_path)
     _write_mastery_worksheet_file(tmp_path)
     _write_quick_brief_file(tmp_path)
+    _write_evidence_coverage_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en"},
         "paper_map": {"nodes": [{"id": "target"}, {"id": "background"}, {"id": "method"}, {"id": "experiment"}]},
@@ -2439,6 +2482,7 @@ def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_p
     _write_study_quiz_file(tmp_path)
     _write_mastery_worksheet_file(tmp_path)
     _write_quick_brief_file(tmp_path)
+    _write_evidence_coverage_file(tmp_path)
     roadmap = {
         "profile": {"output_language": "en", "target_kind": "field", "goal": "learn diffusion models"},
         "phases": [

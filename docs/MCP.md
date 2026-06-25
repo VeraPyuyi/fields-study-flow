@@ -65,6 +65,7 @@ Export a generated plan:
 - `index.html`
 - `roadmap.html`
 - `quick_brief.md`
+- `evidence_coverage.md`
 - `study_cards.md`
 - `study_quiz.md`
 - `mastery_worksheet.md`

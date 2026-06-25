@@ -3206,6 +3206,8 @@ def _portable_study_output_count(root: Path, roadmap: dict[str, Any], html: dict
         outputs += 1
     if (root / "quick_brief.md").exists() and _contains_any_text(index_html, ("quick_brief.md", "5-Minute Research Brief", "5 分钟速读 Brief")):
         outputs += 1
+    if (root / "evidence_coverage.md").exists() and _contains_any_text(index_html, ("evidence_coverage.md", "Evidence Coverage Matrix", "证据覆盖矩阵")):
+        outputs += 1
     if _contains_any_text(
         paper_map_html,
         (
@@ -3354,6 +3356,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Portable five-minute brief",
             _has_portable_quick_brief(root, html.get("index.html", "")),
             "Write quick_brief.md so learners can get a concise first-pass understanding before opening the full interactive report.",
+        ),
+        _experience_check(
+            "portable_evidence_coverage",
+            "Portable evidence coverage matrix",
+            _has_portable_evidence_coverage(root, html.get("index.html", "")),
+            "Write evidence_coverage.md so learners can audit which claims, paragraphs, tasks, and resources are actually evidence-backed.",
         ),
         _experience_check(
             "support_files_progressive_disclosure",
@@ -3874,6 +3882,29 @@ def _has_portable_quick_brief(root: Path, index_html: str) -> bool:
         ),
     )
     return has_heading and has_structure and has_actions and has_useful_detail
+
+
+def _has_portable_evidence_coverage(root: Path, index_html: str) -> bool:
+    path = root / "evidence_coverage.md"
+    if not path.exists() or "evidence_coverage.md" not in index_html:
+        return False
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    if PRIVATE_PATH_RE.search(content):
+        return False
+    if "paper_map.html" in content and not (root / "paper_map.html").exists():
+        return False
+    if "paper_lens.html" in content and not (root / "paper_lens.html").exists():
+        return False
+    return _contains_any_text(content, ("Evidence Coverage Matrix", "证据覆盖矩阵")) and _contains_any_text(
+        content,
+        ("Coverage Summary", "覆盖总览"),
+    ) and _contains_any_text(
+        content,
+        ("Evidence Gaps to Fix", "下一步补证据", "Paper Logic Coverage", "论文逻辑覆盖", "Resource Evidence Coverage", "资料证据覆盖"),
+    )
 
 
 def _all_core_pages_have_check(visual_audit: dict[str, Any], check_name: str) -> bool:

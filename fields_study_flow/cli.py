@@ -1353,7 +1353,7 @@ def _export(args: argparse.Namespace) -> int:
         targets.append(target)
     elif args.format in {"markdown", "svg", "html", "all"}:
         from fields_study_flow.artifact_templates import write_artifact_template
-        from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+        from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
         from fields_study_flow.paper_lens import render_paper_lens_html
         from fields_study_flow.paper_map import render_paper_map_html
         from fields_study_flow.roadmap import render_html, render_markdown, render_svg
@@ -1389,6 +1389,9 @@ def _export(args: argparse.Namespace) -> int:
             targets.append(target)
             target = output_dir / "quick_brief.md"
             target.write_text(render_quick_brief_markdown(data), encoding="utf-8")
+            targets.append(target)
+            target = output_dir / "evidence_coverage.md"
+            target.write_text(render_evidence_coverage_markdown(data), encoding="utf-8")
             targets.append(target)
             if data.get("paper_map"):
                 target = output_dir / "paper_map.html"

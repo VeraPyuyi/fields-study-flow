@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fields_study_flow import frontend_report
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 
 
 def test_checked_in_frontend_dist_has_package_visible_manifest():
@@ -223,6 +223,7 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "study_quiz.md" in html
     assert "mastery_worksheet.md" in html
     assert "quick_brief.md" in html
+    assert "evidence_coverage.md" in html
     assert "C:/Users/example" not in html
 
 
@@ -387,6 +388,76 @@ def test_quick_brief_field_route_uses_roadmap_start_without_paper_only_links():
     assert "paper_lens.html" not in markdown
     assert "## Route at a Glance" in markdown
     assert markdown.count("Open These Resources First") == 1
+    assert "[Diffusion Tutorial](https://example.com/diffusion)" in markdown
+
+
+def test_evidence_coverage_markdown_tracks_claims_tasks_resources_and_redacts_paths():
+    markdown = render_evidence_coverage_markdown(
+        {
+            "title": "Learning Roadmap: Transformer",
+            "profile": {"goal": "master Transformer", "output_language": "en"},
+            "paper_map": {
+                "nodes": [
+                    {
+                        "id": "problem",
+                        "role": "core",
+                        "kind": "problem",
+                        "label": "Problem",
+                        "plain_explanation": "The paper removes recurrent bottlenecks.",
+                        "evidence": [{"source_title": "Attention", "snippet": "attention only", "detail_anchor": "paper_lens.html#detail-1"}],
+                    },
+                    {
+                        "id": "limitation",
+                        "role": "core",
+                        "kind": "limitation",
+                        "label": "Limitation",
+                        "plain_explanation": "Needs more evidence from C:/Users/example/private.pdf.",
+                    },
+                ]
+            },
+            "paper_lens": {
+                "segments": [{"id": "seg-1", "section_kind": "method", "original_text": "Self-attention paragraph."}],
+                "inline_explanations": [{"segment_id": "seg-1", "plain_meaning": "Explains the method.", "evidence_refs": ["paper_lens.html#detail-1"]}],
+            },
+            "study_tasks": [{"type": "explain", "title": "Explain the chain", "resource_titles": ["Attention Is All You Need"], "evidence": "No-notes explanation."}],
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Attention Is All You Need",
+                        "local_href": "study-assets/attention.pdf",
+                        "selected": True,
+                        "metadata": {"rag": {"evidence_chunks": [{"snippet": "Transformer uses attention.", "file_name": "attention.pdf"}]}},
+                    }
+                ]
+            },
+        }
+    )
+
+    assert "# Learning Roadmap: Transformer - Evidence Coverage Matrix" in markdown
+    assert "## Coverage Summary" in markdown
+    assert "## Paper Logic Coverage" in markdown
+    assert "## Reading Paragraph Coverage" in markdown
+    assert "## Mastery Task Coverage" in markdown
+    assert "## Resource Evidence Coverage" in markdown
+    assert "[Problem](paper_lens.html#detail-1)" in markdown
+    assert "[Attention Is All You Need](study-assets/attention.pdf)" in markdown
+    assert "needs evidence" in markdown
+    assert "C:/Users/example/private" not in markdown
+
+
+def test_evidence_coverage_field_route_uses_roadmap_links_without_paper_pages():
+    markdown = render_evidence_coverage_markdown(
+        {
+            "title": "Learning Roadmap: Diffusion Models",
+            "profile": {"goal": "learn diffusion models", "output_language": "en", "target_kind": "field"},
+            "study_tasks": [{"type": "explain", "title": "Explain diffusion", "resource_titles": ["Diffusion Tutorial"]}],
+            "study_bundle": {"resources": [{"title": "Diffusion Tutorial", "href": "https://example.com/diffusion", "selected": True}]},
+        }
+    )
+
+    assert "paper_map.html" not in markdown
+    assert "paper_lens.html" not in markdown
+    assert "roadmap.html#mastery-checklist-title" in markdown
     assert "[Diffusion Tutorial](https://example.com/diffusion)" in markdown
 
 
