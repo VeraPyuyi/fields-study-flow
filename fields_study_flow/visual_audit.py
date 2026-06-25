@@ -3250,9 +3250,9 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
     checks = [
         _experience_check(
             "first_screen_quickstart",
-            "First-screen quickstart",
+            "Discoverable quickstart path",
             _contains_any_text(html.get("index.html", ""), ("10 分钟入门", "10-minute quickstart")),
-            "Add a visible 10-minute quickstart so a new learner knows the first three actions.",
+            "Keep a 10-minute quickstart available from the start page or its secondary guidance disclosure.",
         ),
         _experience_check(
             "intent_router_choice",
@@ -3333,6 +3333,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Keep technical JSON/Markdown/SVG support files behind a collapsed disclosure so new learners see the learning path before implementation artifacts.",
         ),
         _experience_check(
+            "secondary_guidance_progressive_disclosure",
+            "Secondary guidance progressive disclosure",
+            _has_secondary_guidance_disclosure(html.get("index.html", "")),
+            "Keep product rationale, audits, alternate paths, and bring-your-own-paper commands behind one optional disclosure so the start page stays action-first.",
+        ),
+        _experience_check(
             "fresh_user_one_minute_start",
             "Fresh-user one-minute start",
             _contains_any_text(html.get("roadmap.html", ""), ("1分钟上手", "1 分钟上手", "1-minute start")),
@@ -3340,12 +3346,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
         ),
         _experience_check(
             "report_health_panel",
-            "Report health panel",
+            "Report health panel availability",
             _contains_any_text(
                 html.get("index.html", ""),
                 ("report-health-panel", "报告健康状态", "Report Health", "report_audit.json"),
             ),
-            "Show a visible report-health panel on index.html so users can trust local assets, privacy redaction, layout safety, and the audit trail.",
+            "Keep a report-health panel available from index.html so users can trust local assets, privacy redaction, layout safety, and the audit trail.",
         ),
         _experience_check(
             "report_health_evidence_summary",
@@ -3355,12 +3361,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
         ),
         _experience_check(
             "scenario_coverage_panel",
-            "Scenario coverage panel",
+            "Scenario coverage panel availability",
             _contains_any_text(
                 html.get("index.html", ""),
                 ("scenario-panel", "支持三种学习场景", "Three Learning Scenarios", "Single paper", "Field / course route"),
             ),
-            "Show single-paper, paper-set, and field/course entry points so the product is not perceived as only a one-off paper report.",
+            "Keep single-paper, paper-set, and field/course entry points available so the product is not perceived as only a one-off paper report.",
         ),
         _experience_check(
             "route_recovery_next_steps",
@@ -3669,9 +3675,9 @@ def _visual_snapshot_matrix(root: Path, roadmap: dict[str, Any], surfaces: list[
         ),
         _experience_check(
             "start_page_snapshot_path",
-            "Start-page snapshot path",
+            "Start-page discoverable path",
             _contains_any_text(index_html, ("fresh-user-flow-panel", "data-fresh-user-flow", "10-minute quickstart", "10 分钟入门")),
-            "Keep a visible first-10-minutes path on the start page in screenshot-style checks.",
+            "Keep a first-10-minutes path available from the start page in screenshot-style checks.",
         ),
     ]
     warnings = [item for item in checks if item["status"] == "warn"]
@@ -3712,6 +3718,51 @@ def _has_first_session_plan(index_html: str) -> bool:
     if "data-first-session-plan" not in index_html:
         return False
     return index_html.count("data-session-step=") >= 4
+
+
+def _has_secondary_guidance_disclosure(index_html: str) -> bool:
+    fragment = _secondary_guidance_panel_fragment(index_html)
+    if not fragment:
+        return False
+    open_tag = fragment.split(">", 1)[0]
+    if re.search(r"\sopen(?:\s|=|>)", open_tag, flags=re.IGNORECASE):
+        return False
+    required_inside = (
+        "data-market-value-panel",
+        "data-learning-outcome-contract",
+        "data-learning-guide-panel",
+        "data-fresh-user-flow",
+        "data-intent-router",
+        "report-health-panel",
+        "scenario-panel",
+        "next-paper-panel",
+    )
+    if not all(token in fragment for token in required_inside):
+        return False
+    outside = _visible_html_for_encoding_check(index_html.replace(fragment, "", 1))
+    duplicate_markers = (
+        "data-market-value-panel",
+        "data-learning-outcome-contract",
+        "data-learning-guide-panel",
+        "data-fresh-user-flow",
+        "intent-router-panel",
+        "data-intent-router",
+        "report-health-panel",
+        "scenario-panel",
+        "next-paper-panel",
+    )
+    return not any(token in outside for token in duplicate_markers)
+
+
+def _secondary_guidance_panel_fragment(index_html: str) -> str:
+    marker_index = index_html.find("data-secondary-guidance-panel")
+    if marker_index < 0:
+        return ""
+    details_index = index_html.rfind("<details", 0, marker_index + 1)
+    close_index = index_html.find("</details>", marker_index)
+    if details_index < 0 or close_index < 0:
+        return ""
+    return index_html[details_index : close_index + len("</details>")]
 
 
 def _all_core_pages_have_check(visual_audit: dict[str, Any], check_name: str) -> bool:

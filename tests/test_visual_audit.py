@@ -1608,9 +1608,29 @@ def test_cli_audit_report_capture_screenshots_degrades_without_browser_runtime(t
     assert data["browser_snapshot_capture"]["status"] in {"pass", "skipped"}
 
 
+def _market_ready_index_marker(*, paper_entries: bool = True, evidence_edges: int = 5) -> str:
+    entries = "paper_map.html paper_lens.html roadmap.html" if paper_entries else "roadmap.html"
+    return (
+        "Start Here Bring Your Own Paper "
+        "data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session "
+        "data-active-recall-panel data-recall-card 5-minute active recall Find evidence "
+        f"{entries} Local assets "
+        "<details data-secondary-guidance-panel>"
+        '<section data-market-value-panel="true">Why this is more than a PDF summarizer</section>'
+        '<section data-learning-outcome-contract="true">Outcome contract What you should be able to deliver</section>'
+        '<section data-learning-guide-panel="starter-questions">3 starter questions data-starter-question fields-study-flow ask</section>'
+        '<section class="quickstart-panel fresh-user-flow-panel" data-fresh-user-flow="first-10-minutes">10-minute quickstart</section>'
+        '<section class="intent-router-panel" data-intent-router="learning-goal">Choose by what you need</section>'
+        f'<section class="report-health-panel">Report Health Evidence coverage {evidence_edges} evidence-backed edges report_audit.json</section>'
+        '<section class="scenario-panel">Three Learning Scenarios Single paper Paper set Field / course route</section>'
+        '<section class="next-paper-panel">fields-study-flow paper --url</section>'
+        "</details>"
+    )
+
+
 def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route fresh-user-flow-panel data-fresh-user-flow 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence paper_map.html paper_lens.html roadmap.html Local assets",
+        "index.html": _market_ready_index_marker(),
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
             "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据",
@@ -1693,6 +1713,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
         "starter_questions_panel",
         "active_recall_self_check",
         "first_session_plan",
+        "secondary_guidance_progressive_disclosure",
         "support_files_progressive_disclosure",
         "report_health_evidence_summary",
         "resource_local_first",
@@ -1876,8 +1897,24 @@ def test_experience_warnings_prevent_market_ready_status(tmp_path):
 
     assert audit["experience_risks"]["status"] == "warn"
     assert any(item["id"] == "first_session_plan" and item["status"] == "warn" for item in audit["experience_risks"]["checks"])
+    assert any(
+        item["id"] == "secondary_guidance_progressive_disclosure" and item["status"] == "warn"
+        for item in audit["experience_risks"]["checks"]
+    )
     assert audit["market_readiness"]["status"] == "needs_improvement"
     assert audit["market_readiness"]["score"] < 100
+
+    (tmp_path / "index.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        f"<body>{_market_ready_index_marker()} data-market-value-panel</body></html>",
+        encoding="utf-8",
+    )
+    duplicate_audit = build_report_audit(tmp_path, roadmap)
+    assert any(
+        item["id"] == "secondary_guidance_progressive_disclosure" and item["status"] == "warn"
+        for item in duplicate_audit["experience_risks"]["checks"]
+    )
 
 
 def test_first_session_plan_requires_panel_and_multiple_steps(tmp_path):
@@ -2134,7 +2171,7 @@ def test_experience_risks_require_market_value_panel_on_start_page(tmp_path):
 
 def test_viewport_warnings_prevent_market_ready_status(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health Evidence coverage 4 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": _market_ready_index_marker(paper_entries=False, evidence_edges=4),
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence",
         "roadmap.html": "learning console mastery",
@@ -2175,7 +2212,7 @@ def test_viewport_warnings_prevent_market_ready_status(tmp_path):
 
 def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow paper_map.html paper_lens.html roadmap.html Local assets report-health-panel Report Health Evidence coverage 5 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": _market_ready_index_marker(),
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export 下载 worksheet resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
@@ -2309,7 +2346,7 @@ def test_competitive_benchmark_requires_contextual_paper_lens_explanations(tmp_p
 
 def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_path):
     for name, marker in {
-        "index.html": "Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel Why this is more than a PDF summarizer intent-router-panel data-intent-router Choose by what you need data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session data-learning-guide-panel 3 starter questions data-starter-question fields-study-flow ask data-active-recall-panel data-recall-card 5-minute active recall Find evidence fresh-user-flow-panel data-fresh-user-flow roadmap.html Local assets report-health-panel Report Health Evidence coverage 4 evidence-backed edges report_audit.json scenario-panel Three Learning Scenarios Single paper Paper set Field / course route",
+        "index.html": _market_ready_index_marker(paper_entries=False, evidence_edges=4),
         "roadmap.html": "learning console mastery 1-minute start data-mastery-export Download worksheet resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
     }.items():
         (tmp_path / name).write_text(

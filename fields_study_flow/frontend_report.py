@@ -110,6 +110,21 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     resource_label = "核心资料" if is_zh else "Core Resources"
     quickstart_html = _quickstart_panel_html(is_zh, bool(safe_roadmap.get("paper_map")), bool(safe_roadmap.get("paper_lens")))
     next_panel_html = _next_paper_panel_html(is_zh)
+    secondary_guidance_html = _secondary_guidance_panel_html(
+        is_zh,
+        "\n".join(
+            [
+                market_value_html,
+                outcome_contract_html,
+                learning_guide_html,
+                quickstart_html,
+                intent_router_html,
+                health_html,
+                scenario_html,
+                next_panel_html,
+            ]
+        ),
+    )
     technical_label = "辅助文件" if is_zh else "Support Files"
     technical_note = (
         "JSON、Markdown 和 SVG 是给复查、分享或二次处理用的；普通学习优先打开上面的入口。"
@@ -159,7 +174,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       align-items: stretch;
       margin-bottom: 22px;
     }}
-    .hero-copy, .metric-panel, .start-card, .next-paper-panel, .scenario-panel, .support-panel {{
+    .hero-copy, .metric-panel, .start-card, .next-paper-panel, .scenario-panel, .support-panel, .secondary-guidance-panel {{
       background: var(--panel);
       border: 1px solid var(--line);
       box-shadow: var(--shadow);
@@ -1040,6 +1055,57 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       padding-top: 2px;
       font-size: 0.92rem;
     }}
+    .secondary-guidance-panel {{
+      margin-top: 16px;
+      border-radius: 22px;
+      padding: 20px 22px;
+    }}
+    .secondary-guidance-panel summary {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      cursor: pointer;
+      list-style: none;
+      overflow-wrap: anywhere;
+    }}
+    .secondary-guidance-panel summary::-webkit-details-marker {{
+      display: none;
+    }}
+    .secondary-guidance-panel summary::after {{
+      content: "+";
+      flex: 0 0 auto;
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      background: rgba(255, 255, 255, 0.62);
+      font-weight: 900;
+    }}
+    .secondary-guidance-panel[open] summary::after {{
+      content: "-";
+    }}
+    .secondary-guidance-panel summary span {{
+      display: block;
+    }}
+    .secondary-guidance-panel summary strong {{
+      display: block;
+      margin-top: 3px;
+      font-size: 1rem;
+      line-height: 1.35;
+    }}
+    .secondary-guidance-note {{
+      margin: 12px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .secondary-guidance-content {{
+      margin-top: 16px;
+    }}
     .support-panel {{
       margin-top: 16px;
       border-radius: 22px;
@@ -1142,20 +1208,13 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <div class="metric"><span>{escape(resource_label)}</span><strong>{escape(selected_resources)}</strong></div>
       </aside>
     </section>
-    {market_value_html}
     {recommended_action_html}
     {first_session_html}
-    {outcome_contract_html}
-    {learning_guide_html}
     {active_recall_html}
-    {quickstart_html}
-    {intent_router_html}
-    {health_html}
-    {scenario_html}
     <section class="start-grid" aria-label="{escape('推荐入口' if is_zh else 'Recommended entries')}">
       {cards_html}
     </section>
-    {next_panel_html}
+    {secondary_guidance_html}
     <details class="support-panel" data-support-files-panel="collapsed">
       <summary id="support-files">
         <span>
@@ -1173,6 +1232,32 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
   </main>
 </body>
 </html>"""
+
+
+def _secondary_guidance_panel_html(is_zh: bool, content_html: str) -> str:
+    label = "更多说明与检查" if is_zh else "More guidance and checks"
+    summary = (
+        "已收起：产品价值、学习结果、问答向导、10 分钟入门、审计状态、场景说明和换论文命令"
+        if is_zh
+        else "Collapsed: value, outcomes, starter questions, 10-minute quickstart, audit status, scenarios, and bring-your-own-paper commands"
+    )
+    note = (
+        "先按上面的第一轮学习会话开始；需要解释项目为什么这样设计、检查报告健康状态或换成自己的论文时，再展开这里。"
+        if is_zh
+        else "Start with the first study session above. Open this when you need product rationale, report health, alternate entry paths, or commands for your own paper."
+    )
+    return f"""<details class="secondary-guidance-panel" data-secondary-guidance-panel="collapsed">
+      <summary id="secondary-guidance">
+        <span>
+          <span class="eyebrow">{escape(label)}</span>
+          <strong>{escape(summary)}</strong>
+        </span>
+      </summary>
+      <p class="secondary-guidance-note">{escape(note)}</p>
+      <div class="secondary-guidance-content">
+        {content_html}
+      </div>
+    </details>"""
 
 
 def _index_cards(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, str]]:

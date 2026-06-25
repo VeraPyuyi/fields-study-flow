@@ -35,6 +35,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Starter questions guide: `index.html` gives three plain-language questions plus `fields-study-flow ask` commands so learners can start from a guided question instead of reading the interface manual.
 - Active recall check: `index.html` includes a 5-minute self-test with expandable cards that point learners back to the exact map, lens, or roadmap evidence.
 - First study session plan: `index.html` now gives a 45-60 minute timeboxed loop that links Paper Map, Paper Lens, active recall, and the first mastery task so learners can start productively without planning the session themselves.
+- Action-first start page: secondary product rationale, report-health checks, alternate guidance, and bring-your-own-paper commands are collapsed behind a single disclosure so the default view stays focused on learning.
 - Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.
 - Progressive support files: technical JSON/Markdown/SVG artifacts stay collapsed on the start page, so new learners see the learning path before implementation files.
 - Interactive learning console: `roadmap.html` contains the roadmap, draggable/zoomable KG network, right-side task guide with local progress checks, local-first resource links, multi-dimensional resource filter chips, evidence expand/collapse, and collapsible phases.

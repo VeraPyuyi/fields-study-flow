@@ -200,6 +200,22 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "换成自己的论文" in html
     assert "fields-study-flow paper --url" in html
     assert "fields-study-flow paper --url ./my-paper.pdf" in html
+    secondary_start = html.index('<details class="secondary-guidance-panel" data-secondary-guidance-panel="collapsed">')
+    secondary_end = html.index("</details>", secondary_start) + len("</details>")
+    secondary_html = html[secondary_start:secondary_end]
+    outside_secondary = html[:secondary_start] + html[secondary_end:]
+    for token in (
+        'data-market-value-panel="true"',
+        'data-learning-outcome-contract="true"',
+        'data-learning-guide-panel="starter-questions"',
+        'data-fresh-user-flow="first-10-minutes"',
+        'data-intent-router="learning-goal"',
+        'class="report-health-panel"',
+        'class="scenario-panel"',
+        'class="next-paper-panel"',
+    ):
+        assert token in secondary_html
+        assert token not in outside_secondary
     assert '<details class="support-panel" data-support-files-panel="collapsed">' in html
     assert "需要原始数据或导出文件时再展开" in html
     assert "roadmap.json" in html
