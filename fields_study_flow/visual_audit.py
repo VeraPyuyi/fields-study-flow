@@ -2931,7 +2931,7 @@ def _competitive_benchmark(
         _benchmark_check(
             "scholarcy_structured_review_cards",
             "Scholarcy-style structured review cards",
-            _structured_quick_review_surface(roadmap, html),
+            _structured_quick_review_surface(root, roadmap, html),
             "Give learners a structured skim surface: paper logic, paragraph focus, and portable notes or worksheet output.",
             "Scholarcy",
         ),
@@ -2948,8 +2948,8 @@ def _competitive_benchmark(
         _benchmark_check(
             "notebooklm_portable_study_outputs",
             "NotebookLM-style portable study outputs",
-            _portable_study_output_count(roadmap, html) >= 2,
-            "Give learners study outputs they can carry away: presentation notes, a concise reading export, or concrete mastery artifacts.",
+            _portable_study_output_count(root, roadmap, html) >= 3,
+            "Give learners study outputs they can carry away: presentation notes, concise reading exports, active-recall cards, or concrete mastery artifacts.",
             "NotebookLM / Elicit",
         ),
         _benchmark_check(
@@ -3194,11 +3194,14 @@ def _benchmark_check(id_: str, label: str, passed: bool, recommendation: str, co
     return item
 
 
-def _portable_study_output_count(roadmap: dict[str, Any], html: dict[str, str]) -> int:
+def _portable_study_output_count(root: Path, roadmap: dict[str, Any], html: dict[str, str]) -> int:
     outputs = 0
+    index_html = html.get("index.html", "")
     paper_map_html = html.get("paper_map.html", "")
     paper_lens_html = html.get("paper_lens.html", "")
     roadmap_html = html.get("roadmap.html", "")
+    if (root / "study_cards.md").exists() and _contains_any_text(index_html, ("study_cards.md", "Active Recall Study Cards", "主动回忆练习卡")):
+        outputs += 1
     if _contains_any_text(
         paper_map_html,
         (
@@ -3321,6 +3324,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
                 ("data-active-recall-panel", "data-recall-card", "5-minute active recall", "主动回忆", "Find evidence"),
             ),
             "Add a tiny active-recall check so learners test whether they can explain the material before continuing to read.",
+        ),
+        _experience_check(
+            "portable_study_cards",
+            "Portable active-recall cards",
+            _has_portable_study_cards(root, html.get("index.html", "")),
+            "Write study_cards.md and link it from index.html so learners can carry the recall set outside the browser.",
         ),
         _experience_check(
             "support_files_progressive_disclosure",
@@ -3765,6 +3774,20 @@ def _secondary_guidance_panel_fragment(index_html: str) -> str:
     return index_html[details_index : close_index + len("</details>")]
 
 
+def _has_portable_study_cards(root: Path, index_html: str) -> bool:
+    path = root / "study_cards.md"
+    if not path.exists() or "study_cards.md" not in index_html:
+        return False
+    try:
+        content = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+    return _contains_any_text(content, ("Active Recall Study Cards", "主动回忆练习卡")) and _contains_any_text(
+        content,
+        ("Find evidence", "去找证据"),
+    )
+
+
 def _all_core_pages_have_check(visual_audit: dict[str, Any], check_name: str) -> bool:
     checks = visual_audit.get("checks", [])
     if not isinstance(checks, list):
@@ -3799,7 +3822,7 @@ def _paper_lens_contextual_explanations(roadmap: dict[str, Any], html: dict[str,
     )
 
 
-def _structured_quick_review_surface(roadmap: dict[str, Any], html: dict[str, str]) -> bool:
+def _structured_quick_review_surface(root: Path, roadmap: dict[str, Any], html: dict[str, str]) -> bool:
     if not roadmap.get("paper_map") or not roadmap.get("paper_lens"):
         return False
     has_map_structure = _contains_any_text(
@@ -3807,7 +3830,7 @@ def _structured_quick_review_surface(roadmap: dict[str, Any], html: dict[str, st
         ("Core Chain", "速览主链", "Download presentation notes", "presentation.md"),
     )
     has_lens_structure = _paper_lens_contextual_explanations(roadmap, html)
-    return has_map_structure and has_lens_structure and _portable_study_output_count(roadmap, html) >= 2
+    return has_map_structure and has_lens_structure and _portable_study_output_count(root, roadmap, html) >= 2
 
 
 def _resource_library_marker(roadmap: dict[str, Any], html: str, terms: tuple[str, ...]) -> bool:

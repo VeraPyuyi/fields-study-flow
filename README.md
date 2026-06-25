@@ -34,6 +34,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Learning outcome contract: the start page states what the learner should be able to deliver after studying: explain, derive, reproduce, and critique outputs.
 - Starter questions guide: `index.html` gives three plain-language questions plus `fields-study-flow ask` commands so learners can start from a guided question instead of reading the interface manual.
 - Active recall check: `index.html` includes a 5-minute self-test with expandable cards that point learners back to the exact map, lens, or roadmap evidence.
+- Portable study cards: every export writes `study_cards.md`, a local active-recall card set that learners can review, print, or paste into notes without reopening the full report.
 - First study session plan: `index.html` now gives a 45-60 minute timeboxed loop that links Paper Map, Paper Lens, active recall, and the first mastery task so learners can start productively without planning the session themselves.
 - Action-first start page: secondary product rationale, report-health checks, alternate guidance, and bring-your-own-paper commands are collapsed behind a single disclosure so the default view stays focused on learning.
 - Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.

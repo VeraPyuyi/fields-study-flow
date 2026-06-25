@@ -1227,6 +1227,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <a href="roadmap.json">roadmap.json</a>
         <a href="roadmap.md">roadmap.md</a>
         <a href="roadmap.svg">roadmap.svg</a>
+        <a href="study_cards.md">study_cards.md</a>
       </div>
     </details>
   </main>
@@ -1882,6 +1883,74 @@ def _recall_card_html(card: dict[str, str], is_zh: bool) -> str:
           <p>{escape(card["check"])}</p>
           <a href="{escape(card["href"])}">{escape('去找证据' if is_zh else 'Find evidence')}</a>
         </details>"""
+
+
+def render_study_cards_markdown(roadmap: dict[str, Any]) -> str:
+    """Render a portable active-recall card set from the same cards used by index.html."""
+    is_zh = _html_lang(roadmap) != "en"
+    cards = _recall_cards(roadmap, is_zh)
+    title = "主动回忆练习卡" if is_zh else "Active Recall Study Cards"
+    subtitle = (
+        "先遮住答案自己回答，再打开对应页面找证据修正。"
+        if is_zh
+        else "Answer from memory first, then open the linked page to verify with evidence."
+    )
+    evidence_label = "去找证据" if is_zh else "Find evidence"
+    check_label = "检查标准" if is_zh else "Check"
+    output: list[str] = [
+        f"# {title}",
+        "",
+        subtitle,
+        "",
+        "| # | Prompt | Check | Evidence Link |",
+        "|---|---|---|---|",
+    ]
+    for card in cards:
+        output.append(
+            "| {label} | {prompt} | {check} | [{evidence_label}]({href}) |".format(
+                label=_markdown_cell(card.get("label", "")),
+                prompt=_markdown_cell(card.get("prompt", "")),
+                check=_markdown_cell(f"{check_label}: {card.get('check', '')}"),
+                evidence_label=_markdown_cell(evidence_label),
+                href=_safe_markdown_href(card.get("href", "roadmap.html")),
+            )
+        )
+    output.extend(
+        [
+            "",
+            ("## 使用方法" if is_zh else "## How to Use"),
+            "",
+            (
+                "1. 先不要打开证据链接，闭卷回答每张卡。"
+                if is_zh
+                else "1. Do not open the evidence link yet; answer each card closed-book."
+            ),
+            (
+                "2. 回答后打开证据链接，把原文依据补到自己的笔记里。"
+                if is_zh
+                else "2. After answering, open the evidence link and add the source basis to your notes."
+            ),
+            (
+                "3. 答不出来的卡片，回到 Paper Map、Paper Lens 或 roadmap 补读。"
+                if is_zh
+                else "3. For cards you cannot answer, return to Paper Map, Paper Lens, or the roadmap."
+            ),
+            "",
+        ]
+    )
+    return "\n".join(output)
+
+
+def _markdown_cell(value: object) -> str:
+    text = str(value or "")
+    return text.replace("|", "\\|").replace("\r", " ").replace("\n", "<br>")
+
+
+def _safe_markdown_href(value: object) -> str:
+    href = str(value or "roadmap.html").strip()
+    if PRIVATE_PATH_RE.search(href) or not href:
+        return "roadmap.html"
+    return href.replace(" ", "%20")
 
 
 def _intent_router_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:

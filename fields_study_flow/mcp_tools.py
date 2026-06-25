@@ -9,7 +9,7 @@ from fields_study_flow.language import (
     normalize_resource_language_preference,
 )
 from fields_study_flow.artifact_templates import write_artifact_template
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.live_search import search_live_resources
 from fields_study_flow.local_resources import analyze_local_resources
@@ -309,6 +309,8 @@ def exportPlan(
     if "report_audit.json" not in outputs:
         insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
         outputs.insert(insert_at, "report_audit.json")
+    if "study_cards.md" not in outputs:
+        outputs.append("study_cards.md")
     public_plan["outputs"] = outputs
     if has_target_paper(public_plan):
         if "paper_map.html" not in outputs:
@@ -318,6 +320,7 @@ def exportPlan(
         public_plan["outputs"] = outputs
     json_target = output / "roadmap.json"
     md_target = output / "roadmap.md"
+    cards_target = output / "study_cards.md"
     svg_target = output / "roadmap.svg"
     index_target = output / "index.html"
     audit_target = output / "report_audit.json"
@@ -337,6 +340,7 @@ def exportPlan(
     frontend_asset_base = copy_frontend_assets(output)
     json_target.write_text(json.dumps(public_plan, ensure_ascii=False, indent=2), encoding="utf-8")
     md_target.write_text(render_markdown(public_plan), encoding="utf-8")
+    cards_target.write_text(render_study_cards_markdown(public_plan), encoding="utf-8")
     svg_target.write_text(render_svg(public_plan), encoding="utf-8")
     index_target.write_text(render_report_index(public_plan), encoding="utf-8")
     html_target.write_text(
@@ -360,6 +364,7 @@ def exportPlan(
         "report_audit_json": str(audit_target),
         "roadmap_json": str(json_target),
         "roadmap_md": str(md_target),
+        "study_cards_md": str(cards_target),
         "roadmap_svg": str(svg_target),
         "roadmap_html": str(html_target),
     }

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fields_study_flow.artifact_templates import enforce_artifact_requirements, write_artifact_template
-from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index
+from fields_study_flow.frontend_report import copy_frontend_assets, render_frontend_report, render_report_index, render_study_cards_markdown
 from fields_study_flow.knowledge_graph import build_knowledge_graph
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html, write_paper_lens_latex
@@ -27,6 +27,7 @@ OUTPUT_FILES = [
     "roadmap.json",
     "roadmap.svg",
     "roadmap.html",
+    "study_cards.md",
 ]
 PAPER_LENS_FILE = "paper_lens.html"
 
@@ -781,6 +782,8 @@ def write_outputs(
     if "report_audit.json" not in outputs:
         insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
         outputs.insert(insert_at, "report_audit.json")
+    if "study_cards.md" not in outputs:
+        outputs.append("study_cards.md")
     public_roadmap["outputs"] = outputs
     if not public_roadmap.get("paper_lens"):
         public_roadmap = _ensure_paper_lens(public_roadmap)
@@ -801,6 +804,7 @@ def write_outputs(
     (output_dir / "source_registry_snapshot.json").write_text(json.dumps(source_registry_snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "roadmap.json").write_text(json.dumps(public_roadmap, ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "roadmap.md").write_text(render_markdown(public_roadmap), encoding="utf-8")
+    (output_dir / "study_cards.md").write_text(render_study_cards_markdown(public_roadmap), encoding="utf-8")
     (output_dir / "roadmap.svg").write_text(render_svg(public_roadmap), encoding="utf-8")
     (output_dir / "index.html").write_text(render_report_index(public_roadmap), encoding="utf-8")
     (output_dir / "roadmap.html").write_text(
