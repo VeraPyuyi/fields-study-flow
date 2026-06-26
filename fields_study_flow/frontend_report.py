@@ -2294,7 +2294,7 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
     )
     priority_gaps = _coverage_priority_gaps(all_rows)
     source_diagnostics = _coverage_source_diagnostics(roadmap, map_rows, lens_rows, task_rows, resource_rows)
-    mastery_readiness = _coverage_mastery_readiness(roadmap, task_rows, is_zh)
+    mastery_readiness = _coverage_mastery_readiness(roadmap, task_rows, is_zh, map_rows, lens_rows, resource_rows)
     heading = "证据覆盖矩阵" if is_zh else "Evidence Coverage Matrix"
     output: list[str] = [
         f"# {title} - {heading}",
@@ -2697,6 +2697,16 @@ def _resource_links_by_title(roadmap: dict[str, Any]) -> dict[str, str]:
     return links
 
 
+def _resource_chunk_counts_by_title(roadmap: dict[str, Any]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for resource in _report_all_resource_entries(roadmap):
+        title = str(resource.get("title") or resource.get("resource_title") or "").strip()
+        if not title:
+            continue
+        counts[title.casefold()] = len(_resource_evidence_chunks(resource))
+    return counts
+
+
 def _resource_markdown_link(title: str, links: dict[str, str]) -> str:
     clean_title = _markdown_text(title)
     href = links.get(clean_title.casefold())
@@ -2965,6 +2975,17 @@ def _coverage_first_public_ref(refs: list[Any]) -> str:
     return ""
 
 
+def _coverage_first_resource_title_href(resource_titles: list[Any], resource_links: dict[str, str]) -> str:
+    for title in resource_titles:
+        key = str(title or "").strip()
+        if not key:
+            continue
+        href = resource_links.get(key.casefold())
+        if href and not PRIVATE_PATH_RE.search(href):
+            return _safe_markdown_href(href)
+    return ""
+
+
 def _coverage_source_diagnostics(
     roadmap: dict[str, Any],
     map_rows: list[dict[str, Any]],
@@ -3042,6 +3063,44 @@ def _coverage_source_diagnostics(
     return diagnostics
 
 
+def _coverage_checkable_task_evidence_count(row: dict[str, Any]) -> int:
+    return _coerce_nonnegative_int(row.get("checkable_evidence_count"))
+
+
+def _coverage_mastery_action_target(
+    task_type: str,
+    status: str,
+    best_row: dict[str, Any],
+    map_rows: list[dict[str, Any]],
+    lens_rows: list[dict[str, Any]],
+    resource_rows: list[dict[str, Any]],
+    roadmap: dict[str, Any],
+    is_zh: bool,
+) -> dict[str, str]:
+    if best_row:
+        if status == "ready":
+            href = best_row.get("evidence_href") or best_row.get("resource_href") or best_row.get("href")
+            label = "查看可验收证据" if is_zh else "Review checkable evidence"
+        elif best_row.get("resource_href"):
+            href = best_row.get("resource_href")
+            label = "给这份资料补证据片段" if is_zh else "Add evidence to this resource"
+        else:
+            href = best_row.get("gap_href") or best_row.get("href")
+            label = "补齐这个任务的证据" if is_zh else "Fill evidence for this task"
+        return {"href": _safe_markdown_href(href or "roadmap.html#mastery-checklist-title"), "label": label}
+
+    rows_by_task = {
+        "explain": map_rows,
+        "derive": lens_rows,
+        "reproduce": resource_rows,
+        "critique": map_rows or lens_rows,
+    }
+    fallback_rows = rows_by_task.get(task_type, [])
+    href = _coverage_first_gap_href(fallback_rows, _coverage_task_href(task_type, roadmap)) if fallback_rows else _coverage_task_href(task_type, roadmap)
+    label = "先生成或补齐该门槛任务" if is_zh else "Create this gate task first"
+    return {"href": _safe_markdown_href(href), "label": label}
+
+
 def _append_evidence_source_diagnostics(output: list[str], diagnostics: list[dict[str, Any]], is_zh: bool) -> None:
     output.extend([f"## {'证据来源诊断' if is_zh else 'Evidence Source Diagnostics'}", ""])
     output.extend(
@@ -3071,6 +3130,9 @@ def _coverage_mastery_readiness(
     roadmap: dict[str, Any],
     task_rows: list[dict[str, Any]],
     is_zh: bool,
+    map_rows: list[dict[str, Any]] | None = None,
+    lens_rows: list[dict[str, Any]] | None = None,
+    resource_rows: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     rows_by_type: dict[str, list[dict[str, Any]]] = {}
     for row in task_rows:
@@ -3089,7 +3151,8 @@ def _coverage_mastery_readiness(
         rows = rows_by_type.get(key, [])
         best = max(rows, key=lambda row: _coerce_nonnegative_int(row.get("evidence_count")), default={})
         evidence_count = _coerce_nonnegative_int(best.get("evidence_count"))
-        if evidence_count > 0:
+        checkable_evidence_count = _coverage_checkable_task_evidence_count(best)
+        if checkable_evidence_count > 0:
             status = "ready"
             score_units += 2
         elif best:
@@ -3097,6 +3160,16 @@ def _coverage_mastery_readiness(
             score_units += 1
         else:
             status = "missing"
+        target = _coverage_mastery_action_target(
+            key,
+            status,
+            best,
+            map_rows or [],
+            lens_rows or [],
+            resource_rows or [],
+            roadmap,
+            is_zh,
+        )
         items.append(
             {
                 "gate": zh_label if is_zh else en_label,
@@ -3104,8 +3177,11 @@ def _coverage_mastery_readiness(
                 "status": status,
                 "task": best.get("label") or _coverage_default_mastery_task(key, is_zh),
                 "evidence_count": evidence_count,
+                "checkable_evidence_count": checkable_evidence_count,
                 "href": best.get("href") or _coverage_task_href(key, roadmap),
                 "action": _coverage_mastery_next_action(key, status, is_zh),
+                "target_href": target["href"],
+                "target_label": target["label"],
             }
         )
     total_units = len(required) * 2
@@ -3141,15 +3217,17 @@ def _append_mastery_readiness_scorecard(output: list[str], readiness: dict[str, 
         status = _markdown_cell(_coverage_mastery_status_label(str(item.get("status") or ""), is_zh))
         task = _markdown_cell(item.get("task") or "")
         href = _safe_markdown_href(item.get("href") or "roadmap.html#mastery-checklist-title")
-        action = _markdown_cell(item.get("action") or "")
+        target_href = _safe_markdown_href(item.get("target_href") or item.get("href") or "roadmap.html#mastery-checklist-title")
+        target_label = _markdown_cell(item.get("target_label") or item.get("action") or "")
         output.append(
-            "| {gate} | {status} | [{task}]({href}) | {evidence} | {action} |".format(
+            "| {gate} | {status} | [{task}]({href}) | {evidence} | [{target_label}]({target_href}) |".format(
                 gate=gate,
                 status=status,
                 task=task,
                 href=href,
                 evidence=_coerce_nonnegative_int(item.get("evidence_count")),
-                action=action,
+                target_label=target_label,
+                target_href=target_href,
             )
         )
     output.append("")
@@ -3373,6 +3451,8 @@ def _coverage_paper_lens_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict
 
 def _coverage_task_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, Any]]:
     tasks = [item for item in roadmap.get("study_tasks", []) if isinstance(item, dict)]
+    resource_links = _resource_links_by_title(roadmap)
+    resource_chunk_counts = _resource_chunk_counts_by_title(roadmap)
     rows: list[dict[str, Any]] = []
     for index, task in enumerate(tasks, start=1):
         resources = task.get("resource_titles") if isinstance(task.get("resource_titles"), list) else []
@@ -3380,14 +3460,28 @@ def _coverage_task_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, 
         evidence_count = len([item for item in resources if item]) + len([item for item in chunks if _is_traceable_evidence_chunk(item)])
         task_type = str(task.get("type") or "")
         href = _coverage_task_href(task_type, roadmap)
+        resource_href = _coverage_first_resource_title_href(resources, resource_links)
+        evidence_href = _coverage_first_public_ref(chunks)
+        task_chunk_count = len([item for item in chunks if _is_traceable_evidence_chunk(item)])
+        linked_resource_chunk_count = sum(
+            resource_chunk_counts.get(str(title or "").strip().casefold(), 0)
+            for title in resources
+        )
+        checkable_evidence_count = task_chunk_count + linked_resource_chunk_count
         label = _markdown_text(task.get("title") or f"{'任务' if is_zh else 'Task'} {index}")
         detail = _truncate_markdown(_markdown_text(task.get("evidence") or task.get("acceptance") or ""), 140)
         rows.append(
             {
                 "label": label,
+                "task_id": task.get("id") or task.get("task_id") or f"{task_type or 'task'}-{index}",
                 "task_type": task_type,
+                "resource_titles": resources,
+                "resource_href": resource_href,
+                "evidence_href": evidence_href,
+                "gap_href": evidence_href or resource_href or href,
                 "status": "covered" if evidence_count else "gap",
                 "evidence_count": evidence_count,
+                "checkable_evidence_count": checkable_evidence_count,
                 "detail": detail or ("需要绑定资料或证据片段" if is_zh else "Needs linked resources or evidence snippets"),
                 "href": href,
             }

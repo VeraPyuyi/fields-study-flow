@@ -1309,3 +1309,45 @@ def test_write_outputs_removes_stale_artifact_template_when_not_required(tmp_pat
 
     assert second_roadmap["generated_artifacts"] == []
     assert not (tmp_path / "artifact_template").exists()
+
+
+def test_write_outputs_removes_stale_paper_pages_when_route_has_no_target_paper(tmp_path):
+    paper_profile = LearnerProfile(goal="master a planning paper", output_language="en", target_kind="paper")
+    paper = Resource(
+        title="Planning paper",
+        url="local://planning-paper",
+        source="local-library",
+        type="paper",
+        language="en",
+        concepts=["planning"],
+        estimated_minutes=240,
+        trust_score=0.9,
+        metadata={"target_paper": True, "paper_metadata": {"title": "Planning paper", "abstract_snippet": "Planning methods."}},
+        critical_path_role="core-paper",
+    )
+    paper_roadmap = build_roadmap(paper_profile, [paper])
+    write_outputs(tmp_path, paper_profile, [paper], paper_roadmap, {"sources": []})
+
+    assert (tmp_path / "paper_map.html").exists()
+    assert (tmp_path / "paper_lens.html").exists()
+
+    field_profile = LearnerProfile(goal="learn diffusion models", output_language="en", target_kind="field")
+    repo = Resource(
+        title="Diffusion implementation",
+        url="https://github.com/example/diffusion",
+        source="github",
+        type="repository",
+        language="en",
+        concepts=["diffusion models", "python"],
+        estimated_minutes=300,
+        trust_score=0.8,
+        critical_path_role="practice-validation",
+    )
+    field_roadmap = build_roadmap(field_profile, [repo])
+    write_outputs(tmp_path, field_profile, [repo], field_roadmap, {"sources": []})
+
+    exported = json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
+    assert not (tmp_path / "paper_map.html").exists()
+    assert not (tmp_path / "paper_lens.html").exists()
+    assert "paper_map.html" not in exported.get("outputs", [])
+    assert "paper_lens.html" not in exported.get("outputs", [])

@@ -58,11 +58,13 @@ Source refresh on 2026-06-22:
 - Exports now include `evidence_coverage.md` and `evidence_coverage.html`, a portable evidence coverage matrix and readable dashboard that adapt Elicit-style citation transparency into a learner-facing audit of which Paper Map claims, Paper Lens paragraphs, mastery tasks, and resources are actually source-backed.
 - The evidence coverage matrix now reports clickable source diagnostics, a measured coverage score, per-surface scores, and a prioritized evidence-gap queue, turning ResearchRabbit/Litmaps-style orientation into an actionable "what evidence should I fix first?" checklist.
 - The evidence coverage matrix now also includes an explain/derive/reproduce/critique mastery-readiness scorecard, adapting NotebookLM-style active learning outputs into a stricter local mastery contract: the learner can see whether every core gate is ready, missing evidence, or missing a task.
+- The mastery-readiness scorecard now links each next action to a concrete task, resource, or evidence gap, and only marks a gate ready when it has checkable chunks instead of a bare resource title.
 - `index.html` now surfaces that mastery-readiness scorecard before the first study-session plan, so the learner sees the next missing gate immediately instead of opening support artifacts first.
 - The start page now includes a 45-60 minute first-session plan, combining roadmap.sh-style low-friction pathing with NotebookLM/Get It-style active study outputs: map the paper, read one evidence paragraph, recall from memory, and finish one checkable mastery task.
 - The start page now uses action-first progressive disclosure: secondary value explanation, report-health checks, alternate guidance, and bring-your-own-paper commands stay collapsed until the learner asks for them, keeping the first view closer to roadmap.sh's simple first interaction.
 - Single-paper reports prioritize `paper_map.html` first, because the fastest way to understand a paper is to see the logic chain before reading every paragraph.
 - Paper Map now exposes an adaptive reading-density control: beginners start in "core chain" mode, while advanced users can switch to the full evidence/resource/task exploration view.
+- Reusing an output directory now removes stale `paper_map.html` and `paper_lens.html` when the next route has no target paper, so field/course reports cannot accidentally point learners into an old single-paper report.
 - Paper Map now exports the causal logic chain as a downloadable Markdown presentation script, so "understand the paper" can become a short oral report without manual copying.
 - `paper_lens.html` is paragraph-based rather than sentence-fragment based, making explanations lighter and less repetitive.
 - `roadmap.html` contains a mastery checklist so the route does not end at "read these links".
@@ -97,5 +99,5 @@ Source refresh on 2026-06-22:
 
 1. Add checked-in golden baselines for Paper Map, Paper Lens, Roadmap, and the start page, then run them in CI whenever frontend assets or report renderers change.
 2. Promote release-history summaries into CI artifacts once the repository has checked-in visual baselines and browser interaction probes for the main report surfaces.
-3. Deepen the `evidence_coverage.md` matrix by linking each mastery-readiness action to the exact missing paragraph, local note, downloaded-resource chunk, or task artifact.
-4. Keep strengthening the guided mastery worksheet by adding richer per-slot source anchors, readiness status sync back into `roadmap.html`, and clearer "ready to present" checkpoints.
+3. Keep strengthening the guided mastery worksheet by adding richer per-slot source anchors, readiness status sync back into `roadmap.html`, and clearer "ready to present" checkpoints.
+4. Add an export-consistency audit that parses `roadmap.json` plus the embedded HTML payloads and proves companion-page links match the current route.

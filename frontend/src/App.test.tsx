@@ -127,8 +127,20 @@ describe("fields-study-flow React report app", () => {
           download_manager: { retry_file: "retry_failed.md", download_queue_file: "download_queue.json" },
           summary: { total: 4, completed: 2, downloaded: 1, copied: 1, failed: 1, "link-only": 1 },
           resources: [
-            { title: "Local PDF", local_href: "../assets/a.pdf", type: "paper", status: "downloaded" },
-            { title: "Copied Notebook", local_href: "../assets/b.ipynb", type: "notebook", status: "copied" },
+            {
+              title: "Local PDF",
+              local_href: "../assets/a.pdf",
+              type: "paper",
+              status: "downloaded",
+              metadata: { rag: { evidence_chunks: [{ snippet: "Explains the main claim.", file_name: "a.pdf" }] } },
+            },
+            {
+              title: "Copied Notebook",
+              local_href: "../assets/b.ipynb",
+              type: "notebook",
+              status: "copied",
+              metadata: { rag: { evidence_chunks: [{ snippet: "Shows a minimal reproduction.", file_name: "b.ipynb" }] } },
+            },
             { title: "Broken Repo", url: "https://example.com/repo", type: "repository", status: "failed" },
             { title: "Manual Link", url: "https://example.com/book", type: "book", status: "link-only" },
           ],

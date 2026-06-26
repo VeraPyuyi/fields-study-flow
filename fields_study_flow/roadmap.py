@@ -806,6 +806,7 @@ def write_outputs(
         public_roadmap = _ensure_paper_map(public_roadmap)
     if public_roadmap.get("paper_lens"):
         public_roadmap = _write_paper_lens_latex_export(output_dir, public_roadmap)
+    public_roadmap = _remove_stale_paper_reports(output_dir, public_roadmap)
     frontend_asset_base = copy_frontend_assets(output_dir)
     (output_dir / "learner_profile.json").write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
     (output_dir / "resource_index.json").write_text(
@@ -895,6 +896,23 @@ def _ensure_paper_map(roadmap: dict[str, Any]) -> dict[str, Any]:
     outputs = list(updated.get("outputs", []))
     if updated.get("paper_map") and PAPER_MAP_FILE not in outputs:
         outputs.append(PAPER_MAP_FILE)
+    updated["outputs"] = outputs
+    return updated
+
+
+def _remove_stale_paper_reports(output_dir: Path, roadmap: dict[str, Any]) -> dict[str, Any]:
+    updated = copy.deepcopy(roadmap)
+    outputs = list(updated.get("outputs", []))
+    stale_names: list[str] = []
+    if not updated.get("paper_map"):
+        stale_names.append(PAPER_MAP_FILE)
+    if not updated.get("paper_lens"):
+        stale_names.extend([PAPER_LENS_FILE, "paper_lens.tex", "paper_lens.pdf"])
+    for name in stale_names:
+        target = output_dir / name
+        if target.exists() and target.is_file():
+            target.unlink()
+        outputs = [item for item in outputs if item != name]
     updated["outputs"] = outputs
     return updated
 

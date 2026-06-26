@@ -156,9 +156,9 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert 'data-mastery-gate="derive"' in html
     assert 'data-mastery-gate="reproduce"' in html
     assert 'data-mastery-gate="critique"' in html
-    assert 'data-mastery-status="ready"' in html
     assert 'data-mastery-status="needs_evidence"' in html
-    assert "75%" in html
+    assert 'data-mastery-status="ready"' not in html
+    assert "50%" in html
     assert "推荐第一步" in html
     assert "第一步：打开论文逻辑图" in html
     assert "如果要汇报" in html
@@ -466,6 +466,7 @@ def test_evidence_coverage_markdown_tracks_claims_tasks_resources_and_redacts_pa
     assert "## Mastery Readiness Scorecard" in markdown
     assert "Overall readiness: 25%" in markdown
     assert "| Explain | Ready |" in markdown
+    assert "[Review checkable evidence](study-assets/attention.pdf)" in markdown
     assert "| Derive | Missing |" in markdown
     assert "## Measured Coverage Score" in markdown
     assert "## Priority Evidence Queue" in markdown
@@ -493,7 +494,7 @@ def test_evidence_coverage_field_route_uses_roadmap_links_without_paper_pages():
     assert "paper_lens.html" not in markdown
     assert "## Evidence Source Diagnostics" in markdown
     assert "## Mastery Readiness Scorecard" in markdown
-    assert "Overall readiness: 25%" in markdown
+    assert "Overall readiness: 12%" in markdown
     assert "Target-paper logic claims" not in markdown
     assert "Reading paragraphs" not in markdown
     assert "[RAG/resource chunks](https://example.com/diffusion)" in markdown

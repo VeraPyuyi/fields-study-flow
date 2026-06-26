@@ -547,6 +547,16 @@ function taskEvidenceCount(task?: StudyTask) {
   return resources + chunks;
 }
 
+function taskCheckableEvidenceCount(task?: StudyTask, resources: ResourceLink[] = []) {
+  if (!task) return 0;
+  const taskChunks = Array.isArray(task.evidence_chunks) ? task.evidence_chunks.filter(isTraceableEvidenceChunk).length : 0;
+  const resourceTitles = new Set((task.resource_titles ?? []).map((title) => String(title).trim().toLowerCase()).filter(Boolean));
+  const linkedResourceChunks = resources
+    .filter((resource) => resourceTitles.has(String(resource.title || resource.label || "").trim().toLowerCase()))
+    .reduce((total, resource) => total + evidenceChunkCandidates(resource).length, 0);
+  return taskChunks + linkedResourceChunks;
+}
+
 function isTraceableEvidenceChunk(chunk: unknown) {
   if (typeof chunk === "string") return Boolean(chunk.trim());
   if (!chunk || typeof chunk !== "object") return false;
@@ -562,17 +572,19 @@ function masteryGateStatusLabel(status: MasteryGateStatus) {
   return "缺任务";
 }
 
-function buildMasteryReadiness(tasks: StudyTask[]) {
+function buildMasteryReadiness(tasks: StudyTask[], resources: ResourceLink[] = []) {
   const items = MASTERY_GATE_ORDER.map((gate) => {
     const matchingTasks = tasks.filter((task) => String(task.type || "").toLowerCase() === gate.type);
     const task = matchingTasks.sort((a, b) => taskEvidenceCount(b) - taskEvidenceCount(a))[0];
     const evidenceCount = taskEvidenceCount(task);
-    const status: MasteryGateStatus = task ? (evidenceCount > 0 ? "ready" : "needs_evidence") : "missing";
+    const checkableEvidenceCount = taskCheckableEvidenceCount(task, resources);
+    const status: MasteryGateStatus = task ? (checkableEvidenceCount > 0 ? "ready" : "needs_evidence") : "missing";
     const score = status === "ready" ? 2 : status === "needs_evidence" ? 1 : 0;
     return {
       ...gate,
       task,
       evidenceCount,
+      checkableEvidenceCount,
       status,
       score,
       action: status === "ready" ? gate.readyAction : status === "needs_evidence" ? gate.needsAction : gate.missingAction,
@@ -727,7 +739,7 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
     () => buildMasteryWorksheet(roadmap, studyTasks, completedTaskIds),
     [roadmap, studyTasks, completedTaskIds],
   );
-  const masteryReadiness = useMemo(() => buildMasteryReadiness(studyTasks), [studyTasks]);
+  const masteryReadiness = useMemo(() => buildMasteryReadiness(studyTasks, resources), [resources, studyTasks]);
   const missingPhases = phases.length === 0;
   const missingTasks = studyTasks.length === 0;
   const missingResources = resources.length === 0;
