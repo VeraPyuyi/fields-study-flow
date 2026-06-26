@@ -31,6 +31,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Folder entry: `index.html` is the first file to open after export. It routes learners to Paper Map, Paper Lens, or the roadmap checklist depending on what the plan contains.
 - Market value panel: `index.html` explains the product wedge before learners open the detailed reports: Paper Map logic, evidence-backed reading, local resource bundles, and mastery proof.
 - Recommended first action: the start page now highlights the best first click for the current report, with alternate paths for presentation, mastery validation, or bringing your own paper.
+- Visible mastery readiness: the start page shows the explain/derive/reproduce/critique readiness score before the learner opens support artifacts, so the next gap is obvious.
 - Learning outcome contract: the start page states what the learner should be able to deliver after studying: explain, derive, reproduce, and critique outputs.
 - Starter questions guide: `index.html` gives three plain-language questions plus `fields-study-flow ask` commands so learners can start from a guided question instead of reading the interface manual.
 - Active recall check: `index.html` includes a 5-minute self-test with expandable cards that point learners back to the exact map, lens, or roadmap evidence.

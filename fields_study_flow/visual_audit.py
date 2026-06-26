@@ -3320,6 +3320,15 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Make the expected learning outputs explicit: explain, derive, reproduce, and critique should feel like concrete deliverables, not hidden implementation details.",
         ),
         _experience_check(
+            "mastery_readiness_visible",
+            "Visible mastery readiness",
+            _contains_any_text(
+                html.get("index.html", ""),
+                ("data-mastery-readiness-panel", "Mastery readiness", "What is still missing for mastery?", "掌握就绪", "现在离真正掌握还差什么"),
+            ),
+            "Show explain/derive/reproduce/critique readiness on index.html so learners can see what remains before opening support artifacts.",
+        ),
+        _experience_check(
             "starter_questions_panel",
             "Starter questions panel",
             _contains_any_text(

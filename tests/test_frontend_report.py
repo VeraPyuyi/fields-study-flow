@@ -133,6 +133,12 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
             },
             "paper_map": {"nodes": [{"id": "target"}]},
             "paper_lens": {"segments": [{"id": "seg-1"}]},
+            "study_tasks": [
+                {"type": "explain", "title": "Explain the paper", "resource_titles": ["Paper Map"]},
+                {"type": "derive", "title": "Derive the method"},
+                {"type": "reproduce", "title": "Reproduce the minimum experiment", "resource_titles": ["Notebook"]},
+                {"type": "critique", "title": "Critique the limits"},
+            ],
         }
     )
 
@@ -145,6 +151,14 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     assert "Get It" in html
     assert 'data-recommended-action-panel="true"' in html
     assert 'data-recommended-first-action="true" href="paper_map.html"' in html
+    assert 'data-mastery-readiness-panel="true"' in html
+    assert 'data-mastery-gate="explain"' in html
+    assert 'data-mastery-gate="derive"' in html
+    assert 'data-mastery-gate="reproduce"' in html
+    assert 'data-mastery-gate="critique"' in html
+    assert 'data-mastery-status="ready"' in html
+    assert 'data-mastery-status="needs_evidence"' in html
+    assert "75%" in html
     assert "推荐第一步" in html
     assert "第一步：打开论文逻辑图" in html
     assert "如果要汇报" in html
@@ -216,6 +230,8 @@ def test_report_index_prioritizes_learning_entries_and_redacts_private_paths():
     ):
         assert token in secondary_html
         assert token not in outside_secondary
+    assert 'data-mastery-readiness-panel="true"' in outside_secondary
+    assert 'data-mastery-readiness-panel="true"' not in secondary_html
     assert '<details class="support-panel" data-support-files-panel="collapsed">' in html
     assert "需要原始数据或导出文件时再展开" in html
     assert "roadmap.json" in html

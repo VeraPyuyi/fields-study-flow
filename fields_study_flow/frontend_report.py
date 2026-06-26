@@ -94,6 +94,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     intent_router_html = _intent_router_panel_html(safe_roadmap, is_zh)
     market_value_html = _market_value_panel_html(safe_roadmap, is_zh)
     recommended_action_html = _recommended_action_panel_html(safe_roadmap, is_zh)
+    mastery_readiness_html = _mastery_readiness_panel_html(safe_roadmap, is_zh)
     first_session_html = _first_session_plan_panel_html(safe_roadmap, is_zh)
     outcome_contract_html = _learning_outcome_contract_panel_html(safe_roadmap, is_zh)
     learning_guide_html = _learning_guide_panel_html(safe_roadmap, is_zh)
@@ -853,6 +854,94 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       font-size: 0.92rem;
       line-height: 1.52;
     }}
+    .mastery-readiness-panel {{
+      margin: 0 0 18px;
+      border: 1px solid rgba(47, 111, 115, 0.18);
+      border-radius: 24px;
+      padding: 20px;
+      background: linear-gradient(135deg, rgba(255,255,255,0.90), rgba(238,247,247,0.78));
+      box-shadow: 0 16px 46px rgba(47, 42, 35, 0.09);
+    }}
+    .mastery-readiness-panel header {{
+      display: flex;
+      align-items: start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 14px;
+    }}
+    .mastery-readiness-panel h2 {{
+      margin: 0;
+      font-size: clamp(1.15rem, 2vw, 1.55rem);
+      line-height: 1.22;
+      overflow-wrap: anywhere;
+    }}
+    .mastery-readiness-panel p {{
+      margin: 4px 0 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }}
+    .mastery-readiness-score {{
+      flex: 0 0 auto;
+      display: grid;
+      place-items: center;
+      min-width: 72px;
+      min-height: 72px;
+      border: 1px solid rgba(47, 111, 115, 0.26);
+      border-radius: 999px;
+      color: var(--accent);
+      background: rgba(255, 255, 255, 0.72);
+      font-weight: 900;
+      font-size: 1.18rem;
+      line-height: 1;
+    }}
+    .mastery-readiness-grid {{
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }}
+    .mastery-readiness-card {{
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 12px;
+      color: inherit;
+      background: rgba(255, 255, 255, 0.68);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }}
+    .mastery-readiness-card:hover, .mastery-readiness-card:focus-visible {{
+      transform: translateY(-1px);
+      border-color: rgba(47, 111, 115, 0.42);
+      outline: none;
+    }}
+    .mastery-readiness-card small {{
+      display: block;
+      color: var(--accent-2);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }}
+    .mastery-readiness-card strong {{
+      display: block;
+      margin-top: 5px;
+      line-height: 1.25;
+    }}
+    .mastery-readiness-card span {{
+      display: inline-block;
+      margin-top: 8px;
+      border: 1px solid rgba(47, 111, 115, 0.16);
+      border-radius: 999px;
+      padding: 4px 8px;
+      color: var(--accent);
+      background: rgba(47, 111, 115, 0.08);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }}
+    .mastery-readiness-card p {{
+      margin-top: 8px;
+      font-size: 0.9rem;
+      line-height: 1.48;
+    }}
     .outcome-proof-row {{
       display: flex;
       flex-wrap: wrap;
@@ -1198,7 +1287,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
     }}
     @media (max-width: 820px) {{
       main {{ width: min(100vw - 22px, 720px); padding: 24px 0; }}
-      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .active-recall-grid, .session-plan-list, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid {{ grid-template-columns: 1fr; }}
+      .hero, .start-grid, .intent-router-grid, .learning-guide-grid, .active-recall-grid, .session-plan-list, .quickstart-steps, .next-paper-panel, .report-health-grid, .scenario-grid, .market-value-grid, .recommended-action-grid, .outcome-contract-grid, .mastery-readiness-grid {{ grid-template-columns: 1fr; }}
       .hero-copy {{ border-radius: 22px; }}
       .start-card {{ min-height: auto; }}
       .intent-router-panel header {{ display: block; }}
@@ -1208,11 +1297,13 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       .quickstart-panel header {{ display: block; }}
       .market-value-panel header {{ display: block; }}
       .recommended-action-panel header {{ display: block; }}
+      .mastery-readiness-panel header {{ display: block; }}
       .outcome-contract-panel header {{ display: block; }}
       .report-health-panel header {{ display: block; }}
       .quickstart-badge {{ display: inline-block; margin-top: 10px; }}
       .market-value-badge {{ display: inline-block; margin-top: 10px; }}
       .recommended-action-badge {{ display: inline-block; margin-top: 10px; }}
+      .mastery-readiness-score {{ display: inline-grid; margin-top: 10px; }}
       .outcome-contract-badge {{ display: inline-block; margin-top: 10px; }}
       .report-health-link {{ display: inline-block; margin-top: 10px; }}
     }}
@@ -1234,6 +1325,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
       </aside>
     </section>
     {recommended_action_html}
+    {mastery_readiness_html}
     {first_session_html}
     {active_recall_html}
     <section class="start-grid" aria-label="{escape('推荐入口' if is_zh else 'Recommended entries')}">
@@ -1577,6 +1669,50 @@ def _learning_outcome_contract_panel_html(roadmap: dict[str, Any], is_zh: bool) 
       </div>
       <div class="outcome-proof-row" aria-label="{escape('相关验收入口' if is_zh else 'Related validation entries')}">
         {proof_html}
+      </div>
+    </section>"""
+
+
+def _mastery_readiness_panel_html(roadmap: dict[str, Any], is_zh: bool) -> str:
+    task_rows = _coverage_task_rows(roadmap, is_zh)
+    readiness = _coverage_mastery_readiness(roadmap, task_rows, is_zh)
+    score = _coerce_nonnegative_int(readiness.get("score"))
+    items = readiness.get("items") if isinstance(readiness.get("items"), list) else []
+    title = "现在离真正掌握还差什么？" if is_zh else "What is still missing for mastery?"
+    body = (
+        "四个门槛都能留下证据，才算不只是看过，而是真的能汇报、推导、复现和批判。"
+        if is_zh
+        else "You are not done when you have read enough; you are done when all four gates have checkable evidence."
+    )
+    eyebrow = "掌握就绪" if is_zh else "Mastery readiness"
+    label = "就绪度" if is_zh else "Ready"
+    cards: list[str] = []
+    for item in items:
+        status = _coverage_mastery_status_label(str(item.get("status") or ""), is_zh)
+        gate = str(item.get("gate") or "")
+        task = str(item.get("task") or "")
+        action = str(item.get("action") or "")
+        href = _safe_markdown_href(item.get("href") or "roadmap.html#mastery-checklist-title")
+        cards.append(
+            f"""<a class="mastery-readiness-card" data-mastery-gate="{escape(str(item.get('key') or gate).lower())}" data-mastery-status="{escape(str(item.get('status') or 'missing'))}" href="{escape(href)}">
+          <small>{escape(gate)}</small>
+          <strong>{escape(task)}</strong>
+          <span>{escape(status)}</span>
+          <p>{escape(action)}</p>
+        </a>"""
+        )
+    card_html = "\n".join(cards)
+    return f"""<section class="mastery-readiness-panel" data-mastery-readiness-panel="true" aria-labelledby="mastery-readiness-title">
+      <header>
+        <div>
+          <p class="eyebrow">{escape(eyebrow)}</p>
+          <h2 id="mastery-readiness-title">{escape(title)}</h2>
+          <p>{escape(body)}</p>
+        </div>
+        <span class="mastery-readiness-score" aria-label="{escape(label)} {score}%">{score}%</span>
+      </header>
+      <div class="mastery-readiness-grid">
+        {card_html}
       </div>
     </section>"""
 

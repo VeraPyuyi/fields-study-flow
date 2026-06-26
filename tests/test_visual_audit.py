@@ -1615,6 +1615,7 @@ def _market_ready_index_marker(*, paper_entries: bool = True, evidence_edges: in
         "Start Here Bring Your Own Paper "
         "data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session "
         "data-active-recall-panel data-recall-card 5-minute active recall Find evidence "
+        "data-mastery-readiness-panel Mastery readiness What is still missing for mastery "
         f"{entries} Local assets study_cards.md study_quiz.md mastery_worksheet.md quick_brief.md evidence_coverage.md evidence_coverage.html "
         "<details data-secondary-guidance-panel>"
         '<section data-market-value-panel="true">Why this is more than a PDF summarizer</section>'
