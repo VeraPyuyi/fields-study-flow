@@ -3923,6 +3923,9 @@ def _has_portable_evidence_coverage(root: Path, index_html: str) -> bool:
         ("Evidence Source Diagnostics", "证据来源诊断"),
     ) and _contains_any_text(
         content,
+        ("Mastery Readiness Scorecard", "掌握就绪评分卡"),
+    ) and _contains_any_text(
+        content,
         ("Priority Evidence Queue", "优先补证据队列"),
     ) and _contains_any_text(
         content,
@@ -3932,6 +3935,7 @@ def _has_portable_evidence_coverage(root: Path, index_html: str) -> bool:
         "evidence_coverage.html" in index_html
         and _contains_any_text(html_content, ("Evidence Coverage Dashboard", "证据覆盖仪表盘"))
         and _contains_any_text(html_content, ("Evidence Source Diagnostics", "证据来源诊断"))
+        and _contains_any_text(html_content, ("Mastery Readiness Scorecard", "掌握就绪评分卡"))
     )
     return markdown_ok and html_ok
 

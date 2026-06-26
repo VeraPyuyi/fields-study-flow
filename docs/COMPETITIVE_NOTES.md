@@ -57,6 +57,7 @@ Source refresh on 2026-06-22:
 - Exports now include `quick_brief.md`, a one-page first-read brief that adapts Scholarcy-style quick summaries and Spotlight key findings into a paper-logic chain with evidence links and next actions.
 - Exports now include `evidence_coverage.md` and `evidence_coverage.html`, a portable evidence coverage matrix and readable dashboard that adapt Elicit-style citation transparency into a learner-facing audit of which Paper Map claims, Paper Lens paragraphs, mastery tasks, and resources are actually source-backed.
 - The evidence coverage matrix now reports clickable source diagnostics, a measured coverage score, per-surface scores, and a prioritized evidence-gap queue, turning ResearchRabbit/Litmaps-style orientation into an actionable "what evidence should I fix first?" checklist.
+- The evidence coverage matrix now also includes an explain/derive/reproduce/critique mastery-readiness scorecard, adapting NotebookLM-style active learning outputs into a stricter local mastery contract: the learner can see whether every core gate is ready, missing evidence, or missing a task.
 - The start page now includes a 45-60 minute first-session plan, combining roadmap.sh-style low-friction pathing with NotebookLM/Get It-style active study outputs: map the paper, read one evidence paragraph, recall from memory, and finish one checkable mastery task.
 - The start page now uses action-first progressive disclosure: secondary value explanation, report-health checks, alternate guidance, and bring-your-own-paper commands stay collapsed until the learner asks for them, keeping the first view closer to roadmap.sh's simple first interaction.
 - Single-paper reports prioritize `paper_map.html` first, because the fastest way to understand a paper is to see the logic chain before reading every paragraph.
@@ -95,5 +96,5 @@ Source refresh on 2026-06-22:
 
 1. Add checked-in golden baselines for Paper Map, Paper Lens, Roadmap, and the start page, then run them in CI whenever frontend assets or report renderers change.
 2. Promote release-history summaries into CI artifacts once the repository has checked-in visual baselines and browser interaction probes for the main report surfaces.
-3. Deepen the `evidence_coverage.md` matrix by linking each source-diagnostic row to the exact missing paragraph, local note, downloaded-resource chunk, or task artifact.
-4. Keep strengthening the guided mastery worksheet by adding richer per-slot source anchors and review status sync back into `roadmap.html`.
+3. Deepen the `evidence_coverage.md` matrix by linking each mastery-readiness action to the exact missing paragraph, local note, downloaded-resource chunk, or task artifact.
+4. Keep strengthening the guided mastery worksheet by adding richer per-slot source anchors, readiness status sync back into `roadmap.html`, and clearer "ready to present" checkpoints.

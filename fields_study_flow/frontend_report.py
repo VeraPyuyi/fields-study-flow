@@ -2158,6 +2158,7 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
     )
     priority_gaps = _coverage_priority_gaps(all_rows)
     source_diagnostics = _coverage_source_diagnostics(roadmap, map_rows, lens_rows, task_rows, resource_rows)
+    mastery_readiness = _coverage_mastery_readiness(roadmap, task_rows, is_zh)
     heading = "证据覆盖矩阵" if is_zh else "Evidence Coverage Matrix"
     output: list[str] = [
         f"# {title} - {heading}",
@@ -2165,6 +2166,7 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
         f"- {'学习目标' if is_zh else 'Learning goal'}: {goal}",
         f"- {'覆盖进度' if is_zh else 'Coverage'}: {covered}/{total}",
         f"- {'覆盖分数' if is_zh else 'Coverage score'}: {coverage_percent}%",
+        f"- {'掌握就绪度' if is_zh else 'Mastery readiness'}: {mastery_readiness.get('score', 0)}%",
         f"- {'优先缺口' if is_zh else 'Priority gaps'}: {len(priority_gaps)}",
         f"- {'用途' if is_zh else 'Use'}: "
         + (
@@ -2198,6 +2200,7 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
         output.append(f"| {label} | {sum(1 for item in rows if item.get('status') == 'covered')} | {len(rows)} | [{_markdown_text(entry)}]({_safe_markdown_href(entry)}) |")
     output.append("")
     _append_evidence_source_diagnostics(output, source_diagnostics, is_zh)
+    _append_mastery_readiness_scorecard(output, mastery_readiness, is_zh)
     _append_measured_coverage_score(output, section_scores, is_zh)
     _append_priority_evidence_queue(output, priority_gaps, is_zh)
     _append_coverage_table(output, "论文逻辑覆盖" if is_zh else "Paper Logic Coverage", map_rows, is_zh)
@@ -2928,6 +2931,130 @@ def _append_evidence_source_diagnostics(output: list[str], diagnostics: list[dic
     output.append("")
 
 
+def _coverage_mastery_readiness(
+    roadmap: dict[str, Any],
+    task_rows: list[dict[str, Any]],
+    is_zh: bool,
+) -> dict[str, Any]:
+    rows_by_type: dict[str, list[dict[str, Any]]] = {}
+    for row in task_rows:
+        task_type = str(row.get("task_type") or "").strip().casefold()
+        if task_type:
+            rows_by_type.setdefault(task_type, []).append(row)
+    required = [
+        ("explain", "Explain", "解释"),
+        ("derive", "Derive", "推导"),
+        ("reproduce", "Reproduce", "复现"),
+        ("critique", "Critique", "批判"),
+    ]
+    items: list[dict[str, Any]] = []
+    score_units = 0
+    for key, en_label, zh_label in required:
+        rows = rows_by_type.get(key, [])
+        best = max(rows, key=lambda row: _coerce_nonnegative_int(row.get("evidence_count")), default={})
+        evidence_count = _coerce_nonnegative_int(best.get("evidence_count"))
+        if evidence_count > 0:
+            status = "ready"
+            score_units += 2
+        elif best:
+            status = "needs_evidence"
+            score_units += 1
+        else:
+            status = "missing"
+        items.append(
+            {
+                "gate": zh_label if is_zh else en_label,
+                "key": key,
+                "status": status,
+                "task": best.get("label") or _coverage_default_mastery_task(key, is_zh),
+                "evidence_count": evidence_count,
+                "href": best.get("href") or _coverage_task_href(key, roadmap),
+                "action": _coverage_mastery_next_action(key, status, is_zh),
+            }
+        )
+    total_units = len(required) * 2
+    return {"score": _coverage_percent(score_units, total_units), "items": items}
+
+
+def _append_mastery_readiness_scorecard(output: list[str], readiness: dict[str, Any], is_zh: bool) -> None:
+    output.extend([f"## {'掌握就绪评分卡' if is_zh else 'Mastery Readiness Scorecard'}", ""])
+    items = readiness.get("items") if isinstance(readiness.get("items"), list) else []
+    output.append(
+        "- "
+        + (
+            f"总体就绪度：{_coerce_nonnegative_int(readiness.get('score'))}%。四个门槛都通过，才算真正掌握。"
+            if is_zh
+            else f"Overall readiness: {_coerce_nonnegative_int(readiness.get('score'))}%. The learner is not done until all four gates are checkable."
+        )
+    )
+    output.append("")
+    output.extend(
+        [
+            "| {gate} | {status} | {task} | {evidence} | {next_step} |".format(
+                gate="门槛" if is_zh else "Gate",
+                status="状态" if is_zh else "Status",
+                task="对应任务" if is_zh else "Linked task",
+                evidence="证据数" if is_zh else "Evidence",
+                next_step="下一步" if is_zh else "Next action",
+            ),
+            "| --- | --- | --- | ---: | --- |",
+        ]
+    )
+    for item in items:
+        gate = _markdown_cell(item.get("gate") or "")
+        status = _markdown_cell(_coverage_mastery_status_label(str(item.get("status") or ""), is_zh))
+        task = _markdown_cell(item.get("task") or "")
+        href = _safe_markdown_href(item.get("href") or "roadmap.html#mastery-checklist-title")
+        action = _markdown_cell(item.get("action") or "")
+        output.append(
+            "| {gate} | {status} | [{task}]({href}) | {evidence} | {action} |".format(
+                gate=gate,
+                status=status,
+                task=task,
+                href=href,
+                evidence=_coerce_nonnegative_int(item.get("evidence_count")),
+                action=action,
+            )
+        )
+    output.append("")
+
+
+def _coverage_default_mastery_task(task_type: str, is_zh: bool) -> str:
+    defaults = {
+        "explain": ("Explain the core claim without notes", "不看笔记讲清核心主张"),
+        "derive": ("Trace one key mechanism or equation", "推导一个关键机制或公式"),
+        "reproduce": ("Run or outline the smallest reproduction", "运行或写出最小复现"),
+        "critique": ("Name one concrete limitation", "说出一个具体局限"),
+    }
+    en, zh = defaults.get(task_type, defaults["explain"])
+    return zh if is_zh else en
+
+
+def _coverage_mastery_next_action(task_type: str, status: str, is_zh: bool) -> str:
+    if status == "ready":
+        return "保留证据，必要时写进汇报稿。" if is_zh else "Keep the evidence and reuse it in the presentation script."
+    if status == "needs_evidence":
+        actions = {
+            "explain": ("补一段无笔记讲解或概念笔记。", "Add a no-notes explanation or concept note."),
+            "derive": ("补一个公式、证明步骤或机制追踪。", "Add one equation, proof step, or mechanism trace."),
+            "reproduce": ("补命令输出、Notebook 结果或复现日志。", "Add a command output, notebook result, or reproduction log."),
+            "critique": ("补失败情形、适用边界或反例。", "Add a failure case, boundary, or counterexample."),
+        }
+        zh, en = actions.get(task_type, actions["explain"])
+        return zh if is_zh else en
+    return "先生成或补齐这个掌握任务。" if is_zh else "Create this mastery task first."
+
+
+def _coverage_mastery_status_label(status: str, is_zh: bool) -> str:
+    labels = {
+        "ready": ("Ready", "已可验收"),
+        "needs_evidence": ("Needs evidence", "缺证据"),
+        "missing": ("Missing", "缺任务"),
+    }
+    en, zh = labels.get(status, labels["missing"])
+    return zh if is_zh else en
+
+
 def _append_measured_coverage_score(output: list[str], scores: list[dict[str, Any]], is_zh: bool) -> None:
     output.extend([f"## {'可量化覆盖分数' if is_zh else 'Measured Coverage Score'}", ""])
     if not scores:
@@ -3122,6 +3249,7 @@ def _coverage_task_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, 
         rows.append(
             {
                 "label": label,
+                "task_type": task_type,
                 "status": "covered" if evidence_count else "gap",
                 "evidence_count": evidence_count,
                 "detail": detail or ("需要绑定资料或证据片段" if is_zh else "Needs linked resources or evidence snippets"),

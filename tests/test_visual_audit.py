@@ -1669,6 +1669,9 @@ def _write_evidence_coverage_file(root: Path) -> None:
         "| Resource Library | 1 | 1 | [roadmap.html#resource-library](roadmap.html#resource-library) |\n\n"
         "## Evidence Source Diagnostics\n\n| Source | Coverage | Backed | Expected | Next diagnostic step |\n| --- | ---: | ---: | ---: | --- |\n"
         "| [RAG/resource chunks](roadmap.html#resource-library) | 100% | 1 | 1 | Keep indexing resources. |\n\n"
+        "## Mastery Readiness Scorecard\n\n- Overall readiness: 100%. The learner is not done until all four gates are checkable.\n\n"
+        "| Gate | Status | Linked task | Evidence | Next action |\n| --- | --- | --- | ---: | --- |\n"
+        "| Explain | Ready | [Explain](roadmap.html#mastery-checklist-title) | 1 | Keep the evidence. |\n\n"
         "## Measured Coverage Score\n\n| Surface | Score | Covered | Total | Next action |\n| --- | ---: | ---: | ---: | --- |\n"
         "| [Resource Library](roadmap.html#resource-library) | 100% | 1 | 1 | Keep as release evidence. |\n\n"
         "## Priority Evidence Queue\n\n- No high-priority evidence gaps remain.\n\n"
@@ -1679,7 +1682,7 @@ def _write_evidence_coverage_file(root: Path) -> None:
     (root / "evidence_coverage.html").write_text(
         "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\"></head>"
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}@media (max-width: 820px){body{max-width:100%}}</style>"
-        "<body><h1>Evidence Coverage Dashboard</h1><section>Evidence Source Diagnostics</section></body></html>",
+        "<body><h1>Evidence Coverage Dashboard</h1><section>Evidence Source Diagnostics</section><section>Mastery Readiness Scorecard</section></body></html>",
         encoding="utf-8",
     )
 
@@ -1727,6 +1730,9 @@ def test_portable_evidence_coverage_gate_rejects_private_paths_and_missing_paper
         "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n| Paper Map | 1 | 1 | [paper_map.html](paper_map.html) |\n\n"
         "## Evidence Source Diagnostics\n\n| Source | Coverage | Backed | Expected | Next diagnostic step |\n| --- | ---: | ---: | ---: | --- |\n"
         "| [Target-paper logic claims](paper_map.html) | 100% | 1 | 1 | Keep source snippets. |\n\n"
+        "## Mastery Readiness Scorecard\n\n- Overall readiness: 100%. The learner is not done until all four gates are checkable.\n\n"
+        "| Gate | Status | Linked task | Evidence | Next action |\n| --- | --- | --- | ---: | --- |\n"
+        "| Explain | Ready | [Explain](roadmap.html#mastery-checklist-title) | 1 | Keep the evidence. |\n\n"
         "## Measured Coverage Score\n\n| Surface | Score | Covered | Total | Next action |\n| --- | ---: | ---: | ---: | --- |\n| [Paper Map](paper_map.html) | 100% | 1 | 1 | Keep as release evidence. |\n\n"
         "## Priority Evidence Queue\n\n- No high-priority evidence gaps remain.\n\n"
         "## Paper Logic Coverage\n\n| Item | Status | Evidence | Why it matters |\n| --- | --- | ---: | --- |\n| [Problem](paper_map.html) | covered | 1 | Source-backed. |\n\n"
@@ -1742,7 +1748,7 @@ def test_portable_evidence_coverage_gate_rejects_private_paths_and_missing_paper
     (tmp_path / "evidence_coverage.html").write_text(
         "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\">"
         "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}@media (max-width: 820px){body{max-width:100%}}</style></head>"
-        "<body><h1>Evidence Coverage Dashboard</h1><section>Evidence Source Diagnostics</section></body></html>",
+        "<body><h1>Evidence Coverage Dashboard</h1><section>Evidence Source Diagnostics</section><section>Mastery Readiness Scorecard</section></body></html>",
         encoding="utf-8",
     )
 

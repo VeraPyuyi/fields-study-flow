@@ -447,6 +447,10 @@ def test_evidence_coverage_markdown_tracks_claims_tasks_resources_and_redacts_pa
     assert "[Target-paper logic claims](paper_map.html#limitation)" in markdown
     assert "[Reading paragraphs](paper_lens.html#detail-1)" in markdown
     assert "[Local notes and notebooks](study-assets/notes.md)" in markdown
+    assert "## Mastery Readiness Scorecard" in markdown
+    assert "Overall readiness: 25%" in markdown
+    assert "| Explain | Ready |" in markdown
+    assert "| Derive | Missing |" in markdown
     assert "## Measured Coverage Score" in markdown
     assert "## Priority Evidence Queue" in markdown
     assert "## Paper Logic Coverage" in markdown
@@ -472,6 +476,8 @@ def test_evidence_coverage_field_route_uses_roadmap_links_without_paper_pages():
     assert "paper_map.html" not in markdown
     assert "paper_lens.html" not in markdown
     assert "## Evidence Source Diagnostics" in markdown
+    assert "## Mastery Readiness Scorecard" in markdown
+    assert "Overall readiness: 25%" in markdown
     assert "Target-paper logic claims" not in markdown
     assert "Reading paragraphs" not in markdown
     assert "[RAG/resource chunks](https://example.com/diffusion)" in markdown
@@ -509,6 +515,7 @@ def test_evidence_coverage_html_renders_dashboard_and_redacts_private_paths():
     assert "<!doctype html>" in html
     assert "Evidence Coverage Dashboard" in html
     assert "Evidence Source Diagnostics" in html
+    assert "Mastery Readiness Scorecard" in html
     assert "<table>" in html
     assert 'href="study-assets/attention.pdf"' in html
     assert 'href="https://example.com/read?paper=1&amp;src=test"' in html
