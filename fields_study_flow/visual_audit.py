@@ -65,6 +65,7 @@ def build_report_audit(report_dir: Path | str, roadmap: dict[str, Any]) -> dict[
     root = Path(report_dir)
     surfaces = _report_surfaces(root)
     visual_audit = audit_report_directory(root)
+    export_consistency = _export_consistency(root, roadmap, surfaces)
     experience_risks = _experience_risks(root, roadmap, surfaces, visual_audit)
     fresh_user_flow = _fresh_user_flow(root, roadmap, surfaces)
     viewport_risks = _viewport_risks(root, roadmap, surfaces, visual_audit)
@@ -75,6 +76,7 @@ def build_report_audit(report_dir: Path | str, roadmap: dict[str, Any]) -> dict[
         "recommended_first_action": _recommended_first_action(roadmap, surfaces),
         "surfaces": surfaces,
         "visual_audit": visual_audit,
+        "export_consistency": export_consistency,
         "experience_risks": experience_risks,
         "fresh_user_flow": fresh_user_flow,
         "viewport_risks": viewport_risks,
@@ -89,6 +91,7 @@ def build_report_audit(report_dir: Path | str, roadmap: dict[str, Any]) -> dict[
             viewport_risks,
             visual_snapshot_matrix,
             competitive_benchmark,
+            export_consistency,
         ),
     }
 
@@ -1061,6 +1064,105 @@ def _load_json_file(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return data if isinstance(data, dict) else {}
+
+
+def _extract_frontend_payload(html: str) -> dict[str, Any]:
+    match = FIELDS_STUDY_FLOW_DATA_RE.search(html)
+    if not match:
+        return {}
+    try:
+        data = json.loads(match.group(1))
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _export_consistency(root: Path, roadmap: dict[str, Any], surfaces: list[str]) -> dict[str, Any]:
+    roadmap_json = _load_json_file(root / "roadmap.json")
+    reference = roadmap_json or roadmap
+    outputs = set(str(item) for item in reference.get("outputs", []) if item)
+    checks: list[dict[str, str]] = []
+    checks.append(
+        _experience_check(
+            "roadmap_json_present",
+            "roadmap.json exists and is parseable",
+            bool(roadmap_json),
+            "Regenerate the report so roadmap.json can serve as the canonical exported payload.",
+        )
+    )
+    expected_pages = {"index.html", "roadmap.html"}
+    if reference.get("paper_map"):
+        expected_pages.add("paper_map.html")
+    if reference.get("paper_lens"):
+        expected_pages.add("paper_lens.html")
+    for page in sorted(expected_pages):
+        checks.append(
+            _experience_check(
+                f"expected_page:{page}",
+                f"{page} exists for the current roadmap",
+                page in surfaces and (root / page).exists(),
+                f"Regenerate or remove stale outputs so {page} matches the current roadmap.json.",
+            )
+        )
+    stale_pages = []
+    if not reference.get("paper_map") and "paper_map.html" in surfaces:
+        stale_pages.append("paper_map.html")
+    if not reference.get("paper_lens") and "paper_lens.html" in surfaces:
+        stale_pages.append("paper_lens.html")
+    checks.append(
+        _experience_check(
+            "no_stale_companion_pages",
+            "No stale paper companion pages are present",
+            not stale_pages,
+            "Remove stale paper_map.html/paper_lens.html when the current route has no matching paper data.",
+        )
+    )
+    for page in ("paper_map.html", "paper_lens.html", "roadmap.html"):
+        if page not in surfaces:
+            continue
+        payload = _extract_frontend_payload(_read_text(root / page))
+        expected_kind = page.removesuffix(".html")
+        checks.append(
+            _experience_check(
+                f"payload_kind:{page}",
+                f"{page} embedded payload matches its report kind",
+                not payload or payload.get("reportKind") == expected_kind,
+                f"Rebuild {page} so its fields-study-flow-data reportKind is {expected_kind}.",
+            )
+        )
+        payload_roadmap = payload.get("roadmap") if isinstance(payload.get("roadmap"), dict) else {}
+        if payload_roadmap:
+            checks.append(
+                _experience_check(
+                    f"payload_paper_map:{page}",
+                    f"{page} paper_map payload matches roadmap.json",
+                    bool(payload_roadmap.get("paper_map")) == bool(reference.get("paper_map")),
+                    "Rebuild HTML pages after changing paper_map generation or disabling the Paper Map.",
+                )
+            )
+            checks.append(
+                _experience_check(
+                    f"payload_paper_lens:{page}",
+                    f"{page} paper_lens payload matches roadmap.json",
+                    bool(payload_roadmap.get("paper_lens")) == bool(reference.get("paper_lens")),
+                    "Rebuild HTML pages after changing paper_lens generation or disabling the Paper Lens.",
+                )
+            )
+    missing_outputs = sorted(page for page in expected_pages if outputs and page not in outputs)
+    checks.append(
+        _experience_check(
+            "outputs_match_expected_pages",
+            "roadmap.json outputs list the current report pages",
+            not missing_outputs,
+            "Update roadmap.json outputs so learners and MCP clients see the same report pages.",
+        )
+    )
+    warnings = [item for item in checks if item["status"] == "warn"]
+    return {
+        "status": "warn" if warnings else "pass",
+        "summary": {"checks": len(checks), "warnings": len(warnings), "stale_pages": stale_pages},
+        "checks": checks,
+    }
 
 
 def _market_sample_summary(root: Path) -> dict[str, Any]:
@@ -2817,13 +2919,13 @@ def _report_surfaces(root: Path) -> list[str]:
 def _recommended_first_action(roadmap: dict[str, Any], surfaces: list[str]) -> dict[str, str]:
     language = str((roadmap.get("profile") or {}).get("output_language") or "").lower()
     is_zh = language.startswith("zh")
-    if roadmap.get("paper_map") or "paper_map.html" in surfaces:
+    if roadmap.get("paper_map") and "paper_map.html" in surfaces:
         return {
             "href": "paper_map.html",
             "label": "进入论文逻辑图" if is_zh else "Open Paper Map",
             "reason": "先用图形主链抓住论文背景、动机、方法、实验和贡献。" if is_zh else "Start with the visual logic chain before deep reading.",
         }
-    if roadmap.get("paper_lens") or "paper_lens.html" in surfaces:
+    if roadmap.get("paper_lens") and "paper_lens.html" in surfaces:
         return {
             "href": "paper_lens.html",
             "label": "进入段落精读" if is_zh else "Open Paper Lens",
@@ -2851,6 +2953,7 @@ def _market_readiness(
     viewport_risks: dict[str, Any] | None = None,
     visual_snapshot_matrix: dict[str, Any] | None = None,
     competitive_benchmark: dict[str, Any] | None = None,
+    export_consistency: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     dimensions = [
         _onboarding_dimension(roadmap, surfaces, visual_audit),
@@ -2865,6 +2968,7 @@ def _market_readiness(
     warning_count += int(((viewport_risks or {}).get("summary") or {}).get("warnings") or 0)
     warning_count += int(((visual_snapshot_matrix or {}).get("summary") or {}).get("warnings") or 0)
     warning_count += int(((competitive_benchmark or {}).get("summary") or {}).get("warnings") or 0)
+    warning_count += int(((export_consistency or {}).get("summary") or {}).get("warnings") or 0)
     score = max(0, round(sum(item["score"] for item in dimensions) / max(len(dimensions), 1)) - min(warning_count * 5, 20))
     blockers = [item for item in dimensions if item["score"] < 60]
     risk_statuses = {

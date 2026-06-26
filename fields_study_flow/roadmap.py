@@ -787,6 +787,8 @@ def write_outputs(
     if "report_audit.json" not in outputs:
         insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
         outputs.insert(insert_at, "report_audit.json")
+    if "roadmap.html" not in outputs:
+        outputs.append("roadmap.html")
     if "study_cards.md" not in outputs:
         outputs.append("study_cards.md")
     if "study_quiz.md" not in outputs:

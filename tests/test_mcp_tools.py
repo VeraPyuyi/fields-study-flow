@@ -275,6 +275,102 @@ def test_export_plan_writes_paper_lens_and_map_when_plan_has_target_paper(tmp_pa
     assert exported["paper_map"]["layout"]["kind"] == "xmind-flow"
 
 
+def test_export_plan_removes_stale_paper_pages_when_next_plan_has_no_target_paper(tmp_path):
+    paper_plan = {
+        "title": "Learning Roadmap: Planning Paper",
+        "profile": {"goal": "Planning paper", "output_language": "en", "resource_language_preference": "balanced"},
+        "path_strategy": {"mode": "fastest", "estimated_total_time": "2h", "selected_resources": 1, "candidate_resources": 1},
+        "phases": [
+            {
+                "name": "Phase 1",
+                "objective": "Read the target paper.",
+                "estimated_time": "2h",
+                "resources": [
+                    {
+                        "title": "Planning paper",
+                        "url": "local://planning-paper",
+                        "source": "local-library",
+                        "type": "paper",
+                        "language": "en",
+                        "difficulty": "advanced",
+                        "estimated_time": "2h",
+                        "trust_score": 0.9,
+                        "critical_path_role": "core-paper",
+                        "concepts": ["planning"],
+                        "learning_key_points": ["planning method"],
+                        "focus_areas": ["method"],
+                        "why_recommended": "Target paper.",
+                        "license_or_access_note": "User-provided metadata.",
+                        "translation_note": "",
+                        "metadata": {
+                            "target_paper": True,
+                            "paper_metadata": {
+                                "title": "Planning paper",
+                                "abstract_snippet": "A paper about planning.",
+                                "sections": ["Introduction", "Method", "Experiments"],
+                                "metadata_status": "ok",
+                            },
+                        },
+                    }
+                ],
+            }
+        ],
+        "checkpoints": ["Explain the planning method."],
+        "safety_policy": ["Do not expose private paths."],
+    }
+    first = exportPlan(paper_plan, str(tmp_path))
+    assert "paper_map_html" in first
+    assert "paper_lens_html" in first
+    assert (tmp_path / "paper_map.html").exists()
+    assert (tmp_path / "paper_lens.html").exists()
+
+    field_plan = {
+        "title": "Learning Roadmap: Diffusion Field",
+        "profile": {"goal": "learn diffusion models", "output_language": "en", "resource_language_preference": "balanced", "target_kind": "field"},
+        "path_strategy": {"mode": "balanced", "estimated_total_time": "4h", "selected_resources": 1, "candidate_resources": 1},
+        "phases": [
+            {
+                "name": "Phase 1",
+                "objective": "Study a field overview.",
+                "estimated_time": "4h",
+                "resources": [
+                    {
+                        "title": "Diffusion overview",
+                        "url": "https://example.com/diffusion",
+                        "source": "web",
+                        "type": "article",
+                        "language": "en",
+                        "difficulty": "intermediate",
+                        "estimated_time": "1h",
+                        "trust_score": 0.7,
+                        "critical_path_role": "background",
+                        "concepts": ["diffusion models"],
+                        "learning_key_points": ["diffusion overview"],
+                        "focus_areas": ["concepts"],
+                        "why_recommended": "Field overview.",
+                        "license_or_access_note": "Open web link.",
+                        "translation_note": "",
+                    }
+                ],
+            }
+        ],
+        "checkpoints": ["Explain diffusion at a high level."],
+        "safety_policy": ["Use public links only."],
+    }
+    second = exportPlan(field_plan, str(tmp_path))
+
+    exported = json.loads((tmp_path / "roadmap.json").read_text(encoding="utf-8"))
+    audit = json.loads((tmp_path / "report_audit.json").read_text(encoding="utf-8"))
+    assert "paper_map_html" not in second
+    assert "paper_lens_html" not in second
+    assert not (tmp_path / "paper_map.html").exists()
+    assert not (tmp_path / "paper_lens.html").exists()
+    assert "paper_map.html" not in exported.get("outputs", [])
+    assert "paper_lens.html" not in exported.get("outputs", [])
+    assert audit["recommended_first_action"]["href"] == "roadmap.html"
+    assert audit["export_consistency"]["status"] == "pass"
+
+
 def test_export_plan_writes_generated_artifact_template(tmp_path):
     plan = {
         "title": "Learning Roadmap: Diffusion Project",

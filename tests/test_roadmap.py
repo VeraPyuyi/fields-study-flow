@@ -207,6 +207,7 @@ def test_write_outputs_writes_paper_lens_for_target_paper(tmp_path):
     assert (tmp_path / "paper_lens.html").exists()
     report_audit = json.loads((tmp_path / "report_audit.json").read_text(encoding="utf-8"))
     assert report_audit["visual_audit"]["status"] == "pass"
+    assert report_audit["export_consistency"]["status"] == "pass"
     assert report_audit["recommended_first_action"]["href"] == "paper_map.html"
     assert "paper_lens.html" in report_audit["surfaces"]
     index_html = (tmp_path / "index.html").read_text(encoding="utf-8")

@@ -192,6 +192,95 @@ def test_cli_audit_report_refreshes_report_audit_json_when_roadmap_exists(tmp_pa
     assert refreshed["recommended_first_action"]["href"] == "roadmap.html"
 
 
+def test_build_report_audit_warns_about_stale_paper_pages_and_skips_them_as_first_action(tmp_path):
+    roadmap = {
+        "title": "Field route",
+        "profile": {"output_language": "en", "target_kind": "field"},
+        "outputs": ["index.html", "roadmap.html", "report_audit.json"],
+        "study_tasks": [{"type": "explain", "title": "Explain diffusion"}],
+    }
+    (tmp_path / "roadmap.json").write_text(json.dumps(roadmap), encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel "
+        "Why this is more than a PDF summarizer roadmap.html</body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "roadmap.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        '<body><div data-report-kind="roadmap">learning console mastery</div>'
+        '<script type="application/json" id="fields-study-flow-data">'
+        '{"reportKind":"roadmap","roadmap":{"title":"Field route","outputs":["index.html","roadmap.html"]}}'
+        "</script></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "paper_map.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        '<body><div data-report-kind="paper_map">Old Paper Map</div></body></html>',
+        encoding="utf-8",
+    )
+
+    audit = build_report_audit(tmp_path, roadmap)
+
+    assert audit["recommended_first_action"]["href"] == "roadmap.html"
+    assert audit["export_consistency"]["status"] == "warn"
+    assert "paper_map.html" in audit["export_consistency"]["summary"]["stale_pages"]
+    checks = {item["id"]: item["status"] for item in audit["export_consistency"]["checks"]}
+    assert checks["no_stale_companion_pages"] == "warn"
+
+
+def test_build_report_audit_warns_when_embedded_payload_does_not_match_report(tmp_path):
+    roadmap = {
+        "title": "Paper route",
+        "profile": {"output_language": "en", "target_kind": "paper"},
+        "paper_map": {"nodes": [{"id": "target"}]},
+        "paper_lens": {"segments": [{"id": "seg-1"}]},
+        "outputs": ["index.html", "roadmap.html", "paper_map.html", "paper_lens.html", "report_audit.json"],
+    }
+    (tmp_path / "roadmap.json").write_text(json.dumps(roadmap), encoding="utf-8")
+    base_head = '<!doctype html><html><head><meta name="viewport" content="width=device-width"><style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>'
+    (tmp_path / "index.html").write_text(
+        base_head
+        + "<body>Start Here Bring Your Own Paper 10-minute quickstart data-market-value-panel "
+        + "Why this is more than a PDF summarizer paper_map.html paper_lens.html roadmap.html</body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "roadmap.html").write_text(
+        base_head
+        + '<body><div data-report-kind="roadmap">learning console mastery</div>'
+        + '<script type="application/json" id="fields-study-flow-data">'
+        + json.dumps({"reportKind": "roadmap", "roadmap": roadmap})
+        + "</script></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "paper_map.html").write_text(
+        base_head
+        + '<body><div data-report-kind="paper_map">Reading Density Core Chain Full Exploration</div>'
+        + '<script type="application/json" id="fields-study-flow-data">'
+        + json.dumps({"reportKind": "roadmap", "roadmap": {"title": "Paper route", "paper_lens": roadmap["paper_lens"]}})
+        + "</script></body></html>",
+        encoding="utf-8",
+    )
+    (tmp_path / "paper_lens.html").write_text(
+        base_head
+        + '<body><div data-report-kind="paper_lens">paragraph evidence</div>'
+        + '<script type="application/json" id="fields-study-flow-data">'
+        + json.dumps({"reportKind": "paper_lens", "roadmap": roadmap})
+        + "</script></body></html>",
+        encoding="utf-8",
+    )
+
+    audit = build_report_audit(tmp_path, roadmap)
+
+    checks = {item["id"]: item["status"] for item in audit["export_consistency"]["checks"]}
+    assert audit["export_consistency"]["status"] == "warn"
+    assert checks["payload_kind:paper_map.html"] == "warn"
+    assert checks["payload_paper_map:paper_map.html"] == "warn"
+
+
 def test_evaluate_fresh_user_timing_measures_time_to_first_mastery_task():
     fast = evaluate_fresh_user_timing(7.5, target_minutes=10)
     slow = evaluate_fresh_user_timing(12.25, target_minutes=10)

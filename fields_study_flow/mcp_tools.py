@@ -309,6 +309,8 @@ def exportPlan(
     if "report_audit.json" not in outputs:
         insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
         outputs.insert(insert_at, "report_audit.json")
+    if "roadmap.html" not in outputs:
+        outputs.append("roadmap.html")
     if "study_cards.md" not in outputs:
         outputs.append("study_cards.md")
     if "study_quiz.md" not in outputs:
@@ -342,6 +344,13 @@ def exportPlan(
     html_target = output / "roadmap.html"
     map_target = output / "paper_map.html"
     lens_target = output / "paper_lens.html"
+    if not public_plan.get("paper_map"):
+        _remove_stale_export_file(map_target)
+        public_plan["outputs"] = [item for item in public_plan.get("outputs", []) if item != "paper_map.html"]
+    if not public_plan.get("paper_lens"):
+        for stale_name in ("paper_lens.html", "paper_lens.tex", "paper_lens.pdf"):
+            _remove_stale_export_file(output / stale_name)
+        public_plan["outputs"] = [item for item in public_plan.get("outputs", []) if item not in {"paper_lens.html", "paper_lens.tex", "paper_lens.pdf"}]
     if public_plan.get("paper_lens"):
         latex_export = write_paper_lens_latex(output, public_plan)
         if latex_export:
@@ -405,6 +414,11 @@ def exportPlan(
     if public_plan.get("generated_artifacts"):
         result["artifact_template"] = str(output / "artifact_template")
     return result
+
+
+def _remove_stale_export_file(target: Path) -> None:
+    if target.exists() and target.is_file():
+        target.unlink()
 
 
 def _profile_from_dict(data: dict[str, Any]) -> LearnerProfile:
