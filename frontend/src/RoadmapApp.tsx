@@ -65,15 +65,117 @@ function countByStatus(resources: ResourceLink[], status: string) {
   return resources.filter((resource) => resource.status === status).length;
 }
 
-function buildMasteryWorksheet(roadmap: Roadmap, tasks: StudyTask[], completedTaskIds: Set<string>) {
-  const title = roadmap.title || roadmap.profile?.goal || "fields-study-flow 学习路线";
+const PORTABLE_PRIVATE_PATH_PATTERN = /(?:file:\/\/[^\s)\]}"'<]+|[A-Za-z]:[\\/][^)\]}"'<\r\n]+|\/(?:Users|home)\/[^)\]}"'<\r\n]+)/;
+const PORTABLE_PRIVATE_PATH_PATTERN_GLOBAL = /(?:file:\/\/[^\s)\]}"'<]+|[A-Za-z]:[\\/][^)\]}"'<\r\n]+|\/(?:Users|home)\/[^)\]}"'<\r\n]+)/g;
+
+function portableWorksheetText(value: unknown) {
+  return String(value || "").replace(PORTABLE_PRIVATE_PATH_PATTERN_GLOBAL, "[private path]").replace(/\r|\n/g, " ").trim();
+}
+
+function portableWorksheetHref(value: unknown) {
+  const href = String(value || "").trim();
+  if (!href || PORTABLE_PRIVATE_PATH_PATTERN.test(href)) return "";
+  return href.replace(/ /g, "%20");
+}
+
+function portableResourceTitle(resource: ResourceLink) {
+  return portableWorksheetText(resource.title || resource.label || "资料");
+}
+
+function portableResourceEvidenceByTitle(resources: ResourceLink[]) {
+  const byTitle = new Map<string, Array<{ chunk: Evidence; resource: ResourceLink }>>();
+  resources.forEach((resource) => {
+    const title = portableResourceTitle(resource);
+    if (!title) return;
+    const chunks = evidenceChunkCandidates(resource).filter(isTraceableEvidenceChunk).map((chunk) => chunk as Evidence);
+    if (!chunks.length) return;
+    const key = title.toLowerCase();
+    const existing = byTitle.get(key) || [];
+    chunks.forEach((chunk) => existing.push({ chunk, resource }));
+    byTitle.set(key, existing);
+  });
+  return byTitle;
+}
+
+function portableEvidenceLabel(chunk: Evidence, fallbackTitle: string) {
+  const record = chunk as Record<string, unknown>;
+  return portableWorksheetText(chunk.resource_title || chunk.file_name || chunk.source_title || record.title || fallbackTitle || "证据片段");
+}
+
+function portableEvidenceLines(chunks: Evidence[] = [], fallbackResource?: ResourceLink) {
+  const resource = fallbackResource || ({} as ResourceLink);
+  return chunks
+    .filter(isTraceableEvidenceChunk)
+    .slice(0, 2)
+    .map((chunk) => {
+      const fallbackTitle = fallbackResource ? portableResourceTitle(fallbackResource) : "证据片段";
+      const label = portableEvidenceLabel(chunk, fallbackTitle);
+      const href = portableWorksheetHref(evidenceReviewHref(chunk, resource));
+      const linkedLabel = href ? `[${label}](${href})` : label;
+      const snippet = portableWorksheetText(chunk.snippet || chunk.text || chunk.note || "");
+      return snippet ? `- ${linkedLabel}: ${snippet}` : `- ${linkedLabel}`;
+    });
+}
+
+function portableResourceAnchorLines(resourceTitles: string[], resources: ResourceLink[]) {
+  const evidenceByTitle = portableResourceEvidenceByTitle(resources);
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  resourceTitles.forEach((title) => {
+    const matches = evidenceByTitle.get(String(title || "").trim().toLowerCase()) || [];
+    matches.slice(0, 1).forEach(({ chunk, resource }) => {
+      portableEvidenceLines([chunk], resource).forEach((line) => {
+        if (seen.has(line)) return;
+        seen.add(line);
+        lines.push(line);
+      });
+    });
+  });
+  return lines.slice(0, 3);
+}
+
+function portableReadyCheckpointLines(taskType?: string) {
+  const common = [
+    "- [ ] 我能在 90 秒内不用笔记讲清这一步。",
+    "- [ ] 我能指向上方至少一条来源锚点。",
+    "- [ ] 我写下了还不确定的地方或需要复核的条件。",
+  ];
+  const specific: Record<string, string> = {
+    explain: "- [ ] 听众能复述论文主张、动机和方法主线。",
+    derive: "- [ ] 我能逐步说明公式、机制或推理链为什么成立。",
+    reproduce: "- [ ] 我留下了命令、notebook、日志或最小实验结果。",
+    critique: "- [ ] 我能说出一个具体边界、失败情形或反例。",
+  };
+  const line = specific[String(taskType || "").toLowerCase()];
+  return line ? [...common, line] : common;
+}
+
+function portableDedupeLines(lines: string[]) {
+  const output: string[] = [];
+  const seen = new Set<string>();
+  lines.forEach((line) => {
+    if (seen.has(line)) return;
+    seen.add(line);
+    output.push(line);
+  });
+  return output;
+}
+
+function buildPortableMasteryWorksheet(
+  roadmap: Roadmap,
+  tasks: StudyTask[],
+  completedTaskIds: Set<string>,
+  resources: ResourceLink[],
+) {
+  const title = portableWorksheetText(roadmap.title || roadmap.profile?.goal || "fields-study-flow 学习路线");
   const completed = tasks.filter((task, index) => completedTaskIds.has(taskId(task, index))).length;
   const lines = [
-    `# ${title} 掌握证据清单`,
+    `# ${title} - 掌握证据工作表`,
     "",
-    `- 学习目标：${roadmap.profile?.goal || title}`,
+    `- 学习目标：${portableWorksheetText(roadmap.profile?.goal || title)}`,
     `- 当前进度：${completed}/${tasks.length}`,
     "- 使用方式：每完成一项任务，就在“我的证据”下面填写讲解、推导、实验输出、截图、Notebook 链接或批判笔记。",
+    "- 汇报就绪规则 / Ready-to-present rule: 每个槽位至少要有一条可回看的来源锚点、一段自己的答案，以及一个复核结论。",
     "",
   ];
   if (!tasks.length) {
@@ -84,19 +186,41 @@ function buildMasteryWorksheet(roadmap: Roadmap, tasks: StudyTask[], completedTa
     const id = taskId(task, index);
     const status = completedTaskIds.has(id) ? "已完成" : "待完成";
     const type = TASK_TYPE_LABELS[task.type || ""] || task.type || "任务";
-    const resources = (task.resource_titles ?? []).length ? (task.resource_titles ?? []).join(" / ") : "未绑定资料";
+    const resourceTitles = (task.resource_titles ?? []).map(portableWorksheetText).filter(Boolean);
+    const resourceLabel = resourceTitles.length ? resourceTitles.join(" / ") : "未绑定资料";
+    const anchorLines = portableDedupeLines([
+      ...portableEvidenceLines(task.evidence_chunks || []),
+      ...portableResourceAnchorLines(resourceTitles, resources),
+    ]);
     lines.push(
-      `## ${index + 1}. ${task.title || `验收任务 ${index + 1}`}`,
+      `## ${index + 1}. ${portableWorksheetText(task.title || `验收任务 ${index + 1}`)}`,
       "",
       `- 类型：${type}`,
       `- 状态：${status}`,
       `- 预计耗时：${task.estimated_minutes ? `${task.estimated_minutes} 分钟` : "待估计"}`,
-      `- 相关资料：${resources}`,
-      `- 验收标准：${task.acceptance || "能解释给别人听，并能回到论文证据。"}`,
-      `- 任务证据要求：${task.evidence || "完成后留下可复查的学习证据。"}`,
+      `- 相关资料：${resourceLabel}`,
+      `- 验收标准：${portableWorksheetText(task.acceptance || "能解释给别人听，并能回到论文证据。")}`,
+      `- 任务证据要求：${portableWorksheetText(task.evidence || "完成后留下可复查的学习证据。")}`,
       "",
-      "我的证据：",
+      "**可引用来源锚点 / Source anchors to use**",
+      "",
+      ...(anchorLines.length
+        ? anchorLines
+        : ["- 暂未绑定可回看的证据片段；先打开上面的资料，补一条页码、段落或本地文件锚点。"]),
+      "",
+      "**汇报就绪检查 / Ready-to-present checkpoint**",
+      "",
+      ...portableReadyCheckpointLines(task.type),
+      "",
+      "**我的证据 / My Evidence**",
+      "",
       "- ",
+      "",
+      "**来源 / 文件 / 页码**",
+      "",
+      "- ",
+      "",
+      "**复核结果**：通过 / 需要修改 / 证据不足",
       "",
     );
   });
@@ -736,8 +860,8 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
   const completedTaskCount = studyTasks.filter((task, index) => completedTaskIds.has(taskId(task, index))).length;
   const taskProgressRate = studyTasks.length ? Math.round((completedTaskCount / studyTasks.length) * 100) : 0;
   const masteryWorksheet = useMemo(
-    () => buildMasteryWorksheet(roadmap, studyTasks, completedTaskIds),
-    [roadmap, studyTasks, completedTaskIds],
+    () => buildPortableMasteryWorksheet(roadmap, studyTasks, completedTaskIds, resources),
+    [roadmap, studyTasks, completedTaskIds, resources],
   );
   const masteryReadiness = useMemo(() => buildMasteryReadiness(studyTasks, resources), [resources, studyTasks]);
   const missingPhases = phases.length === 0;

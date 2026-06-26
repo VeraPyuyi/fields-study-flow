@@ -2186,6 +2186,7 @@ def render_mastery_worksheet_markdown(roadmap: dict[str, Any]) -> str:
     final_artifact = _markdown_text(mastery.get("final_artifact") or _dict_at(roadmap, "final_artifact").get("type") or "")
     tasks = _mastery_worksheet_items(roadmap)
     resource_links = _resource_links_by_title(roadmap)
+    resource_evidence = _resource_evidence_chunks_by_title(roadmap)
     heading = "掌握证据工作表" if is_zh else "Mastery Evidence Worksheet"
     output: list[str] = [
         f"# {title} - {heading}",
@@ -2198,6 +2199,11 @@ def render_mastery_worksheet_markdown(roadmap: dict[str, Any]) -> str:
             "使用方法：每完成一项任务，就把自己的解释、推导、复现结果或批判结论写进“我的证据”，并补上来源链接或本地文件。"
             if is_zh
             else "How to use: for each task, fill in your explanation, derivation, reproduction result, or critique under My Evidence, then add the source link or local file."
+        ),
+        (
+            "汇报就绪规则：每个槽位至少要有一条可回看的来源锚点、一段自己的答案，以及一个复核结论。"
+            if is_zh
+            else "Ready-to-present rule: every slot needs at least one source anchor, one answer in your own words, and one review result."
         ),
         "",
         f"## {'快速入口' if is_zh else 'Quick Links'}",
@@ -2248,9 +2254,15 @@ def render_mastery_worksheet_markdown(roadmap: dict[str, Any]) -> str:
         else:
             output.append(f"- {'回到路线资料库选择最短路径资料。' if is_zh else 'Return to the roadmap resource library and choose the shortest-path resource.'}")
         chunk_lines = _worksheet_evidence_chunk_lines(item.get("evidence_chunks") or [], is_zh)
-        if chunk_lines:
-            output.extend(["", f"**{'可回看的原文证据' if is_zh else 'Source evidence to revisit'}**"])
-            output.extend(chunk_lines)
+        resource_anchor_lines = _worksheet_resource_anchor_lines(resources, resource_evidence, is_zh)
+        anchor_lines = _dedupe_preserve_order(chunk_lines + resource_anchor_lines)
+        output.extend(["", f"**{'可引用来源锚点' if is_zh else 'Source anchors to use'}**"])
+        if anchor_lines:
+            output.extend(anchor_lines)
+        else:
+            output.append(f"- {'暂未绑定可回看的证据片段；先打开上面的资料，补一条页码、段落或本地文件锚点。' if is_zh else 'No traceable source anchor yet; open the resource above and add one page, paragraph, or local-file anchor.'}")
+        output.extend(["", f"**{'汇报就绪检查' if is_zh else 'Ready-to-present checkpoint'}**"])
+        output.extend(_worksheet_ready_checkpoint_lines(str(item.get("task_type") or item.get("type") or ""), is_zh))
         output.extend(
             [
                 "",
@@ -2707,6 +2719,18 @@ def _resource_chunk_counts_by_title(roadmap: dict[str, Any]) -> dict[str, int]:
     return counts
 
 
+def _resource_evidence_chunks_by_title(roadmap: dict[str, Any]) -> dict[str, list[Any]]:
+    chunks_by_title: dict[str, list[Any]] = {}
+    for resource in _report_all_resource_entries(roadmap):
+        title = str(resource.get("title") or resource.get("resource_title") or "").strip()
+        if not title:
+            continue
+        chunks = _resource_evidence_chunks(resource)
+        if chunks:
+            chunks_by_title.setdefault(title.casefold(), []).extend(chunks)
+    return chunks_by_title
+
+
 def _resource_markdown_link(title: str, links: dict[str, str]) -> str:
     clean_title = _markdown_text(title)
     href = links.get(clean_title.casefold())
@@ -2759,6 +2783,72 @@ def _worksheet_evidence_chunk_lines(chunks: object, is_zh: bool) -> list[str]:
         else:
             lines.append(f"- {label}")
     return lines
+
+
+def _worksheet_resource_anchor_lines(resources: list[str], resource_evidence: dict[str, list[Any]], is_zh: bool) -> list[str]:
+    lines: list[str] = []
+    seen: set[str] = set()
+    for resource in resources:
+        key = str(resource or "").strip().casefold()
+        if not key:
+            continue
+        for line in _worksheet_evidence_chunk_lines(resource_evidence.get(key, [])[:1], is_zh):
+            if line in seen:
+                continue
+            seen.add(line)
+            lines.append(line)
+            break
+        if len(lines) >= 3:
+            break
+    return lines
+
+
+def _dedupe_preserve_order(lines: list[str]) -> list[str]:
+    output: list[str] = []
+    seen: set[str] = set()
+    for line in lines:
+        if line in seen:
+            continue
+        seen.add(line)
+        output.append(line)
+    return output
+
+
+def _worksheet_ready_checkpoint_lines(task_type: str, is_zh: bool) -> list[str]:
+    task_type = str(task_type or "").casefold()
+    common = (
+        [
+            "- [ ] 我能在 90 秒内不用笔记讲清这一步。",
+            "- [ ] 我能指向上方至少一条来源锚点。",
+            "- [ ] 我写下了还不确定的地方或需要复核的条件。",
+        ]
+        if is_zh
+        else [
+            "- [ ] I can explain this step in 90 seconds without notes.",
+            "- [ ] I can point to at least one source anchor above.",
+            "- [ ] I wrote down the remaining uncertainty or condition to re-check.",
+        ]
+    )
+    specific = {
+        "explain": (
+            ["- [ ] 听众能复述论文主张、动机和方法主线。"],
+            ["- [ ] A listener can restate the claim, motivation, and method chain."],
+        ),
+        "derive": (
+            ["- [ ] 我能逐步说明公式、机制或推理链为什么成立。"],
+            ["- [ ] I can walk through why the equation, mechanism, or reasoning chain holds."],
+        ),
+        "reproduce": (
+            ["- [ ] 我留下了命令、notebook、日志或最小实验结果。"],
+            ["- [ ] I left a command, notebook, log, or smallest runnable result."],
+        ),
+        "critique": (
+            ["- [ ] 我能说出一个具体边界、失败情形或反例。"],
+            ["- [ ] I can name one concrete boundary, failure case, or counterexample."],
+        ),
+    }
+    zh_lines, en_lines = specific.get(task_type, ([], []))
+    return common + (zh_lines if is_zh else en_lines)
 
 
 def _truncate_markdown(text: str, limit: int) -> str:

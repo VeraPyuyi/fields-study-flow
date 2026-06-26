@@ -183,9 +183,14 @@ describe("fields-study-flow React report app", () => {
     fireEvent.click(screen.getByLabelText("解释"));
     expect(screen.getByText("1/3 · 33%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "复制证据清单" }));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Transformer 学习路线 掌握证据清单"));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("解释核心问题"));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Copied Notebook"));
+    const copiedWorksheet = String(writeText.mock.calls[0]?.[0] || "");
+    expect(copiedWorksheet).toContain("Ready-to-present rule");
+    expect(copiedWorksheet).toContain("Source anchors to use");
+    expect(copiedWorksheet).toContain("Ready-to-present checkpoint");
+    expect(copiedWorksheet).toContain("Explains the main claim.");
+    expect(copiedWorksheet).toContain("Shows a minimal reproduction.");
+    expect(copiedWorksheet).toContain("Copied Notebook");
+    expect(copiedWorksheet).not.toContain("D:\\");
     fireEvent.click(screen.getByRole("button", { name: "下载 worksheet.md" }));
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(anchorClick).toHaveBeenCalled();

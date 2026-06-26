@@ -298,6 +298,15 @@ def test_mastery_worksheet_markdown_has_fillable_evidence_slots_and_links():
                                 "detail_anchor": "paper_lens.html#detail-seg-1",
                             }
                         ],
+                    },
+                    {
+                        "task_id": "task-2-reproduce",
+                        "task_type": "reproduce",
+                        "title": "Run the smallest reproduction",
+                        "evidence": "A notebook result or command log.",
+                        "pass_criteria": "The output can be checked later.",
+                        "resources": ["Attention Is All You Need"],
+                        "estimated_minutes": 60,
                     }
                 ],
             },
@@ -306,6 +315,17 @@ def test_mastery_worksheet_markdown_has_fillable_evidence_slots_and_links():
                     {
                         "title": "Attention Is All You Need",
                         "local_href": "study-assets/attention.pdf",
+                        "metadata": {
+                            "rag": {
+                                "evidence_chunks": [
+                                    {
+                                        "resource_title": "Attention Is All You Need",
+                                        "snippet": "The model uses stacked attention and feed-forward layers.",
+                                        "detail_anchor": "paper_lens.html#detail-seg-2",
+                                    }
+                                ]
+                            }
+                        },
                     }
                 ]
             },
@@ -314,9 +334,15 @@ def test_mastery_worksheet_markdown_has_fillable_evidence_slots_and_links():
 
     assert "# Learning Roadmap: Transformer - Mastery Evidence Worksheet" in markdown
     assert "## Evidence Slots" in markdown
+    assert "Ready-to-present rule:" in markdown
     assert "[Paper Map](paper_map.html)" in markdown
     assert "[Attention Is All You Need](study-assets/attention.pdf)" in markdown
+    assert "**Source anchors to use**" in markdown
     assert "[Attention Is All You Need](paper_lens.html#detail-seg-1)" in markdown
+    assert "[Attention Is All You Need](paper_lens.html#detail-seg-2)" in markdown
+    assert "**Ready-to-present checkpoint**" in markdown
+    assert "I can explain this step in 90 seconds without notes." in markdown
+    assert "I left a command, notebook, log, or smallest runnable result." in markdown
     assert "**My Evidence**" in markdown
     assert "C:/Users/example" not in markdown
 

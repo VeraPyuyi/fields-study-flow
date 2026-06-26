@@ -3976,9 +3976,11 @@ def _has_portable_mastery_worksheet(root: Path, html: str) -> bool:
         content = path.read_text(encoding="utf-8")
     except OSError:
         return False
-    return _contains_any_text(content, ("Mastery Evidence Worksheet", "掌握证据工作表")) and _contains_any_text(
-        content,
-        ("My Evidence", "我的证据", "Evidence Slots", "证据槽"),
+    return (
+        _contains_any_text(content, ("Mastery Evidence Worksheet", "掌握证据工作表"))
+        and _contains_any_text(content, ("My Evidence", "我的证据", "Evidence Slots", "证据槽"))
+        and _contains_any_text(content, ("Source anchors", "来源锚点"))
+        and _contains_any_text(content, ("Ready-to-present", "汇报就绪"))
     )
 
 

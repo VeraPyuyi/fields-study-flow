@@ -1738,9 +1738,43 @@ def _write_study_quiz_file(root: Path) -> None:
 
 def _write_mastery_worksheet_file(root: Path) -> None:
     (root / "mastery_worksheet.md").write_text(
-        "# Demo - Mastery Evidence Worksheet\n\n## Evidence Slots\n\n### 1. Explain\n\n**My Evidence**\n\n- \n",
+        "# Demo - Mastery Evidence Worksheet\n\n"
+        "Ready-to-present rule: every slot needs a source anchor and review result.\n\n"
+        "## Evidence Slots\n\n### 1. Explain\n\n"
+        "**Source anchors to use**\n\n- [Paper Map](paper_map.html)\n\n"
+        "**Ready-to-present checkpoint**\n\n- [ ] I can explain this step in 90 seconds without notes.\n\n"
+        "**My Evidence**\n\n- \n",
         encoding="utf-8",
     )
+
+
+def test_portable_mastery_worksheet_requires_source_anchors_and_readiness(tmp_path):
+    html = '<a href="mastery_worksheet.md">mastery_worksheet.md</a>'
+    (tmp_path / "mastery_worksheet.md").write_text(
+        "# Demo - Mastery Evidence Worksheet\n\n"
+        "## Evidence Slots\n\n"
+        "**Source anchors to use**\n\n"
+        "- [Paper Map](paper_map.html)\n\n"
+        "**My Evidence**\n\n"
+        "- \n",
+        encoding="utf-8",
+    )
+
+    assert not visual_audit._has_portable_mastery_worksheet(tmp_path, html)
+
+    (tmp_path / "mastery_worksheet.md").write_text(
+        "# Demo - Mastery Evidence Worksheet\n\n"
+        "## Evidence Slots\n\n"
+        "**Source anchors to use**\n\n"
+        "- [Paper Map](paper_map.html)\n\n"
+        "**Ready-to-present checkpoint**\n\n"
+        "- [ ] I can explain this step in 90 seconds without notes.\n\n"
+        "**My Evidence**\n\n"
+        "- \n",
+        encoding="utf-8",
+    )
+
+    assert visual_audit._has_portable_mastery_worksheet(tmp_path, html)
 
 
 def _write_quick_brief_file(root: Path) -> None:

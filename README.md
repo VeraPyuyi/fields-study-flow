@@ -46,7 +46,7 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Progressive support files: technical JSON/Markdown/SVG artifacts stay collapsed on the start page, so new learners see the learning path before implementation files.
 - Interactive learning console: `roadmap.html` contains the roadmap, draggable/zoomable KG network, right-side task guide with local progress checks, local-first resource links, multi-dimensional resource filter chips, evidence expand/collapse, and collapsible phases.
 - Resource purpose, strength, provenance, and coverage badges: roadmap resources explain whether they are primary evidence, background, implementation/reproduction help, or validation material, where they came from, which paper-logic or learning surface they cover, plus a short "why read" hint and core/support/fallback strength signal.
-- Portable mastery worksheet: every export writes `mastery_worksheet.md`, turning explain/derive/reproduce/critique tasks into a fillable, shareable evidence log with source links.
+- Portable mastery worksheet: every export writes `mastery_worksheet.md`, turning explain/derive/reproduce/critique tasks into a fillable, shareable evidence log with source anchors and ready-to-present checkpoints.
 - Study bundle start page: the local resource folder includes a Chinese-first `README.md` dashboard with a 10-minute start path, local file groups, link-only resources, and retry guidance.
 
 ## Quick Start
@@ -238,7 +238,7 @@ study-assets/
 ```
 
 When `--resource-dir` is used, downloaded/copied resources in `roadmap.html`, `paper_map.html`, `paper_lens.html`, and `roadmap.md` link to the local study bundle first. Original web links remain visible only as fallback/source links, and absolute local paths are still redacted from shareable outputs.
-The resource folder's `README.md` is meant to be opened directly: it shows bundle completion, the recommended first 10 minutes, route resources, supplemental resources, and how to retry failed downloads. Every export also includes `mastery_worksheet.md` for notes, reports, or review.
+The resource folder's `README.md` is meant to be opened directly: it shows bundle completion, the recommended first 10 minutes, route resources, supplemental resources, and how to retry failed downloads. Every export also includes `mastery_worksheet.md` for notes, reports, or review, with per-task source anchors and ready-to-present checks.
 
 Ask a question against the downloaded/copied bundle only:
 
