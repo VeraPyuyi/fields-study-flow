@@ -151,10 +151,14 @@ describe("fields-study-flow React report app", () => {
     render(<App />);
     const resourceLibrary = document.querySelector("#resource-library") as HTMLElement;
     const readinessPanel = document.querySelector("[data-roadmap-mastery-readiness]") as HTMLElement;
+    const worksheetSyncPanel = document.querySelector("[data-roadmap-worksheet-sync]") as HTMLElement;
     const readinessGates = Array.from(document.querySelectorAll("[data-roadmap-mastery-gate]"));
 
     expect(screen.getByText("学习中控台")).toBeInTheDocument();
     expect(readinessPanel).toBeInTheDocument();
+    expect(worksheetSyncPanel).toBeInTheDocument();
+    expect(worksheetSyncPanel).toHaveAttribute("data-worksheet-source-anchored", "2");
+    expect(worksheetSyncPanel).toHaveAttribute("data-worksheet-ready-slots", "0");
     expect(within(readinessPanel).getByText("63%")).toBeInTheDocument();
     expect(readinessGates).toHaveLength(4);
     expect(document.querySelector('[data-roadmap-mastery-gate="explain"]')).toHaveAttribute("data-roadmap-mastery-status", "ready");
@@ -182,6 +186,7 @@ describe("fields-study-flow React report app", () => {
     expect(screen.getByLabelText("解释")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("解释"));
     expect(screen.getByText("1/3 · 33%")).toBeInTheDocument();
+    expect(worksheetSyncPanel).toHaveAttribute("data-worksheet-ready-slots", "1");
     fireEvent.click(screen.getByRole("button", { name: "复制证据清单" }));
     const copiedWorksheet = String(writeText.mock.calls[0]?.[0] || "");
     expect(copiedWorksheet).toContain("Ready-to-present rule");

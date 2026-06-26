@@ -95,11 +95,12 @@ Source refresh on 2026-06-22:
 - The same benchmark now checks NotebookLM-style portable study outputs: a single-paper report should expose at least two usable outputs such as presentation notes, a PDF/LaTeX reading export, or concrete mastery artifacts.
 - Exports now write `mastery_worksheet.md` as a fillable evidence log, so the Get It-style mastery contract leaves the browser and can be reviewed, submitted, or pasted into a lab notebook.
 - `mastery_worksheet.md` now gives each explain/derive/reproduce/critique slot traceable source anchors and ready-to-present checkpoints, so portable mastery artifacts are easier to audit than a bare notes file.
+- `roadmap.html` now shows worksheet-readiness sync: checked tasks, source-anchored tasks, ready-to-present slots, and remaining gaps are visible before learners copy or download `mastery_worksheet.md`.
 - The local study bundle `README.md` is now a first-use dashboard with completion rate, a 10-minute start path, route/supplemental resource grouping, and retry guidance instead of a raw file list.
 
 ## Next Market-Facing Improvements
 
 1. Add checked-in golden baselines for Paper Map, Paper Lens, Roadmap, and the start page, then run them in CI whenever frontend assets or report renderers change.
 2. Promote release-history summaries into CI artifacts once the repository has checked-in visual baselines and browser interaction probes for the main report surfaces.
-3. Sync `mastery_worksheet.md` readiness status back into `roadmap.html`, so browser progress and portable review artifacts reinforce each other.
-4. Strengthen MCP `exportPlan` with the same stale companion-page cleanup used by CLI `write_outputs`, then add a direct MCP regression for disabled/missing paper pages.
+3. Strengthen MCP `exportPlan` with the same stale companion-page cleanup used by CLI `write_outputs`, then add a direct MCP regression for disabled/missing paper pages.
+4. Add a first-run prompt preset layer that can produce different report defaults for "fast presentation", "deep reproduction", and "field survey" without making beginners learn every CLI flag.

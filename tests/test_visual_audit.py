@@ -1720,6 +1720,7 @@ def _market_ready_index_marker(*, paper_entries: bool = True, evidence_edges: in
 
 
 ROADMAP_READINESS_MARKER = "data-roadmap-mastery-readiness data-roadmap-mastery-gate data-roadmap-mastery-status explain derive reproduce critique 现在离真正掌握还差什么"
+ROADMAP_WORKSHEET_SYNC_MARKER = "data-roadmap-worksheet-sync data-worksheet-ready-slots data-worksheet-source-anchored mastery_worksheet.md 验收表同步 Ready-to-present"
 
 
 def _write_study_cards_file(root: Path) -> None:
@@ -1887,7 +1888,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
         "index.html": _market_ready_index_marker(),
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
-            "roadmap.html": f"learning console mastery 1-minute start data-mastery-export 下载 worksheet {ROADMAP_READINESS_MARKER} resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据",
+            "roadmap.html": f"learning console mastery 1-minute start data-mastery-export 下载 worksheet {ROADMAP_READINESS_MARKER} {ROADMAP_WORKSHEET_SYNC_MARKER} resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -1969,6 +1970,7 @@ def test_build_report_audit_scores_market_readiness_dimensions(tmp_path):
         "paper_lens_paragraph_focus",
         "recommended_first_action_panel",
         "learning_outcome_contract",
+        "roadmap_worksheet_sync",
         "starter_questions_panel",
         "active_recall_self_check",
         "first_session_plan",
@@ -2299,6 +2301,33 @@ def test_experience_risks_require_all_roadmap_mastery_readiness_gates(tmp_path):
     assert recovered_checks["roadmap_mastery_readiness_sync"]["status"] == "pass"
 
 
+def test_experience_risks_require_roadmap_worksheet_sync(tmp_path):
+    (tmp_path / "roadmap.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        f"<body><section>{ROADMAP_READINESS_MARKER}</section></body></html>",
+        encoding="utf-8",
+    )
+    roadmap = {"profile": {"output_language": "zh-CN"}, "study_tasks": [{"type": "explain"}]}
+
+    audit = build_report_audit(tmp_path, roadmap)
+    checks = {item["id"]: item for item in audit["experience_risks"]["checks"]}
+
+    assert checks["roadmap_worksheet_sync"]["status"] == "warn"
+
+    (tmp_path / "roadmap.html").write_text(
+        '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}</style></head>"
+        f"<body><section>{ROADMAP_READINESS_MARKER} {ROADMAP_WORKSHEET_SYNC_MARKER}</section></body></html>",
+        encoding="utf-8",
+    )
+
+    recovered = build_report_audit(tmp_path, roadmap)
+    recovered_checks = {item["id"]: item for item in recovered["experience_risks"]["checks"]}
+
+    assert recovered_checks["roadmap_worksheet_sync"]["status"] == "pass"
+
+
 def test_interactive_reports_require_static_fallback_against_blank_pages(tmp_path):
     (tmp_path / "paper_map.html").write_text(
         '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -2516,7 +2545,7 @@ def test_competitive_benchmark_passes_paper_centered_mastery_report(tmp_path):
         "index.html": _market_ready_index_marker(),
         "paper_map.html": 'Reading Density Core Chain Full Exploration Evidence coverage data-report-static-fallback="paper_map" data-paper-map-canvas react-flow Download presentation notes',
         "paper_lens.html": "paragraph evidence Explanation support not a resource trust score",
-        "roadmap.html": f"learning console mastery 1-minute start data-mastery-export 下载 worksheet {ROADMAP_READINESS_MARKER} resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
+        "roadmap.html": f"learning console mastery 1-minute start data-mastery-export 下载 worksheet {ROADMAP_READINESS_MARKER} {ROADMAP_WORKSHEET_SYNC_MARKER} resource-list resource-purpose-badge 为什么读 resource-strength-badge 证据强度 resource-provenance-badge resource-coverage-badge 覆盖范围 最强证据 resource-evidence-link 查看证据 paper_lens.html#detail-seg-1",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'
@@ -2653,7 +2682,7 @@ def test_competitive_benchmark_requires_contextual_paper_lens_explanations(tmp_p
 def test_field_course_report_can_be_market_ready_without_paper_map_or_lens(tmp_path):
     for name, marker in {
         "index.html": _market_ready_index_marker(paper_entries=False, evidence_edges=4),
-        "roadmap.html": f"learning console mastery 1-minute start data-mastery-export Download worksheet {ROADMAP_READINESS_MARKER} resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
+        "roadmap.html": f"learning console mastery 1-minute start data-mastery-export Download worksheet {ROADMAP_READINESS_MARKER} {ROADMAP_WORKSHEET_SYNC_MARKER} resource-list resource-purpose-badge Why read resource-strength-badge Evidence strength resource-provenance-badge resource-coverage-badge Coverage Strongest evidence resource-evidence-link Review evidence",
     }.items():
         (tmp_path / name).write_text(
             '<!doctype html><html><head><meta name="viewport" content="width=device-width">'

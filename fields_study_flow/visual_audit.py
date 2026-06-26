@@ -3439,6 +3439,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Show explain/derive/reproduce/critique readiness inside roadmap.html so route execution and readiness stay in the same report.",
         ),
         _experience_check(
+            "roadmap_worksheet_sync",
+            "Roadmap worksheet sync",
+            _has_roadmap_worksheet_sync(html.get("roadmap.html", "")),
+            "Show how browser progress and source-anchored tasks flow into the downloadable mastery worksheet.",
+        ),
+        _experience_check(
             "starter_questions_panel",
             "Starter questions panel",
             _contains_any_text(
@@ -3887,6 +3893,19 @@ def _has_roadmap_mastery_readiness_sync(roadmap_html: str) -> bool:
     if not all(gate in roadmap_html for gate in required_gates):
         return False
     return _contains_any_text(roadmap_html, ("data-roadmap-mastery-status", "data-mastery-status"))
+
+
+def _has_roadmap_worksheet_sync(roadmap_html: str) -> bool:
+    if "data-roadmap-worksheet-sync" not in roadmap_html:
+        return False
+    required_tokens = (
+        "data-worksheet-ready-slots",
+        "data-worksheet-source-anchored",
+        "mastery_worksheet.md",
+    )
+    if not all(token in roadmap_html for token in required_tokens):
+        return False
+    return _contains_any_text(roadmap_html, ("验收表同步", "worksheet sync", "Ready-to-present"))
 
 
 def _has_first_session_plan(index_html: str) -> bool:

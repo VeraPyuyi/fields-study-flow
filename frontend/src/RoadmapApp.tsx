@@ -864,6 +864,11 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
     [roadmap, studyTasks, completedTaskIds, resources],
   );
   const masteryReadiness = useMemo(() => buildMasteryReadiness(studyTasks, resources), [resources, studyTasks]);
+  const sourceAnchoredTaskCount = studyTasks.filter((task) => taskCheckableEvidenceCount(task, resources) > 0).length;
+  const worksheetReadyCount = studyTasks.filter(
+    (task, index) => completedTaskIds.has(taskId(task, index)) && taskCheckableEvidenceCount(task, resources) > 0,
+  ).length;
+  const worksheetGapCount = Math.max(0, studyTasks.length - worksheetReadyCount);
   const missingPhases = phases.length === 0;
   const missingTasks = studyTasks.length === 0;
   const missingResources = resources.length === 0;
@@ -1110,6 +1115,47 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
               {item.task ? <em>{item.task.title || `${item.label}任务`} · 证据 {item.evidenceCount}</em> : <em>暂无对应任务</em>}
             </a>
           ))}
+        </div>
+      </section>
+      <section
+        className="worksheet-sync-panel"
+        data-roadmap-worksheet-sync
+        data-worksheet-ready-slots={worksheetReadyCount}
+        data-worksheet-source-anchored={sourceAnchoredTaskCount}
+        data-worksheet-total-slots={studyTasks.length}
+        aria-labelledby="worksheet-sync-title"
+      >
+        <div className="worksheet-sync-copy">
+          <p className="eyebrow">验收表同步</p>
+          <h2 id="worksheet-sync-title">浏览器进度会进入可带走 worksheet</h2>
+          <p>勾选任务后，复制或下载的 `mastery_worksheet.md` 会带上当前进度；有来源锚点并已勾选的槽位，才算接近可汇报。</p>
+        </div>
+        <div className="worksheet-sync-grid" aria-label="worksheet 同步状态">
+          <article>
+            <span>已勾选</span>
+            <strong>{completedTaskCount}/{studyTasks.length}</strong>
+          </article>
+          <article>
+            <span>有来源锚点</span>
+            <strong>{sourceAnchoredTaskCount}/{studyTasks.length}</strong>
+          </article>
+          <article>
+            <span>可汇报槽位</span>
+            <strong>{worksheetReadyCount}/{studyTasks.length}</strong>
+          </article>
+          <article className={worksheetGapCount ? "attention" : ""}>
+            <span>待补齐</span>
+            <strong>{worksheetGapCount}</strong>
+          </article>
+        </div>
+        <div className="worksheet-sync-actions mastery-export-actions" data-mastery-export>
+          <button type="button" onClick={copyMasteryWorksheet}>复制当前 worksheet</button>
+          <button type="button" onClick={downloadMasteryWorksheet}>下载当前 worksheet.md</button>
+          <span aria-live="polite">
+            {worksheetState === "copied" ? "已复制，包含当前勾选进度和来源锚点。" : null}
+            {worksheetState === "downloaded" ? "已生成带当前进度的 mastery_worksheet.md。" : null}
+            {worksheetState === "failed" ? "当前浏览器限制自动操作，可使用下方任务卡手动记录。" : null}
+          </span>
         </div>
       </section>
       {studyTasks.length ? (

@@ -495,6 +495,87 @@ summary {
   background: rgba(255, 246, 244, 0.92);
 }
 
+.worksheet-sync-panel {
+  min-width: 0;
+  border: 1px solid #d8cdb8;
+  background: linear-gradient(135deg, rgba(255, 253, 248, 0.96), rgba(241, 247, 255, 0.88));
+  border-radius: 8px;
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+  display: grid;
+  grid-template-columns: minmax(220px, 0.95fr) minmax(0, 1.2fr) auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.worksheet-sync-copy {
+  min-width: 0;
+}
+
+.worksheet-sync-copy h2 {
+  margin: 4px 0;
+  color: var(--ink-strong);
+  font-size: clamp(18px, 1.8vw, 23px);
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+}
+
+.worksheet-sync-copy p:last-child {
+  margin: 0;
+  color: #44535c;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+.worksheet-sync-grid {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.worksheet-sync-grid article {
+  min-width: 0;
+  border: 1px solid #e2d9c8;
+  background: rgba(255, 255, 255, 0.78);
+  border-radius: 8px;
+  padding: 9px;
+  display: grid;
+  gap: 3px;
+}
+
+.worksheet-sync-grid article.attention {
+  border-color: #ead19a;
+  background: rgba(255, 249, 235, 0.92);
+}
+
+.worksheet-sync-grid span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+  overflow-wrap: anywhere;
+}
+
+.worksheet-sync-grid strong {
+  color: var(--teal);
+  font-size: 20px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
+}
+
+.worksheet-sync-actions {
+  min-width: 170px;
+}
+
+.worksheet-sync-actions span {
+  width: 100%;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
 .mastery-checklist-panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -2097,6 +2178,22 @@ blockquote {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .worksheet-sync-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .worksheet-sync-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .worksheet-sync-actions {
+    justify-content: flex-start;
+  }
+
+  .worksheet-sync-actions span {
+    text-align: left;
+  }
+
   .mastery-checklist-head {
     grid-template-columns: 1fr;
   }
@@ -2204,6 +2301,10 @@ blockquote {
   }
 
   .roadmap-readiness-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .worksheet-sync-grid {
     grid-template-columns: 1fr;
   }
 
