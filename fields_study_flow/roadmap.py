@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from fields_study_flow.artifact_templates import enforce_artifact_requirements, write_artifact_template
-from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_html, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 from fields_study_flow.knowledge_graph import build_knowledge_graph
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.paper_lens import build_paper_lens, has_target_paper, render_paper_lens_html, write_paper_lens_latex
@@ -32,6 +32,7 @@ OUTPUT_FILES = [
     "mastery_worksheet.md",
     "quick_brief.md",
     "evidence_coverage.md",
+    "evidence_coverage.html",
 ]
 PAPER_LENS_FILE = "paper_lens.html"
 
@@ -796,6 +797,8 @@ def write_outputs(
         outputs.append("quick_brief.md")
     if "evidence_coverage.md" not in outputs:
         outputs.append("evidence_coverage.md")
+    if "evidence_coverage.html" not in outputs:
+        outputs.append("evidence_coverage.html")
     public_roadmap["outputs"] = outputs
     if not public_roadmap.get("paper_lens"):
         public_roadmap = _ensure_paper_lens(public_roadmap)
@@ -821,6 +824,7 @@ def write_outputs(
     (output_dir / "mastery_worksheet.md").write_text(render_mastery_worksheet_markdown(public_roadmap), encoding="utf-8")
     (output_dir / "quick_brief.md").write_text(render_quick_brief_markdown(public_roadmap), encoding="utf-8")
     (output_dir / "evidence_coverage.md").write_text(render_evidence_coverage_markdown(public_roadmap), encoding="utf-8")
+    (output_dir / "evidence_coverage.html").write_text(render_evidence_coverage_html(public_roadmap), encoding="utf-8")
     (output_dir / "roadmap.svg").write_text(render_svg(public_roadmap), encoding="utf-8")
     (output_dir / "index.html").write_text(render_report_index(public_roadmap), encoding="utf-8")
     (output_dir / "roadmap.html").write_text(

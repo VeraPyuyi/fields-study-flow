@@ -1257,6 +1257,7 @@ def render_report_index(roadmap: dict[str, Any]) -> str:
         <a href="mastery_worksheet.md">mastery_worksheet.md</a>
         <a href="quick_brief.md">quick_brief.md</a>
         <a href="evidence_coverage.md">evidence_coverage.md</a>
+        <a href="evidence_coverage.html">evidence_coverage.html</a>
       </div>
     </details>
   </main>
@@ -2138,19 +2139,33 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
     title = _markdown_text(roadmap.get("title") or _display_report_base_title(roadmap))
     profile = roadmap.get("profile") if isinstance(roadmap.get("profile"), dict) else {}
     goal = _markdown_text(profile.get("goal") or title)
-    map_rows = _coverage_paper_map_rows(roadmap, is_zh)
-    lens_rows = _coverage_paper_lens_rows(roadmap, is_zh)
-    task_rows = _coverage_task_rows(roadmap, is_zh)
-    resource_rows = _coverage_resource_rows(roadmap, is_zh)
+    map_rows = _coverage_mark_surface(_coverage_paper_map_rows(roadmap, is_zh), "Paper Map", 10)
+    lens_rows = _coverage_mark_surface(_coverage_paper_lens_rows(roadmap, is_zh), "Paper Lens", 20)
+    task_rows = _coverage_mark_surface(_coverage_task_rows(roadmap, is_zh), "Mastery Tasks", 30)
+    resource_rows = _coverage_mark_surface(_coverage_resource_rows(roadmap, is_zh), "Resource Library", 40)
     all_rows = map_rows + lens_rows + task_rows + resource_rows
     covered = sum(1 for item in all_rows if item.get("status") == "covered")
     total = len(all_rows)
+    coverage_percent = _coverage_percent(covered, total)
+    section_scores = _coverage_section_scores(
+        [
+            ("Paper Map", map_rows, "paper_map.html"),
+            ("Paper Lens", lens_rows, "paper_lens.html"),
+            ("Mastery Tasks", task_rows, "roadmap.html#mastery-checklist-title"),
+            ("Resource Library", resource_rows, "roadmap.html#resource-library"),
+        ],
+        roadmap,
+    )
+    priority_gaps = _coverage_priority_gaps(all_rows)
+    source_diagnostics = _coverage_source_diagnostics(roadmap, map_rows, lens_rows, task_rows, resource_rows)
     heading = "证据覆盖矩阵" if is_zh else "Evidence Coverage Matrix"
     output: list[str] = [
         f"# {title} - {heading}",
         "",
         f"- {'学习目标' if is_zh else 'Learning goal'}: {goal}",
         f"- {'覆盖进度' if is_zh else 'Coverage'}: {covered}/{total}",
+        f"- {'覆盖分数' if is_zh else 'Coverage score'}: {coverage_percent}%",
+        f"- {'优先缺口' if is_zh else 'Priority gaps'}: {len(priority_gaps)}",
         f"- {'用途' if is_zh else 'Use'}: "
         + (
             "先看哪里有证据，再决定是否继续读、补资料或重新生成路线。"
@@ -2182,6 +2197,9 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
     for label, rows, entry in summary_items:
         output.append(f"| {label} | {sum(1 for item in rows if item.get('status') == 'covered')} | {len(rows)} | [{_markdown_text(entry)}]({_safe_markdown_href(entry)}) |")
     output.append("")
+    _append_evidence_source_diagnostics(output, source_diagnostics, is_zh)
+    _append_measured_coverage_score(output, section_scores, is_zh)
+    _append_priority_evidence_queue(output, priority_gaps, is_zh)
     _append_coverage_table(output, "论文逻辑覆盖" if is_zh else "Paper Logic Coverage", map_rows, is_zh)
     _append_coverage_table(output, "精读段落覆盖" if is_zh else "Reading Paragraph Coverage", lens_rows, is_zh)
     _append_coverage_table(output, "验收任务覆盖" if is_zh else "Mastery Task Coverage", task_rows, is_zh)
@@ -2191,6 +2209,108 @@ def render_evidence_coverage_markdown(roadmap: dict[str, Any]) -> str:
     output.extend(gaps or [("- 当前核心路径都有可追溯证据。" if is_zh else "- The current core path has traceable evidence.")])
     output.append("")
     return "\n".join(output)
+
+
+def render_evidence_coverage_html(roadmap: dict[str, Any]) -> str:
+    """Render the evidence coverage matrix as a readable offline dashboard."""
+    markdown = render_evidence_coverage_markdown(roadmap)
+    is_zh = _html_lang(roadmap) != "en"
+    title = _markdown_text(roadmap.get("title") or _display_report_base_title(roadmap))
+    body = _simple_markdown_to_html(markdown)
+    return f"""<!doctype html>
+<html lang="{escape('zh-CN' if is_zh else 'en')}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escape(title)} - {escape('证据覆盖仪表盘' if is_zh else 'Evidence Coverage Dashboard')}</title>
+  <style>
+    :root {{
+      --ink:#15212f;
+      --muted:#5d6f82;
+      --line:#d9e4ee;
+      --paper:#fbfcfd;
+      --accent:#2f6f73;
+      --accent-2:#375c9f;
+      --warn:#9a6324;
+      --soft:#f2f7f8;
+    }}
+    * {{ box-sizing:border-box; }}
+    body {{
+      margin:0;
+      color:var(--ink);
+      background:linear-gradient(180deg,#eef5f6 0,#f8fbfc 46%,#eef3f7 100%);
+      font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans SC","Source Han Sans SC",Arial,sans-serif;
+      line-height:1.62;
+    }}
+    main {{ width:min(1180px, calc(100vw - 28px)); max-width:100%; margin:0 auto; padding:28px 0 44px; }}
+    .hero {{
+      border:1px solid rgba(47,111,115,.18);
+      background:rgba(255,255,255,.92);
+      border-radius:18px;
+      padding:22px;
+      box-shadow:0 18px 55px rgba(32,64,82,.11);
+    }}
+    .eyebrow {{ margin:0 0 6px; color:var(--accent); font-size:.78rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }}
+    h1 {{ margin:0; font-size:clamp(24px,4vw,42px); line-height:1.16; overflow-wrap:anywhere; }}
+    .hero p:last-child {{ margin-bottom:0; color:var(--muted); }}
+    .dashboard {{
+      margin-top:18px;
+      display:grid;
+      gap:16px;
+      grid-template-columns:minmax(0,1fr);
+    }}
+    section {{
+      border:1px solid var(--line);
+      background:rgba(255,255,255,.94);
+      border-radius:14px;
+      padding:18px;
+      overflow:hidden;
+    }}
+    h2 {{ margin:0 0 12px; font-size:1.22rem; line-height:1.25; }}
+    ul {{ margin:0; padding-left:1.2rem; }}
+    li {{ margin:6px 0; overflow-wrap:anywhere; }}
+    table {{ width:100%; border-collapse:collapse; font-size:.94rem; }}
+    th, td {{ border-bottom:1px solid var(--line); padding:10px 9px; text-align:left; vertical-align:top; overflow-wrap:anywhere; }}
+    th {{ color:#31475b; background:var(--soft); font-weight:800; }}
+    tr:last-child td {{ border-bottom:0; }}
+    a {{ color:var(--accent-2); text-decoration:none; font-weight:700; }}
+    a:hover, a:focus-visible {{ text-decoration:underline; outline:none; }}
+    code {{ background:#edf3f5; border-radius:6px; padding:2px 5px; }}
+    .metric-list {{
+      display:grid;
+      gap:10px;
+      grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+      padding:0;
+      list-style:none;
+    }}
+    .metric-list li {{
+      border:1px solid var(--line);
+      border-radius:12px;
+      padding:12px;
+      background:#fbfdfe;
+    }}
+    .metric-list strong {{ display:block; margin-bottom:4px; color:var(--accent); }}
+    @media (max-width:760px) {{
+      main {{ width:min(100vw - 20px, 680px); padding-top:18px; }}
+      section {{ padding:14px; }}
+      table {{ display:block; overflow-x:auto; white-space:normal; }}
+      th, td {{ min-width:130px; }}
+    }}
+  </style>
+</head>
+<body>
+  <main>
+    <header class="hero">
+      <p class="eyebrow">fields-study-flow</p>
+      <h1>{escape('证据覆盖仪表盘' if is_zh else 'Evidence Coverage Dashboard')}</h1>
+      <p>{escape(title)}</p>
+    </header>
+    <article class="dashboard">
+      {body}
+    </article>
+  </main>
+</body>
+</html>"""
 
 
 def render_quick_brief_markdown(roadmap: dict[str, Any]) -> str:
@@ -2278,6 +2398,120 @@ def _markdown_text(value: object) -> str:
     text = PRIVATE_PATH_RE.sub("[private path]", text)
     return text.replace("\r", " ").replace("\n", " ").strip()
 
+
+def _simple_markdown_to_html(markdown: str) -> str:
+    lines = markdown.splitlines()
+    output: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            index += 1
+            continue
+        if line.startswith("# "):
+            output.append(f"<section><h2>{_inline_markdown_to_html(line[2:].strip())}</h2>")
+            index += 1
+            while index < len(lines) and lines[index].startswith("- "):
+                items: list[str] = []
+                while index < len(lines) and lines[index].startswith("- "):
+                    items.append(f"<li>{_inline_markdown_to_html(lines[index][2:].strip())}</li>")
+                    index += 1
+                output.append(f"<ul class=\"metric-list\">{''.join(items)}</ul>")
+            output.append("</section>")
+            continue
+        if line.startswith("## "):
+            heading = _inline_markdown_to_html(line[3:].strip())
+            index += 1
+            block_lines: list[str] = []
+            while index < len(lines) and not lines[index].startswith("## "):
+                block_lines.append(lines[index])
+                index += 1
+            output.append(f"<section><h2>{heading}</h2>{_markdown_block_to_html(block_lines)}</section>")
+            continue
+        output.append(f"<section><p>{_inline_markdown_to_html(line.strip())}</p></section>")
+        index += 1
+    return "\n".join(output)
+
+
+def _markdown_block_to_html(lines: list[str]) -> str:
+    output: list[str] = []
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        if not line.strip():
+            index += 1
+            continue
+        if line.startswith("|"):
+            table_lines: list[str] = []
+            while index < len(lines) and lines[index].startswith("|"):
+                table_lines.append(lines[index])
+                index += 1
+            output.append(_markdown_table_to_html(table_lines))
+            continue
+        if line.startswith("- "):
+            items: list[str] = []
+            while index < len(lines) and lines[index].startswith("- "):
+                items.append(f"<li>{_inline_markdown_to_html(lines[index][2:].strip())}</li>")
+                index += 1
+            output.append(f"<ul>{''.join(items)}</ul>")
+            continue
+        output.append(f"<p>{_inline_markdown_to_html(line.strip())}</p>")
+        index += 1
+    return "\n".join(output)
+
+
+def _markdown_table_to_html(lines: list[str]) -> str:
+    rows = [_split_markdown_table_row(line) for line in lines if line.strip()]
+    if not rows:
+        return ""
+    header = rows[0]
+    body_rows = rows[2:] if len(rows) > 1 and all(set(cell) <= {"-", ":"} for cell in rows[1]) else rows[1:]
+    head_html = "".join(f"<th>{_inline_markdown_to_html(cell)}</th>" for cell in header)
+    body_html = "".join(
+        "<tr>" + "".join(f"<td>{_inline_markdown_to_html(cell)}</td>" for cell in row) + "</tr>"
+        for row in body_rows
+    )
+    return f"<table><thead><tr>{head_html}</tr></thead><tbody>{body_html}</tbody></table>"
+
+
+def _split_markdown_table_row(line: str) -> list[str]:
+    stripped = line.strip().strip("|")
+    cells: list[str] = []
+    current: list[str] = []
+    escaped = False
+    for char in stripped:
+        if escaped:
+            current.append(char)
+            escaped = False
+        elif char == "\\":
+            escaped = True
+        elif char == "|":
+            cells.append("".join(current).strip())
+            current = []
+        else:
+            current.append(char)
+    cells.append("".join(current).strip())
+    return cells
+
+
+def _inline_markdown_to_html(text: str) -> str:
+    parts: list[str] = []
+    last_index = 0
+    for match in re.finditer(r"\[([^\]]+)\]\(([^)]+)\)", text):
+        parts.append(_inline_markdown_fragment_to_html(text[last_index : match.start()]))
+        label = _inline_markdown_fragment_to_html(match.group(1))
+        href = escape(match.group(2), quote=True)
+        parts.append(f'<a href="{href}">{label}</a>')
+        last_index = match.end()
+    parts.append(_inline_markdown_fragment_to_html(text[last_index:]))
+    return "".join(parts)
+
+
+def _inline_markdown_fragment_to_html(text: str) -> str:
+    safe = escape(text)
+    safe = re.sub(r"`([^`]+)`", r"<code>\1</code>", safe)
+    safe = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", safe)
+    return safe
 
 
 def _safe_markdown_href(value: object) -> str:
@@ -2381,7 +2615,7 @@ def _worksheet_evidence_chunk_lines(chunks: object, is_zh: bool) -> list[str]:
 def _truncate_markdown(text: str, limit: int) -> str:
     if len(text) <= limit:
         return text
-    return text[: max(0, limit - 1)].rstrip() + "..."
+    return text[:limit].rstrip()
 
 
 def _quick_brief_core_nodes(paper_map: dict[str, Any]) -> list[dict[str, Any]]:
@@ -2499,6 +2733,324 @@ def _quick_brief_resource_lines(roadmap: dict[str, Any], resource_links: dict[st
     return lines
 
 
+def _coverage_mark_surface(rows: list[dict[str, Any]], surface: str, base_priority: int) -> list[dict[str, Any]]:
+    marked: list[dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        item = dict(row)
+        item["surface"] = surface
+        item["priority"] = base_priority + index
+        marked.append(item)
+    return marked
+
+
+def _coverage_percent(covered: int, total: int) -> int:
+    if total <= 0:
+        return 0
+    return int(round((max(0, covered) / total) * 100))
+
+
+def _coverage_section_scores(
+    sections: list[tuple[str, list[dict[str, Any]], str]],
+    roadmap: dict[str, Any],
+) -> list[dict[str, Any]]:
+    scores: list[dict[str, Any]] = []
+    for label, rows, entry in sections:
+        if label == "Paper Map" and not rows and not roadmap.get("paper_map"):
+            continue
+        if label == "Paper Lens" and not rows and not roadmap.get("paper_lens"):
+            continue
+        covered = sum(1 for item in rows if item.get("status") == "covered")
+        total = len(rows)
+        gaps = max(0, total - covered)
+        scores.append(
+            {
+                "label": label,
+                "covered": covered,
+                "total": total,
+                "score": _coverage_percent(covered, total),
+                "gaps": gaps,
+                "href": entry,
+                "action": _coverage_section_action(label, gaps),
+            }
+        )
+    return scores
+
+
+def _coverage_section_action(label: str, gaps: int) -> str:
+    if gaps <= 0:
+        return "Keep as release evidence."
+    if label == "Paper Map":
+        return "Add source snippets for uncovered claims."
+    if label == "Paper Lens":
+        return "Bind uncovered paragraphs to local evidence or resources."
+    if label == "Mastery Tasks":
+        return "Attach each task to resources and checkable evidence."
+    if label == "Resource Library":
+        return "Download/snapshot resources or attach evidence chunks."
+    return "Add traceable evidence."
+
+
+def _coverage_priority_gaps(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    gaps = [row for row in rows if row.get("status") != "covered"]
+    return sorted(gaps, key=lambda row: (_coerce_nonnegative_int(row.get("priority")), str(row.get("label") or "")))[:10]
+
+
+def _coverage_first_gap_href(rows: list[dict[str, Any]], fallback: str) -> str:
+    for row in rows:
+        if row.get("status") != "covered":
+            return _safe_markdown_href(row.get("href") or fallback)
+    for row in rows:
+        if row.get("href"):
+            return _safe_markdown_href(row.get("href"))
+    return _safe_markdown_href(fallback)
+
+
+def _coverage_first_resource_href(resources: list[dict[str, Any]], fallback: str) -> str:
+    for resource in resources:
+        href = str(resource.get("local_href") or resource.get("href") or resource.get("url") or "").strip()
+        if href and not PRIVATE_PATH_RE.search(href):
+            return _safe_markdown_href(href)
+    return _safe_markdown_href(fallback)
+
+
+def _coverage_first_public_ref(refs: list[Any]) -> str:
+    for ref in refs:
+        if isinstance(ref, str):
+            href = ref.strip()
+        elif isinstance(ref, dict):
+            href = str(ref.get("detail_anchor") or ref.get("local_href") or ref.get("href") or ref.get("url") or "").strip()
+        else:
+            href = ""
+        if href and not PRIVATE_PATH_RE.search(href):
+            return _safe_markdown_href(href)
+    return ""
+
+
+def _coverage_source_diagnostics(
+    roadmap: dict[str, Any],
+    map_rows: list[dict[str, Any]],
+    lens_rows: list[dict[str, Any]],
+    task_rows: list[dict[str, Any]],
+    resource_rows: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    resources = _report_all_resource_entries(roadmap)
+    resource_chunk_count = sum(len(_resource_evidence_chunks(item)) for item in resources if isinstance(item, dict))
+    local_resource_count = sum(1 for item in resources if isinstance(item, dict) and _resource_is_materialized(item))
+    local_note_resources = [item for item in resources if isinstance(item, dict) and _resource_is_local_note_like(item)]
+    local_note_chunks = sum(len(_resource_evidence_chunks(item)) for item in local_note_resources)
+    task_chunk_rows = [row for row in task_rows if _coerce_nonnegative_int(row.get("evidence_count")) > 0]
+    diagnostics: list[dict[str, Any]] = []
+    if map_rows or roadmap.get("paper_map"):
+        diagnostics.append(
+            {
+                "label": "Target-paper logic claims",
+                "covered": sum(1 for row in map_rows if row.get("status") == "covered"),
+                "total": len(map_rows),
+                "next": "Add source snippets to uncovered Paper Map nodes.",
+                "href": _coverage_first_gap_href(map_rows, "paper_map.html"),
+            }
+        )
+    if lens_rows or roadmap.get("paper_lens"):
+        diagnostics.append(
+            {
+                "label": "Reading paragraphs",
+                "covered": sum(1 for row in lens_rows if row.get("status") == "covered"),
+                "total": len(lens_rows),
+                "next": "Bind unsupported Paper Lens paragraphs to evidence references.",
+                "href": _coverage_first_gap_href(lens_rows, "paper_lens.html"),
+            }
+        )
+    if resource_rows or resource_chunk_count:
+        diagnostics.append(
+            {
+                "label": "RAG/resource chunks",
+                "covered": resource_chunk_count,
+                "total": max(resource_chunk_count, len(resource_rows)),
+                "next": "Index downloaded files or attach retrieved snippets to recommended resources.",
+                "href": _coverage_first_gap_href(resource_rows, "roadmap.html#resource-library"),
+            }
+        )
+    if resources:
+        diagnostics.append(
+            {
+                "label": "Local/openable resources",
+                "covered": local_resource_count,
+                "total": len(resources),
+                "next": "Download, copy, snapshot, or generate local files for link-only resources.",
+                "href": _coverage_first_gap_href(resource_rows, "roadmap.html#resource-library"),
+            }
+        )
+    if task_rows:
+        diagnostics.append(
+            {
+                "label": "Mastery task evidence",
+                "covered": len(task_chunk_rows),
+                "total": len(task_rows),
+                "next": "Attach each task to resource titles, chunks, or acceptance artifacts.",
+                "href": _coverage_first_gap_href(task_rows, "roadmap.html#mastery-checklist-title"),
+            }
+        )
+    if local_note_resources or local_note_chunks:
+        diagnostics.append(
+            {
+                "label": "Local notes and notebooks",
+                "covered": local_note_chunks,
+                "total": max(local_note_chunks, len(local_note_resources)),
+                "next": "Add Markdown, notebook, or local-note chunks when the learner brings private material.",
+                "href": _coverage_first_resource_href(local_note_resources, "roadmap.html#resource-library"),
+            }
+        )
+    return diagnostics
+
+
+def _append_evidence_source_diagnostics(output: list[str], diagnostics: list[dict[str, Any]], is_zh: bool) -> None:
+    output.extend([f"## {'证据来源诊断' if is_zh else 'Evidence Source Diagnostics'}", ""])
+    output.extend(
+        [
+            "| {source} | {score} | {covered} | {total} | {next_step} |".format(
+                source="来源" if is_zh else "Source",
+                score="覆盖率" if is_zh else "Coverage",
+                covered="已支撑" if is_zh else "Backed",
+                total="应检查" if is_zh else "Expected",
+                next_step="下一步" if is_zh else "Next diagnostic step",
+            ),
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for item in diagnostics:
+        label = _markdown_cell(_coverage_localized_diagnostic_label(str(item.get("label") or ""), is_zh))
+        href = _safe_markdown_href(item.get("href") or "roadmap.html")
+        covered = _coerce_nonnegative_int(item.get("covered"))
+        total = _coerce_nonnegative_int(item.get("total"))
+        score = _coverage_percent(covered, total)
+        next_step = _markdown_cell(_coverage_localized_diagnostic_next(str(item.get("next") or ""), is_zh))
+        output.append(f"| [{label}]({href}) | {score}% | {covered} | {total} | {next_step} |")
+    output.append("")
+
+
+def _append_measured_coverage_score(output: list[str], scores: list[dict[str, Any]], is_zh: bool) -> None:
+    output.extend([f"## {'可量化覆盖分数' if is_zh else 'Measured Coverage Score'}", ""])
+    if not scores:
+        output.extend([("- 暂无可计分学习面。" if is_zh else "- No measurable learning surfaces yet."), ""])
+        return
+    output.extend(
+        [
+            "| {surface} | {score} | {covered} | {total} | {action} |".format(
+                surface="学习面" if is_zh else "Surface",
+                score="分数" if is_zh else "Score",
+                covered="已覆盖" if is_zh else "Covered",
+                total="总数" if is_zh else "Total",
+                action="下一步" if is_zh else "Next action",
+            ),
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+    )
+    for item in scores:
+        label = _markdown_cell(item.get("label") or "")
+        href = _safe_markdown_href(item.get("href") or "roadmap.html")
+        action = _markdown_cell(_coverage_localized_action(str(item.get("action") or ""), is_zh))
+        output.append(
+            "| [{label}]({href}) | {score}% | {covered} | {total} | {action} |".format(
+                label=label,
+                href=href,
+                score=_coerce_nonnegative_int(item.get("score")),
+                covered=_coerce_nonnegative_int(item.get("covered")),
+                total=_coerce_nonnegative_int(item.get("total")),
+                action=action,
+            )
+        )
+    output.append("")
+
+
+def _append_priority_evidence_queue(output: list[str], gaps: list[dict[str, Any]], is_zh: bool) -> None:
+    output.extend([f"## {'优先补证据队列' if is_zh else 'Priority Evidence Queue'}", ""])
+    if not gaps:
+        output.extend([("- 暂无高优先级证据缺口。" if is_zh else "- No high-priority evidence gaps remain."), ""])
+        return
+    output.extend(
+        [
+            "| {rank} | {surface} | {item} | {reason} | {action} |".format(
+                rank="优先级" if is_zh else "Priority",
+                surface="学习面" if is_zh else "Surface",
+                item="项目" if is_zh else "Item",
+                reason="缺口原因" if is_zh else "Gap reason",
+                action="建议动作" if is_zh else "Suggested fix",
+            ),
+            "| ---: | --- | --- | --- | --- |",
+        ]
+    )
+    for rank, row in enumerate(gaps[:8], start=1):
+        label = _markdown_cell(row.get("label") or "")
+        href = _safe_markdown_href(row.get("href") or "roadmap.html")
+        surface = _markdown_cell(row.get("surface") or "")
+        reason = _markdown_cell(_truncate_markdown(_markdown_text(row.get("detail") or ""), 120))
+        action = _markdown_cell(_coverage_gap_action(str(row.get("surface") or ""), is_zh))
+        output.append(f"| {rank} | {surface} | [{label}]({href}) | {reason} | {action} |")
+    output.append("")
+
+
+def _coverage_localized_action(action: str, is_zh: bool) -> str:
+    if not is_zh:
+        return action
+    translations = {
+        "Keep as release evidence.": "保留为发布证据。",
+        "Add source snippets for uncovered claims.": "给未覆盖论断补原文片段。",
+        "Bind uncovered paragraphs to local evidence or resources.": "给未覆盖段落绑定本地证据或资料。",
+        "Attach each task to resources and checkable evidence.": "把任务绑定到资料和可检查证据。",
+        "Download/snapshot resources or attach evidence chunks.": "下载/快照资料，或补证据片段。",
+        "Add traceable evidence.": "补可追溯证据。",
+    }
+    return translations.get(action, action)
+
+
+def _coverage_localized_diagnostic_label(label: str, is_zh: bool) -> str:
+    if not is_zh:
+        return label
+    translations = {
+        "Target-paper logic claims": "目标论文逻辑论断",
+        "Reading paragraphs": "精读段落",
+        "RAG/resource chunks": "RAG/资料片段",
+        "Local/openable resources": "本地可打开资料",
+        "Mastery task evidence": "掌握任务证据",
+        "Local notes and notebooks": "本地笔记与 Notebook",
+    }
+    return translations.get(label, label)
+
+
+def _coverage_localized_diagnostic_next(next_step: str, is_zh: bool) -> str:
+    if not is_zh:
+        return next_step
+    translations = {
+        "Add source snippets to uncovered Paper Map nodes.": "给未覆盖的 Paper Map 节点补原文片段。",
+        "Bind unsupported Paper Lens paragraphs to evidence references.": "把未支撑的 Paper Lens 段落绑定到证据引用。",
+        "Index downloaded files or attach retrieved snippets to recommended resources.": "索引已下载文件，或给推荐资料补检索片段。",
+        "Download, copy, snapshot, or generate local files for link-only resources.": "给仅链接资料下载、复制、快照或生成本地文件。",
+        "Attach each task to resource titles, chunks, or acceptance artifacts.": "把每个任务绑定到资料标题、证据片段或验收产物。",
+        "Add Markdown, notebook, or local-note chunks when the learner brings private material.": "当用户带入私有材料时，补 Markdown、Notebook 或本地笔记片段。",
+    }
+    return translations.get(next_step, next_step)
+
+
+def _coverage_gap_action(surface: str, is_zh: bool) -> str:
+    if surface == "Paper Map":
+        return "回到目标论文，给这个逻辑节点补一条原文证据。" if is_zh else "Add one source snippet to this logic node."
+    if surface == "Paper Lens":
+        return "给这段精读解释绑定原文片段、资料或本地文件。" if is_zh else "Bind this paragraph explanation to a source snippet, resource, or local file."
+    if surface == "Mastery Tasks":
+        return "给任务补资料标题、证据片段或验收产物。" if is_zh else "Attach resources, evidence chunks, or an acceptance artifact to the task."
+    if surface == "Resource Library":
+        return "优先下载/快照资料，或给推荐理由补证据片段。" if is_zh else "Download/snapshot the resource or attach evidence for why it matters."
+    return "补一条可追溯证据。" if is_zh else "Add one traceable evidence item."
+
+
+def _resource_is_local_note_like(resource: dict[str, Any]) -> bool:
+    values = " ".join(
+        str(resource.get(key) or "")
+        for key in ("source", "type", "title", "label", "local_href", "file_name", "path")
+    ).casefold()
+    return any(marker in values for marker in ("local", "note", "notebook", ".ipynb", ".md", "markdown", "tex"))
+
+
 def _coverage_paper_map_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict[str, Any]]:
     paper_map = roadmap.get("paper_map") if isinstance(roadmap.get("paper_map"), dict) else {}
     nodes = paper_map.get("nodes") if isinstance(paper_map.get("nodes"), list) else []
@@ -2540,7 +3092,8 @@ def _coverage_paper_lens_rows(roadmap: dict[str, Any], is_zh: bool) -> list[dict
         refs = explanation.get("evidence_refs") if isinstance(explanation.get("evidence_refs"), list) else []
         resources = explanation.get("related_resources") if isinstance(explanation.get("related_resources"), list) else []
         evidence_count = len([item for item in refs if item]) + len([item for item in resources if item])
-        href = str(explanation.get("detail_anchor") or segment.get("detail_anchor") or f"paper_lens.html#detail-{_safe_anchor(segment_id or str(index))}")
+        evidence_href = _coverage_first_public_ref(refs)
+        href = str(explanation.get("detail_anchor") or segment.get("detail_anchor") or evidence_href or f"paper_lens.html#detail-{_safe_anchor(segment_id or str(index))}")
         label = _markdown_text(segment.get("section_kind") or segment.get("heading") or f"{'段落' if is_zh else 'Paragraph'} {index}")
         detail = _truncate_markdown(_markdown_text(explanation.get("plain_meaning") or segment.get("original_text") or ""), 140)
         rows.append(

@@ -3206,7 +3206,11 @@ def _portable_study_output_count(root: Path, roadmap: dict[str, Any], html: dict
         outputs += 1
     if (root / "quick_brief.md").exists() and _contains_any_text(index_html, ("quick_brief.md", "5-Minute Research Brief", "5 分钟速读 Brief")):
         outputs += 1
-    if (root / "evidence_coverage.md").exists() and _contains_any_text(index_html, ("evidence_coverage.md", "Evidence Coverage Matrix", "证据覆盖矩阵")):
+    if (
+        (root / "evidence_coverage.md").exists()
+        and _contains_any_text(index_html, ("evidence_coverage.md", "Evidence Coverage Matrix", "证据覆盖矩阵"))
+        and ((root / "evidence_coverage.html").exists() or "evidence_coverage.html" in index_html)
+    ):
         outputs += 1
     if _contains_any_text(
         paper_map_html,
@@ -3886,25 +3890,50 @@ def _has_portable_quick_brief(root: Path, index_html: str) -> bool:
 
 def _has_portable_evidence_coverage(root: Path, index_html: str) -> bool:
     path = root / "evidence_coverage.md"
+    html_path = root / "evidence_coverage.html"
     if not path.exists() or "evidence_coverage.md" not in index_html:
         return False
     try:
         content = path.read_text(encoding="utf-8")
     except OSError:
         return False
+    html_required = "evidence_coverage.html" in index_html
+    if html_required and not html_path.exists():
+        return False
+    try:
+        html_content = html_path.read_text(encoding="utf-8") if html_path.exists() else ""
+    except OSError:
+        return False
     if PRIVATE_PATH_RE.search(content):
+        return False
+    if html_content and PRIVATE_PATH_RE.search(html_content):
         return False
     if "paper_map.html" in content and not (root / "paper_map.html").exists():
         return False
     if "paper_lens.html" in content and not (root / "paper_lens.html").exists():
         return False
-    return _contains_any_text(content, ("Evidence Coverage Matrix", "证据覆盖矩阵")) and _contains_any_text(
+    markdown_ok = _contains_any_text(content, ("Evidence Coverage Matrix", "证据覆盖矩阵")) and _contains_any_text(
         content,
         ("Coverage Summary", "覆盖总览"),
     ) and _contains_any_text(
         content,
+        ("Measured Coverage Score", "可量化覆盖分数"),
+    ) and _contains_any_text(
+        content,
+        ("Evidence Source Diagnostics", "证据来源诊断"),
+    ) and _contains_any_text(
+        content,
+        ("Priority Evidence Queue", "优先补证据队列"),
+    ) and _contains_any_text(
+        content,
         ("Evidence Gaps to Fix", "下一步补证据", "Paper Logic Coverage", "论文逻辑覆盖", "Resource Evidence Coverage", "资料证据覆盖"),
     )
+    html_ok = (not html_content) or (
+        "evidence_coverage.html" in index_html
+        and _contains_any_text(html_content, ("Evidence Coverage Dashboard", "证据覆盖仪表盘"))
+        and _contains_any_text(html_content, ("Evidence Source Diagnostics", "证据来源诊断"))
+    )
+    return markdown_ok and html_ok
 
 
 def _all_core_pages_have_check(visual_audit: dict[str, Any], check_name: str) -> bool:

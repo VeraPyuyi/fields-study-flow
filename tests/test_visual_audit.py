@@ -1615,7 +1615,7 @@ def _market_ready_index_marker(*, paper_entries: bool = True, evidence_edges: in
         "Start Here Bring Your Own Paper "
         "data-first-session-plan data-session-step= data-session-step= data-session-step= data-session-step= First study session "
         "data-active-recall-panel data-recall-card 5-minute active recall Find evidence "
-        f"{entries} Local assets study_cards.md study_quiz.md mastery_worksheet.md quick_brief.md evidence_coverage.md "
+        f"{entries} Local assets study_cards.md study_quiz.md mastery_worksheet.md quick_brief.md evidence_coverage.md evidence_coverage.html "
         "<details data-secondary-guidance-panel>"
         '<section data-market-value-panel="true">Why this is more than a PDF summarizer</section>'
         '<section data-learning-outcome-contract="true">Outcome contract What you should be able to deliver</section>'
@@ -1667,8 +1667,19 @@ def _write_evidence_coverage_file(root: Path) -> None:
         "- Coverage: 3/3\n\n"
         "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n"
         "| Resource Library | 1 | 1 | [roadmap.html#resource-library](roadmap.html#resource-library) |\n\n"
+        "## Evidence Source Diagnostics\n\n| Source | Coverage | Backed | Expected | Next diagnostic step |\n| --- | ---: | ---: | ---: | --- |\n"
+        "| [RAG/resource chunks](roadmap.html#resource-library) | 100% | 1 | 1 | Keep indexing resources. |\n\n"
+        "## Measured Coverage Score\n\n| Surface | Score | Covered | Total | Next action |\n| --- | ---: | ---: | ---: | --- |\n"
+        "| [Resource Library](roadmap.html#resource-library) | 100% | 1 | 1 | Keep as release evidence. |\n\n"
+        "## Priority Evidence Queue\n\n- No high-priority evidence gaps remain.\n\n"
         "## Resource Evidence Coverage\n\n| Item | Status | Evidence | Why it matters |\n| --- | --- | ---: | --- |\n| [DDPM paper](roadmap.html#resource-library) | covered | 1 | Source-backed. |\n\n"
         "## Evidence Gaps to Fix\n\n- The current core path has traceable evidence.\n",
+        encoding="utf-8",
+    )
+    (root / "evidence_coverage.html").write_text(
+        "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\"></head>"
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}@media (max-width: 820px){body{max-width:100%}}</style>"
+        "<body><h1>Evidence Coverage Dashboard</h1><section>Evidence Source Diagnostics</section></body></html>",
         encoding="utf-8",
     )
 
@@ -1701,7 +1712,7 @@ def test_portable_quick_brief_gate_rejects_private_paths_and_missing_paper_links
 
 
 def test_portable_evidence_coverage_gate_rejects_private_paths_and_missing_paper_links(tmp_path):
-    index_html = '<a href="evidence_coverage.md">evidence_coverage.md</a>'
+    index_html = '<a href="evidence_coverage.md">evidence_coverage.md</a><a href="evidence_coverage.html">evidence_coverage.html</a>'
     (tmp_path / "evidence_coverage.md").write_text(
         "# Demo - Evidence Coverage Matrix\n\n"
         "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n| Paper Map | 1 | 1 | [paper_map.html](paper_map.html) |\n\n"
@@ -1714,6 +1725,10 @@ def test_portable_evidence_coverage_gate_rejects_private_paths_and_missing_paper
     (tmp_path / "evidence_coverage.md").write_text(
         "# Demo - Evidence Coverage Matrix\n\n"
         "## Coverage Summary\n\n| Surface | Covered | Total | First entry |\n| --- | ---: | ---: | --- |\n| Paper Map | 1 | 1 | [paper_map.html](paper_map.html) |\n\n"
+        "## Evidence Source Diagnostics\n\n| Source | Coverage | Backed | Expected | Next diagnostic step |\n| --- | ---: | ---: | ---: | --- |\n"
+        "| [Target-paper logic claims](paper_map.html) | 100% | 1 | 1 | Keep source snippets. |\n\n"
+        "## Measured Coverage Score\n\n| Surface | Score | Covered | Total | Next action |\n| --- | ---: | ---: | ---: | --- |\n| [Paper Map](paper_map.html) | 100% | 1 | 1 | Keep as release evidence. |\n\n"
+        "## Priority Evidence Queue\n\n- No high-priority evidence gaps remain.\n\n"
         "## Paper Logic Coverage\n\n| Item | Status | Evidence | Why it matters |\n| --- | --- | ---: | --- |\n| [Problem](paper_map.html) | covered | 1 | Source-backed. |\n\n"
         "## Evidence Gaps to Fix\n\n- Done.\n",
         encoding="utf-8",
@@ -1722,6 +1737,14 @@ def test_portable_evidence_coverage_gate_rejects_private_paths_and_missing_paper
     assert not visual_audit._has_portable_evidence_coverage(tmp_path, index_html)
 
     (tmp_path / "paper_map.html").write_text("<html></html>", encoding="utf-8")
+    assert not visual_audit._has_portable_evidence_coverage(tmp_path, index_html)
+
+    (tmp_path / "evidence_coverage.html").write_text(
+        "<!doctype html><html><head><meta name=\"viewport\" content=\"width=device-width\">"
+        "<style>body{font-family:Arial;max-width:100%;overflow-wrap:anywhere}@media (max-width: 820px){body{max-width:100%}}</style></head>"
+        "<body><h1>Evidence Coverage Dashboard</h1><section>Evidence Source Diagnostics</section></body></html>",
+        encoding="utf-8",
+    )
 
     assert visual_audit._has_portable_evidence_coverage(tmp_path, index_html)
 

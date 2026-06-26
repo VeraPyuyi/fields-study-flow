@@ -41,7 +41,7 @@ fields-study-flow 可以把“掌握这篇论文”“学习 diffusion models”
 - 可带走练习卡：每次导出都会写出 `study_cards.md`，把首页主动回忆小测变成可打印、可复制到笔记里的本地练习集。
 - 证据链接小测：每次导出也会写出 `study_quiz.md`，用题目、答案钥匙和证据入口帮助用户快速确认“我是不是真的理解了”。
 - 速读 Brief：每次导出都会写出 `quick_brief.md`，用一页内容串起论文逻辑主链、证据入口、核心资料和下一步动作。
-- 证据覆盖矩阵：每次导出都会写出 `evidence_coverage.md`，标明 Paper Map 结论、Paper Lens 段落、掌握任务和资料是否已有来源证据支撑。
+- 证据覆盖矩阵：每次导出都会写出 `evidence_coverage.md` 和 `evidence_coverage.html`，标明 Paper Map 结论、Paper Lens 段落、掌握任务和资料是否已有来源证据支撑，并给出可点击证据来源诊断、覆盖分数和优先补证据队列。
 - 行动优先首页：产品价值说明、报告健康检查、替代向导和换论文命令会默认收进一个“更多说明与检查”折叠区，让默认视图先服务学习行动，而不是堆满说明文字。
 - 交互式学习中控台：`roadmap.html` 提供学习路线、可拖动/缩放的 KG 学习路径网络、右侧任务向导、本地进度勾选、本地优先资料链接、多维资料筛选 chips、证据展开/收起和阶段折叠。
 - 资源来源与覆盖范围：`roadmap.html` 的资料卡会显示资料用途、证据强度、来源类型，以及它覆盖论文逻辑或学习任务的哪一部分，方便用户先打开最有用的资料。
@@ -284,7 +284,7 @@ python -m fields_study_flow.mcp_server
 - `validateSources`
 - `exportPlan`
 
-`exportPlan` 会写出 JSON、Markdown、SVG、HTML、`quick_brief.md`、`evidence_coverage.md`、`study_cards.md`、`study_quiz.md` 和 `mastery_worksheet.md`；当路线需要可运行项目或复现验收时，还会写出 `artifact_template/` 模板包。
+`exportPlan` 会写出 JSON、Markdown、SVG、HTML、`quick_brief.md`、`evidence_coverage.md`、`evidence_coverage.html`、`study_cards.md`、`study_quiz.md` 和 `mastery_worksheet.md`；当路线需要可运行项目或复现验收时，还会写出 `artifact_template/` 模板包。
 模板包会遵循所选输出语言；如果有论文解析结果，也会写入公式、代码链接、实验和局限相关验收目标。
 
 交互式 HTML 是单个可离线打开的文件，不依赖前端框架、远程字体或在线脚本。任务进度会在浏览器允许时写入 `localStorage`；如果浏览器阻止本地存储，报告仍然可以阅读和点击，只是勾选状态作为临时状态处理。

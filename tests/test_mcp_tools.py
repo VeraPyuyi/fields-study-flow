@@ -177,6 +177,7 @@ def test_export_plan_writes_markdown_svg_and_html(tmp_path):
     assert (tmp_path / "mastery_worksheet.md").exists()
     assert (tmp_path / "quick_brief.md").exists()
     assert (tmp_path / "evidence_coverage.md").exists()
+    assert (tmp_path / "evidence_coverage.html").exists()
     assert result["index_html"].endswith("index.html")
     assert result["report_audit_json"].endswith("report_audit.json")
     assert result["study_cards_md"].endswith("study_cards.md")
@@ -184,6 +185,7 @@ def test_export_plan_writes_markdown_svg_and_html(tmp_path):
     assert result["mastery_worksheet_md"].endswith("mastery_worksheet.md")
     assert result["quick_brief_md"].endswith("quick_brief.md")
     assert result["evidence_coverage_md"].endswith("evidence_coverage.md")
+    assert result["evidence_coverage_html"].endswith("evidence_coverage.html")
     assert result["roadmap_svg"].endswith("roadmap.svg")
     assert result["roadmap_html"].endswith("roadmap.html")
 

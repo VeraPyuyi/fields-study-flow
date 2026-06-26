@@ -1052,7 +1052,8 @@ def test_cli_export_all_sanitizes_private_paths_and_lists_outputs(tmp_path):
     assert "roadmap.html" in result.stdout
     assert "quick_brief.md" in result.stdout
     assert "evidence_coverage.md" in result.stdout
-    for target in ("roadmap.json", "roadmap.md", "roadmap.svg", "index.html", "roadmap.html", "quick_brief.md", "evidence_coverage.md"):
+    assert "evidence_coverage.html" in result.stdout
+    for target in ("roadmap.json", "roadmap.md", "roadmap.svg", "index.html", "roadmap.html", "quick_brief.md", "evidence_coverage.md", "evidence_coverage.html"):
         exported = (export_dir / target).read_text(encoding="utf-8")
         assert "C:/Users/example/private" not in exported
         assert "file:///C:/Users/example/private" not in exported
@@ -1119,6 +1120,7 @@ def test_cli_export_all_writes_paper_map_and_lens_for_paper_brief_links(tmp_path
     assert (export_dir / "paper_map.html").exists()
     assert (export_dir / "paper_lens.html").exists()
     assert (export_dir / "evidence_coverage.md").exists()
+    assert (export_dir / "evidence_coverage.html").exists()
     quick_brief = (export_dir / "quick_brief.md").read_text(encoding="utf-8")
     assert "[Paper Map](paper_map.html)" in quick_brief
     assert "[Paper Lens](paper_lens.html)" in quick_brief
@@ -1152,6 +1154,7 @@ def test_write_outputs_sanitizes_private_urls_in_resource_indices(tmp_path):
 
     assert (tmp_path / "quick_brief.md").exists()
     assert (tmp_path / "evidence_coverage.md").exists()
+    assert (tmp_path / "evidence_coverage.html").exists()
     for target in ("resource_index.json", "local_resource_analysis.json", "roadmap.json"):
         exported = (tmp_path / target).read_text(encoding="utf-8")
         assert "C:/Users/example/private" not in exported
@@ -1163,9 +1166,13 @@ def test_write_outputs_sanitizes_private_urls_in_resource_indices(tmp_path):
     assert "private folder" not in quick_brief
     assert "file:///C:/Users/example/private" not in quick_brief
     evidence_coverage = (tmp_path / "evidence_coverage.md").read_text(encoding="utf-8")
+    evidence_coverage_html = (tmp_path / "evidence_coverage.html").read_text(encoding="utf-8")
     assert "C:/Users/example/private" not in evidence_coverage
     assert "private folder" not in evidence_coverage
     assert "file:///C:/Users/example/private" not in evidence_coverage
+    assert "C:/Users/example/private" not in evidence_coverage_html
+    assert "private folder" not in evidence_coverage_html
+    assert "file:///C:/Users/example/private" not in evidence_coverage_html
 
 
 def test_write_outputs_exports_generated_artifact_template(tmp_path):

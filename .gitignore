@@ -8,6 +8,7 @@ fields-study-flow-output/
 fields-study-flow-paper-output/
 fields-study-flow-export/
 tmp-review-output/
+tmp_*/
 dist/
 build/
 *.egg-info/

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from fields_study_flow import frontend_report
-from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_html, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 
 
 def test_checked_in_frontend_dist_has_package_visible_manifest():
@@ -427,6 +427,13 @@ def test_evidence_coverage_markdown_tracks_claims_tasks_resources_and_redacts_pa
                         "local_href": "study-assets/attention.pdf",
                         "selected": True,
                         "metadata": {"rag": {"evidence_chunks": [{"snippet": "Transformer uses attention.", "file_name": "attention.pdf"}]}},
+                    },
+                    {
+                        "title": "Private reading notes",
+                        "local_href": "study-assets/notes.md",
+                        "source": "local",
+                        "type": "note",
+                        "metadata": {"rag": {"evidence_chunks": [{"snippet": "Notes explain residual connections.", "file_name": "notes.md"}]}},
                     }
                 ]
             },
@@ -435,6 +442,13 @@ def test_evidence_coverage_markdown_tracks_claims_tasks_resources_and_redacts_pa
 
     assert "# Learning Roadmap: Transformer - Evidence Coverage Matrix" in markdown
     assert "## Coverage Summary" in markdown
+    assert "- Coverage score:" in markdown
+    assert "## Evidence Source Diagnostics" in markdown
+    assert "[Target-paper logic claims](paper_map.html#limitation)" in markdown
+    assert "[Reading paragraphs](paper_lens.html#detail-1)" in markdown
+    assert "[Local notes and notebooks](study-assets/notes.md)" in markdown
+    assert "## Measured Coverage Score" in markdown
+    assert "## Priority Evidence Queue" in markdown
     assert "## Paper Logic Coverage" in markdown
     assert "## Reading Paragraph Coverage" in markdown
     assert "## Mastery Task Coverage" in markdown
@@ -457,8 +471,49 @@ def test_evidence_coverage_field_route_uses_roadmap_links_without_paper_pages():
 
     assert "paper_map.html" not in markdown
     assert "paper_lens.html" not in markdown
+    assert "## Evidence Source Diagnostics" in markdown
+    assert "Target-paper logic claims" not in markdown
+    assert "Reading paragraphs" not in markdown
+    assert "[RAG/resource chunks](https://example.com/diffusion)" in markdown
+    assert "[Local/openable resources](https://example.com/diffusion)" in markdown
+    assert "[Mastery task evidence](roadmap.html#mastery-checklist-title)" in markdown
+    assert "## Measured Coverage Score" in markdown
+    assert "## Priority Evidence Queue" in markdown
     assert "roadmap.html#mastery-checklist-title" in markdown
     assert "[Diffusion Tutorial](https://example.com/diffusion)" in markdown
+
+
+def test_evidence_coverage_html_renders_dashboard_and_redacts_private_paths():
+    html = render_evidence_coverage_html(
+        {
+            "title": "Learning Roadmap: Transformer",
+            "profile": {"goal": "master Transformer from C:/Users/example/private.pdf", "output_language": "en"},
+            "study_tasks": [{"type": "explain", "title": "Explain the chain", "resource_titles": ["Attention"]}],
+            "study_bundle": {
+                "resources": [
+                    {
+                        "title": "Attention",
+                        "local_href": "study-assets/attention.pdf",
+                        "metadata": {"rag": {"evidence_chunks": [{"snippet": "attention evidence", "file_name": "attention.pdf"}]}},
+                    },
+                    {
+                        "title": "Query Resource",
+                        "href": "https://example.com/read?paper=1&src=test",
+                        "why_recommended": "checks query link escaping",
+                    },
+                ]
+            },
+        }
+    )
+
+    assert "<!doctype html>" in html
+    assert "Evidence Coverage Dashboard" in html
+    assert "Evidence Source Diagnostics" in html
+    assert "<table>" in html
+    assert 'href="study-assets/attention.pdf"' in html
+    assert 'href="https://example.com/read?paper=1&amp;src=test"' in html
+    assert "amp;amp;src" not in html
+    assert "C:/Users/example/private" not in html
 
 
 def test_report_index_starter_questions_fall_back_for_field_routes():

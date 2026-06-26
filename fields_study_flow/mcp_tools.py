@@ -9,7 +9,7 @@ from fields_study_flow.language import (
     normalize_resource_language_preference,
 )
 from fields_study_flow.artifact_templates import write_artifact_template
-from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
+from fields_study_flow.frontend_report import copy_frontend_assets, render_evidence_coverage_html, render_evidence_coverage_markdown, render_frontend_report, render_mastery_worksheet_markdown, render_quick_brief_markdown, render_report_index, render_study_cards_markdown, render_study_quiz_markdown
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.live_search import search_live_resources
 from fields_study_flow.local_resources import analyze_local_resources
@@ -319,6 +319,8 @@ def exportPlan(
         outputs.append("quick_brief.md")
     if "evidence_coverage.md" not in outputs:
         outputs.append("evidence_coverage.md")
+    if "evidence_coverage.html" not in outputs:
+        outputs.append("evidence_coverage.html")
     public_plan["outputs"] = outputs
     if has_target_paper(public_plan):
         if "paper_map.html" not in outputs:
@@ -333,6 +335,7 @@ def exportPlan(
     mastery_target = output / "mastery_worksheet.md"
     brief_target = output / "quick_brief.md"
     coverage_target = output / "evidence_coverage.md"
+    coverage_html_target = output / "evidence_coverage.html"
     svg_target = output / "roadmap.svg"
     index_target = output / "index.html"
     audit_target = output / "report_audit.json"
@@ -357,6 +360,7 @@ def exportPlan(
     mastery_target.write_text(render_mastery_worksheet_markdown(public_plan), encoding="utf-8")
     brief_target.write_text(render_quick_brief_markdown(public_plan), encoding="utf-8")
     coverage_target.write_text(render_evidence_coverage_markdown(public_plan), encoding="utf-8")
+    coverage_html_target.write_text(render_evidence_coverage_html(public_plan), encoding="utf-8")
     svg_target.write_text(render_svg(public_plan), encoding="utf-8")
     index_target.write_text(render_report_index(public_plan), encoding="utf-8")
     html_target.write_text(
@@ -385,6 +389,7 @@ def exportPlan(
         "mastery_worksheet_md": str(mastery_target),
         "quick_brief_md": str(brief_target),
         "evidence_coverage_md": str(coverage_target),
+        "evidence_coverage_html": str(coverage_html_target),
         "roadmap_svg": str(svg_target),
         "roadmap_html": str(html_target),
     }
