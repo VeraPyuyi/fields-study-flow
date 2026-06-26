@@ -94,6 +94,7 @@ export type StudyTask = {
   evidence?: string;
   acceptance?: string;
   resource_titles?: string[];
+  evidence_chunks?: Evidence[];
 };
 
 export type PaperSet = {

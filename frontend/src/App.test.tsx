@@ -99,6 +99,15 @@ describe("fields-study-flow React report app", () => {
             resource_titles: ["Local PDF"],
           },
           {
+            id: "task-derive",
+            type: "derive",
+            title: "推导关键机制",
+            evidence: "用自己的话拆解公式或机制。",
+            acceptance: "能说明每一步为什么成立。",
+            estimated_minutes: 30,
+            evidence_chunks: [{}],
+          },
+          {
             id: "task-reproduce",
             type: "reproduce",
             title: "复现最小实验",
@@ -129,8 +138,17 @@ describe("fields-study-flow React report app", () => {
 
     render(<App />);
     const resourceLibrary = document.querySelector("#resource-library") as HTMLElement;
+    const readinessPanel = document.querySelector("[data-roadmap-mastery-readiness]") as HTMLElement;
+    const readinessGates = Array.from(document.querySelectorAll("[data-roadmap-mastery-gate]"));
 
     expect(screen.getByText("学习中控台")).toBeInTheDocument();
+    expect(readinessPanel).toBeInTheDocument();
+    expect(within(readinessPanel).getByText("63%")).toBeInTheDocument();
+    expect(readinessGates).toHaveLength(4);
+    expect(document.querySelector('[data-roadmap-mastery-gate="explain"]')).toHaveAttribute("data-roadmap-mastery-status", "ready");
+    expect(document.querySelector('[data-roadmap-mastery-gate="reproduce"]')).toHaveAttribute("data-roadmap-mastery-status", "ready");
+    expect(document.querySelector('[data-roadmap-mastery-gate="derive"]')).toHaveAttribute("data-roadmap-mastery-status", "needs_evidence");
+    expect(document.querySelector('[data-roadmap-mastery-gate="critique"]')).toHaveAttribute("data-roadmap-mastery-status", "missing");
     expect(screen.getByText("先从这里开始")).toBeInTheDocument();
     expect(screen.getByText("1 先看论文逻辑图")).toBeInTheDocument();
     expect(screen.getByText("2 再做段落精读")).toBeInTheDocument();
@@ -146,12 +164,12 @@ describe("fields-study-flow React report app", () => {
     expect(screen.getByText("重试失败项")).toBeInTheDocument();
     expect(screen.getByText("下载队列")).toBeInTheDocument();
     expect(screen.getByText("把学习变成可检查证据")).toBeInTheDocument();
-    expect(screen.getByText("0/2 · 0%")).toBeInTheDocument();
+    expect(screen.getByText("0/3 · 0%")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "复制证据清单" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "下载 worksheet.md" })).toBeInTheDocument();
     expect(screen.getByLabelText("解释")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("解释"));
-    expect(screen.getByText("1/2 · 50%")).toBeInTheDocument();
+    expect(screen.getByText("1/3 · 33%")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "复制证据清单" }));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Transformer 学习路线 掌握证据清单"));
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("解释核心问题"));
@@ -192,8 +210,12 @@ describe("fields-study-flow React report app", () => {
     });
 
     render(<App />);
+    const readinessPanel = document.querySelector("[data-roadmap-mastery-readiness]") as HTMLElement;
 
     expect(screen.getByText("下一步补齐路线")).toBeInTheDocument();
+    expect(readinessPanel).toBeInTheDocument();
+    expect(within(readinessPanel).getByText("0%")).toBeInTheDocument();
+    expect(document.querySelectorAll('[data-roadmap-mastery-status="missing"]')).toHaveLength(4);
     expect(screen.getByText("补齐学习阶段")).toBeInTheDocument();
     expect(screen.getByText(/补充目标论文或本地资料/)).toBeInTheDocument();
     expect(screen.getByText("补齐验收任务")).toBeInTheDocument();

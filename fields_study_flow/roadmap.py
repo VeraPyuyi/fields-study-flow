@@ -1732,6 +1732,119 @@ def render_svg(roadmap: dict[str, Any]) -> str:
     return "\n".join(parts)
 
 
+def _html_roadmap_mastery_readiness(study_tasks: list[dict[str, Any]], language: str) -> str:
+    gates = [
+        (
+            "explain",
+            "Already has a supporting resource; use it for a no-notes explanation.",
+            "Add a paper paragraph or resource that supports the explanation.",
+            "Add an explain task so the route can test basic understanding.",
+        ),
+        (
+            "derive",
+            "Already has a supporting resource; use it for the key formula or mechanism derivation.",
+            "Add formula, method, or mechanism evidence before assessment.",
+            "Add a derive task so the method is not only memorized.",
+        ),
+        (
+            "reproduce",
+            "Already has a supporting resource; use it for a minimal runnable check.",
+            "Add a notebook, repository, or experiment note as evidence.",
+            "Add a reproduce task so mastery becomes checkable.",
+        ),
+        (
+            "critique",
+            "Already has a supporting resource; use it to explain limitations and boundaries.",
+            "Add limitation, failure-case, or comparison evidence.",
+            "Add a critique task so the route covers boundaries.",
+        ),
+    ]
+    zh_actions = {
+        "explain": ("已经绑定资料，可以直接做无笔记讲解。", "补一条能支撑讲解的论文段落或资料来源。", "先补一个解释任务，让路线能检验是否听得懂。"),
+        "derive": ("已经绑定资料，可以整理关键公式或机制推导。", "补一条公式、方法或机制证据后再验收。", "补一个推导任务，避免只会复述不会拆解方法。"),
+        "reproduce": ("已经绑定资料，可以进入最小实验或代码验证。", "补一个 notebook、代码仓库或实验说明作为证据。", "补一个复现任务，让掌握结果可运行、可检查。"),
+        "critique": ("已经绑定资料，可以说明适用边界和局限。", "补一条局限、失败案例或对比资料作为证据。", "补一个批判任务，避免报告只讲优点不讲边界。"),
+    }
+    cards: list[str] = []
+    score = 0
+    for task_type, ready_en, needs_en, missing_en in gates:
+        matching = [
+            task
+            for task in study_tasks
+            if isinstance(task, dict) and str(task.get("type") or "").lower() == task_type
+        ]
+        matching.sort(
+            key=_roadmap_task_evidence_count,
+            reverse=True,
+        )
+        task = matching[0] if matching else None
+        evidence_count = _roadmap_task_evidence_count(task) if task else 0
+        if task and evidence_count:
+            status = "ready"
+            score += 2
+            action = zh_actions.get(task_type, (ready_en, needs_en, missing_en))[0] if language == "zh-CN" else ready_en
+        elif task:
+            status = "needs_evidence"
+            score += 1
+            action = zh_actions.get(task_type, (ready_en, needs_en, missing_en))[1] if language == "zh-CN" else needs_en
+        else:
+            status = "missing"
+            action = zh_actions.get(task_type, (ready_en, needs_en, missing_en))[2] if language == "zh-CN" else missing_en
+        status_label = {
+            "ready": _localized_value(language, "ready", {"ready": "ready"}, {"ready": "已可验收"}),
+            "needs_evidence": _localized_value(language, "needs_evidence", {"needs_evidence": "needs evidence"}, {"needs_evidence": "缺证据"}),
+            "missing": _localized_value(language, "missing", {"missing": "missing"}, {"missing": "缺任务"}),
+        }[status]
+        title = str(task.get("title") or "") if task else ""
+        cards.append(
+            f"""
+            <a class="kg-node roadmap-readiness-card status-{status}" href="#mastery-checklist-title"
+               data-roadmap-mastery-gate="{escape(task_type)}" data-roadmap-mastery-status="{escape(status)}"
+               data-mastery-gate="{escape(task_type)}" data-mastery-status="{escape(status)}">
+              <span class="badge">{escape(_localized_task_type(language, task_type))}</span>
+              <h3>{escape(status_label)}</h3>
+              <p>{escape(action)}</p>
+              <p class="meta">{escape(title or (_label(language, 'not_available')))} · {escape(str(evidence_count))} evidence</p>
+            </a>
+            """
+        )
+    percent = round((score / (len(gates) * 2)) * 100) if gates else 0
+    heading = "现在离真正掌握还差什么" if language == "zh-CN" else "What remains before mastery"
+    description = (
+        "按解释、推导、复现、批判四个门槛检查：有任务且有资料证据才算已可验收。"
+        if language == "zh-CN"
+        else "Check explain, derive, reproduce, and critique. A gate is ready only when the task has supporting evidence."
+    )
+    return f"""
+    <section class="graph-panel roadmap-readiness-panel" data-roadmap-mastery-readiness data-mastery-readiness-panel>
+      <div class="phase-title-row">
+        <h2>{escape(heading)}</h2>
+        <span class="badge">{percent}% · {score}/{len(gates) * 2}</span>
+      </div>
+      <p class="meta">{escape(description)}</p>
+      <div class="kg-flow">{''.join(cards)}</div>
+    </section>
+    """
+
+
+def _roadmap_task_evidence_count(task: dict[str, Any]) -> int:
+    resources = task.get("resource_titles") or []
+    chunks = task.get("evidence_chunks") or []
+    resource_count = len([item for item in resources if item]) if isinstance(resources, list) else int(bool(resources))
+    chunk_count = len([chunk for chunk in chunks if _roadmap_is_traceable_evidence_chunk(chunk)]) if isinstance(chunks, list) else int(_roadmap_is_traceable_evidence_chunk(chunks))
+    return resource_count + chunk_count
+
+
+def _roadmap_is_traceable_evidence_chunk(chunk: Any) -> bool:
+    if isinstance(chunk, str):
+        return bool(chunk.strip())
+    if not isinstance(chunk, dict):
+        return False
+    snippet = str(chunk.get("snippet") or chunk.get("text") or chunk.get("quote") or "").strip()
+    locator = any(chunk.get(key) for key in ("detail_anchor", "local_href", "href", "url", "file_name", "resource_title"))
+    return bool(snippet or locator)
+
+
 def render_html(roadmap: dict[str, Any]) -> str:
     roadmap = sanitize_roadmap_for_export(roadmap)
     language = _roadmap_language(roadmap)
@@ -1897,6 +2010,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
         </section>
         """
 
+    roadmap_readiness_panel = _html_roadmap_mastery_readiness(roadmap.get("study_tasks", []), language)
     mastery_panel = ""
     mastery_evidence = roadmap.get("mastery_evidence", {})
     if mastery_evidence:
@@ -2827,6 +2941,7 @@ def render_html(roadmap: dict[str, Any]) -> str:
   {quality_panel}
   {route_panel}
   {rag_panel}
+  {roadmap_readiness_panel}
   {mastery_panel}
   {knowledge_graph_panel}
   {next_actions_panel}

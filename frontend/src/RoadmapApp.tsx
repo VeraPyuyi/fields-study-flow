@@ -23,6 +23,39 @@ const TASK_TYPE_LABELS: Record<string, string> = {
   critique: "批判",
 };
 
+const MASTERY_GATE_ORDER = [
+  {
+    type: "explain",
+    label: "解释",
+    readyAction: "已经绑定资料，可以直接做无笔记讲解。",
+    needsAction: "补一条能支撑讲解的论文段落或资料来源。",
+    missingAction: "先补一个解释任务，让路线能检验是否听得懂。",
+  },
+  {
+    type: "derive",
+    label: "推导",
+    readyAction: "已经绑定资料，可以整理关键公式或机制推导。",
+    needsAction: "补一条公式、方法或机制证据后再验收。",
+    missingAction: "补一个推导任务，避免只会复述不会拆解方法。",
+  },
+  {
+    type: "reproduce",
+    label: "复现",
+    readyAction: "已经绑定资料，可以进入最小实验或代码验证。",
+    needsAction: "补一个 notebook、代码仓库或实验说明作为证据。",
+    missingAction: "补一个复现任务，让掌握结果可运行、可检查。",
+  },
+  {
+    type: "critique",
+    label: "批判",
+    readyAction: "已经绑定资料，可以说明适用边界和局限。",
+    needsAction: "补一条局限、失败案例或对比资料作为证据。",
+    missingAction: "补一个批判任务，避免报告只讲优点不讲边界。",
+  },
+] as const;
+
+type MasteryGateStatus = "ready" | "needs_evidence" | "missing";
+
 function numeric(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
@@ -507,6 +540,50 @@ function taskId(task: StudyTask, index: number) {
   return String(task.id || `${task.type || "task"}-${index + 1}`);
 }
 
+function taskEvidenceCount(task?: StudyTask) {
+  if (!task) return 0;
+  const resources = Array.isArray(task.resource_titles) ? task.resource_titles.filter(Boolean).length : 0;
+  const chunks = Array.isArray(task.evidence_chunks) ? task.evidence_chunks.filter(isTraceableEvidenceChunk).length : 0;
+  return resources + chunks;
+}
+
+function isTraceableEvidenceChunk(chunk: unknown) {
+  if (typeof chunk === "string") return Boolean(chunk.trim());
+  if (!chunk || typeof chunk !== "object") return false;
+  const record = chunk as Record<string, unknown>;
+  const snippet = String(record.snippet || record.text || record.quote || "").trim();
+  const locator = ["detail_anchor", "local_href", "href", "url", "file_name", "resource_title"].some((key) => Boolean(record[key]));
+  return Boolean(snippet || locator);
+}
+
+function masteryGateStatusLabel(status: MasteryGateStatus) {
+  if (status === "ready") return "已可验收";
+  if (status === "needs_evidence") return "缺证据";
+  return "缺任务";
+}
+
+function buildMasteryReadiness(tasks: StudyTask[]) {
+  const items = MASTERY_GATE_ORDER.map((gate) => {
+    const matchingTasks = tasks.filter((task) => String(task.type || "").toLowerCase() === gate.type);
+    const task = matchingTasks.sort((a, b) => taskEvidenceCount(b) - taskEvidenceCount(a))[0];
+    const evidenceCount = taskEvidenceCount(task);
+    const status: MasteryGateStatus = task ? (evidenceCount > 0 ? "ready" : "needs_evidence") : "missing";
+    const score = status === "ready" ? 2 : status === "needs_evidence" ? 1 : 0;
+    return {
+      ...gate,
+      task,
+      evidenceCount,
+      status,
+      score,
+      action: status === "ready" ? gate.readyAction : status === "needs_evidence" ? gate.needsAction : gate.missingAction,
+    };
+  });
+  const maxScore = items.length * 2;
+  const score = items.reduce((total, item) => total + item.score, 0);
+  const percent = maxScore ? Math.round((score / maxScore) * 100) : 0;
+  return { items, score, maxScore, percent };
+}
+
 function PaperSetPanel({ paperSet }: { paperSet: NonNullable<Roadmap["paper_set"]> }) {
   const papers = paperSet.papers ?? [];
   const readingOrder = paperSet.reading_order ?? [];
@@ -650,6 +727,7 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
     () => buildMasteryWorksheet(roadmap, studyTasks, completedTaskIds),
     [roadmap, studyTasks, completedTaskIds],
   );
+  const masteryReadiness = useMemo(() => buildMasteryReadiness(studyTasks), [studyTasks]);
   const missingPhases = phases.length === 0;
   const missingTasks = studyTasks.length === 0;
   const missingResources = resources.length === 0;
@@ -867,6 +945,37 @@ export function RoadmapApp({ roadmap }: { roadmap: Roadmap }) {
           </div>
         </section>
       ) : null}
+      <section className="roadmap-readiness-panel" data-roadmap-mastery-readiness data-mastery-readiness-panel aria-labelledby="roadmap-readiness-title">
+        <div className="roadmap-readiness-head">
+          <div>
+            <p className="eyebrow">掌握就绪</p>
+            <h2 id="roadmap-readiness-title">现在离真正掌握还差什么</h2>
+            <p>按解释、推导、复现、批判四个门槛检查：有任务且有资料证据才算已可验收。</p>
+          </div>
+          <div className="roadmap-readiness-score" aria-label={`掌握就绪 ${masteryReadiness.percent}%`}>
+            <strong>{masteryReadiness.percent}%</strong>
+            <span>{masteryReadiness.score}/{masteryReadiness.maxScore}</span>
+          </div>
+        </div>
+        <div className="roadmap-readiness-grid">
+          {masteryReadiness.items.map((item) => (
+            <a
+              className={`roadmap-readiness-card status-${item.status}`}
+              href="#mastery-checklist-title"
+              data-roadmap-mastery-gate={item.type}
+              data-roadmap-mastery-status={item.status}
+              data-mastery-gate={item.type}
+              data-mastery-status={item.status}
+              key={item.type}
+            >
+              <span>{item.label}</span>
+              <strong>{masteryGateStatusLabel(item.status)}</strong>
+              <p>{item.action}</p>
+              {item.task ? <em>{item.task.title || `${item.label}任务`} · 证据 {item.evidenceCount}</em> : <em>暂无对应任务</em>}
+            </a>
+          ))}
+        </div>
+      </section>
       {studyTasks.length ? (
         <section className="mastery-checklist-panel" aria-labelledby="mastery-checklist-title">
           <div className="mastery-checklist-head">

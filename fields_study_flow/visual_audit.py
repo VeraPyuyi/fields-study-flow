@@ -3329,6 +3329,12 @@ def _experience_risks(root: Path, roadmap: dict[str, Any], surfaces: list[str], 
             "Show explain/derive/reproduce/critique readiness on index.html so learners can see what remains before opening support artifacts.",
         ),
         _experience_check(
+            "roadmap_mastery_readiness_sync",
+            "Roadmap mastery readiness sync",
+            _has_roadmap_mastery_readiness_sync(html.get("roadmap.html", "")),
+            "Show explain/derive/reproduce/critique readiness inside roadmap.html so route execution and readiness stay in the same report.",
+        ),
+        _experience_check(
             "starter_questions_panel",
             "Starter questions panel",
             _contains_any_text(
@@ -3766,6 +3772,17 @@ def _read_text(path: Path) -> str:
 
 def _contains_any_text(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
+
+
+def _has_roadmap_mastery_readiness_sync(roadmap_html: str) -> bool:
+    if "data-roadmap-mastery-readiness" not in roadmap_html:
+        return False
+    if "data-roadmap-mastery-gate" not in roadmap_html:
+        return False
+    required_gates = ("explain", "derive", "reproduce", "critique")
+    if not all(gate in roadmap_html for gate in required_gates):
+        return False
+    return _contains_any_text(roadmap_html, ("data-roadmap-mastery-status", "data-mastery-status"))
 
 
 def _has_first_session_plan(index_html: str) -> bool:
