@@ -8,7 +8,7 @@ from html import escape
 from typing import Any, Protocol
 
 
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+from fields_study_flow.privacy import PRIVATE_PATH_RE
 PAPER_MAP_FILE = "paper_map.html"
 PAPER_LENS_FILE = "paper_lens.html"
 CORE_CHAIN = [
@@ -754,7 +754,8 @@ def _target_node(target: dict[str, Any], language: str) -> dict[str, Any]:
         "connection": _label(language, "target_connection"),
         "talking_point": _label(language, "target_talk"),
         "evidence": [],
-        "confidence": 0.75,
+        "confidence": None,
+        "evidence_status": "partial" if target.get("abstract_snippet") else "missing",
         "related_resources": [_link_item(target, _label(language, "open_local_or_source"))],
     }
 
@@ -762,7 +763,6 @@ def _target_node(target: dict[str, Any], language: str) -> dict[str, Any]:
 def _core_node(kind: str, metadata: dict[str, Any], text: str, evidence: list[dict[str, Any]], language: str) -> dict[str, Any]:
     source = _source_for_kind(kind, metadata, text)
     node_evidence = _evidence_for_kind(kind, source, evidence)
-    confidence = 0.55 + min(len(node_evidence), 2) * 0.12 + (0.12 if source else 0)
     label = _node_label(kind, metadata, source, language)
     return _sanitize(
         {
@@ -775,8 +775,9 @@ def _core_node(kind: str, metadata: dict[str, Any], text: str, evidence: list[di
             "why_it_matters": _why_it_matters(kind, source, language),
             "connection": _connection_text(kind, language),
             "talking_point": _talking_point(kind, label, language),
-            "evidence": node_evidence or [_missing_evidence(language)],
-            "confidence": round(min(confidence, 0.95), 2),
+            "evidence": node_evidence,
+            "evidence_status": "partial" if source else "missing",
+            "confidence": None,
             "related_resources": [],
             "paper_lens_href": PAPER_LENS_FILE,
         }
@@ -823,7 +824,10 @@ def _branch_nodes_and_edges(
     formulas = [str(item) for item in metadata.get("formula_candidates", []) if item]
     for index, formula in enumerate(formulas[:2], start=1):
         node_id = f"formula-{index}"
-        nodes.append(_branch_node(node_id, "formula", _clip(formula, 90), _label(language, "formula_plain"), language))
+        node = _branch_node(node_id, "formula", _clip(formula, 90), _label(language, "formula_plain"), language)
+        node["evidence"] = [{"source_title": "Target paper", "snippet": formula, "evidence_status": "partial"}]
+        node["evidence_status"] = "partial"
+        nodes.append(node)
         edges.append(_branch_edge("core-methodology", node_id, "supports", language))
     for index, item in enumerate(resources[: 4 if depth == "standard" else 8], start=1):
         node_id = f"resource-{index}"
@@ -837,7 +841,11 @@ def _branch_nodes_and_edges(
         edges.append(_branch_edge(node_id, "core-contribution", "supports", language))
     for index, item in enumerate(evidence[: 2 if depth == "standard" else 5], start=1):
         node_id = f"evidence-{index}"
-        nodes.append(_branch_node(node_id, "evidence", str(item.get("resource_title") or item.get("file_name") or "Evidence"), _clip(str(item.get("snippet") or ""), 180), language))
+        node = _branch_node(node_id, "evidence", str(item.get("resource_title") or item.get("file_name") or "Evidence"), str(item.get("snippet") or ""), language)
+        if item.get("snippet"):
+            node["evidence"] = [{**item, "evidence_status": "partial"}]
+            node["evidence_status"] = "partial"
+        nodes.append(node)
         edges.append(_branch_edge(node_id, "core-experiment", "supports", language))
     return nodes, edges
 
@@ -854,7 +862,8 @@ def _branch_node(node_id: str, kind: str, label: str, explanation: str, language
         "connection": _label(language, "branch_connection"),
         "talking_point": _label(language, "branch_talk"),
         "evidence": [],
-        "confidence": 0.62,
+        "confidence": None,
+        "evidence_status": "missing",
         "related_resources": [],
     }
 
@@ -971,11 +980,11 @@ def _paper_source_text(target: dict[str, Any], metadata: dict[str, Any]) -> str:
 def _source_for_kind(kind: str, metadata: dict[str, Any], text: str) -> str:
     key_map = {
         "background": ("concepts", "keywords"),
-        "motivation": ("abstract_snippet", "limitations_hints"),
+        "motivation": ("abstract_snippet",),
         "problem": ("abstract_snippet",),
         "methodology": ("method_hints",),
         "experiment": ("experiment_hints",),
-        "contribution": ("abstract_snippet", "method_hints"),
+        "contribution": (),
         "limitation": ("limitations_hints",),
     }
     for key in key_map.get(kind, ()):
@@ -984,11 +993,21 @@ def _source_for_kind(kind: str, metadata: dict[str, Any], text: str) -> str:
             return " ".join(str(item) for item in value[:3] if item)
         if isinstance(value, str) and value.strip():
             return value
+    from .paper_lens import _split_paper_segments
+
+    section_kind = {"methodology": "method", "experiment": "experiment", "limitation": "limitation"}.get(kind)
+    if section_kind:
+        sections = _split_paper_segments(text)
+        matches = [item["text"] for item in sections if item["section_kind"] == section_kind]
+        if matches:
+            return "\n\n".join(matches)
+        # An abstract can mention a method or evaluation, but is not a method or experiment section.
+        return ""
     sentences = _sentences(text)
     terms = {
-        "background": ("background", "symbolic", "pddl", "planning"),
+        "background": ("background", "introduction", "preliminaries"),
         "motivation": ("motivation", "gap", "struggle", "violate", "need"),
-        "problem": ("problem", "struggle", "valid", "precondition"),
+        "problem": ("problem", "struggle", "challenge"),
         "methodology": ("method", "construct", "trace", "pddl-instruct", "chain-of-thought"),
         "experiment": ("experiment", "planbench", "val", "evaluation", "validation"),
         "contribution": ("result", "show", "contribution", "help"),
@@ -996,30 +1015,30 @@ def _source_for_kind(kind: str, metadata: dict[str, Any], text: str) -> str:
     }.get(kind, ())
     for sentence in sentences:
         lower = sentence.lower()
-        if any(term in lower for term in terms):
+        if any(re.search(r"\b" + re.escape(term) + r"\b", lower) for term in terms):
             return sentence
-    return sentences[0] if sentences else ""
+    return ""
 
 
 def _evidence_for_kind(kind: str, source: str, evidence: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    terms = set(_tokens(source)) | {
-        "methodology": {"pddl", "trace", "cot", "logical"},
-        "experiment": {"planbench", "val", "validation"},
-        "limitation": {"coverage", "unseen", "quality"},
-    }.get(kind, set())
-    output: list[dict[str, Any]] = []
+    if not source:
+        return []
+    terms = _tokens(source) - {"the", "and", "for", "with", "this", "that", "from", "are", "model", "paper"}
+    output: list[dict[str, Any]] = [{"source_title": "Target paper", "snippet": source, "evidence_status": "partial"}]
     for item in evidence:
         snippet = str(item.get("snippet") or "")
         if not snippet:
             continue
-        if terms and not (_tokens(snippet) & terms):
+        if not terms or not (_tokens(snippet) & terms):
             continue
         output.append(
             _sanitize(
                 {
                     "source_title": item.get("resource_title") or item.get("title"),
                     "file_name": item.get("file_name"),
-                    "snippet": _clip(snippet, 360),
+                    "snippet": snippet,
+                    "evidence_status": "partial",
+                    "relation_status": "unreviewed",
                     "score": item.get("score"),
                     "local_href": item.get("local_href"),
                     "url": item.get("url"),
@@ -1028,8 +1047,6 @@ def _evidence_for_kind(kind: str, source: str, evidence: list[dict[str, Any]]) -
         )
         if len(output) >= 2:
             break
-    if not output and source:
-        output.append({"source_title": "Target paper", "snippet": _clip(source, 360), "score": 0.6})
     return output
 
 
@@ -1097,58 +1114,41 @@ def _node_label(kind: str, metadata: dict[str, Any], source: str, language: str)
     if kind == "background":
         return _clip(" / ".join(concepts[:3]) or _kind_label(kind, language), 90)
     if kind == "motivation":
-        return _label(language, "motivation_label")
+        return _kind_label(kind, language)
     if kind == "problem":
-        return _label(language, "problem_label")
+        return _kind_label(kind, language)
     if kind == "methodology":
-        if "pddl" in source.lower():
-            return "PDDL-Instruct + Logical CoT"
+        if "pddl-instruct" in source.lower():
+            return "PDDL-Instruct"
         return _clip(source or _kind_label(kind, language), 90)
     if kind == "experiment":
-        if re.search(r"planbench|val", source, flags=re.I):
-            return "PlanBench / VAL"
+        tools = [tool for tool in ("PlanBench", "VAL") if re.search(r"\b" + tool + r"\b", source, flags=re.I)]
+        if tools:
+            return " / ".join(tools)
         return _clip(source or _kind_label(kind, language), 90)
     if kind == "contribution":
-        return _label(language, "contribution_label")
+        return _kind_label(kind, language)
     if kind == "limitation":
-        return _label(language, "limitation_label")
+        return _kind_label(kind, language)
     return _kind_label(kind, language)
 
 
 def _plain_explanation(kind: str, source: str, metadata: dict[str, Any], language: str) -> str:
-    if language == "en":
-        return _english_plain(kind, source)
-    if kind == "background":
-        return f"这篇论文站在这些背景上：{_concept_phrase(metadata, source)}。先知道这些，后面的动机和方法才不会悬空。"
-    if kind == "motivation":
-        return "它的出发点是：大模型生成的计划看起来可能顺，但不一定真的满足动作前提、效果和状态变化约束。"
-    if kind == "problem":
-        return "它要解决的具体问题是：让模型不仅给出计划，还能说明每一步为什么在符号规划规则下合法。"
-    if kind == "methodology":
-        return f"方法可以直白理解为：把规划任务做成带逻辑推理过程的教学样例，让模型学习按状态、前提、效果一步步推。{_clip(source, 180)}"
-    if kind == "experiment":
-        return f"实验部分负责回答：这种训练到底有没有让计划更可执行。关键看 PlanBench、VAL 或 PDDL 风格验证。{_clip(source, 180)}"
-    if kind == "contribution":
-        return "贡献不是只说用了 CoT，而是把 CoT 变成可检查的规划逻辑轨迹，并用执行性验证证明它有帮助。"
-    if kind == "limitation":
-        return f"边界在于：轨迹质量、领域覆盖和长步规划都会影响效果，不能把结果无限外推。{_clip(source, 160)}"
-    return _clip(source, 240)
+    en = _english_plain(kind, source)
+    zh = (f"可用的{_kind_label(kind, 'zh-CN')}来源：{source}\n本地模式保留原文；这些片段不等于完整章节或已验证结论。"
+          if source else f"当前材料未找到{_kind_label(kind, 'zh-CN')}来源，不能据此补写论文内容。")
+    return en if language == "en" else f"{en} / {zh}" if language == "bilingual" else zh
 
 
 def _english_plain(kind: str, source: str) -> str:
-    templates = {
-        "background": "This part names the field assumptions the paper relies on before the method makes sense.",
-        "motivation": "This part explains the gap: fluent language output is not the same as a valid symbolic plan.",
-        "problem": "This part turns the gap into a concrete question the method must solve.",
-        "methodology": "This part describes the mechanism used to teach the model the planning process.",
-        "experiment": "This part checks whether the method improves executable planning behavior.",
-        "contribution": "This part states what the paper adds beyond prior work.",
-        "limitation": "This part defines when the claim may not hold.",
-    }
-    return _clip(f"{templates.get(kind, '')} {source}", 260)
+    if not source:
+        return f"No {kind} source was found in the supplied material; this part cannot be reconstructed."
+    return f"Available {kind} source: {source}\nLocal mode retains the excerpt; it is not a complete section or a verified conclusion."
 
 
 def _why_it_matters(kind: str, source: str, language: str) -> str:
+    if not source:
+        return "This evidence gap needs source material before interpretation." if language == "en" else "这是待补材料的证据缺口，不能当作已知结论。"
     if language == "en":
         return "It is a load-bearing node in the paper's argument: removing it would make the next step less justified."
     zh = {
@@ -1156,7 +1156,7 @@ def _why_it_matters(kind: str, source: str, language: str) -> str:
         "motivation": "它回答“为什么要写这篇论文”，是整篇文章的发动机。",
         "problem": "它把宽泛动机压成可验证的问题，后面的方法和实验都围绕它展开。",
         "methodology": "它是论文真正的技术核心，贡献是否成立主要看这里。",
-        "experiment": "它把方法从想法变成证据，支撑论文的有效性主张。",
+        "experiment": "它描述评价条件；仍需核对指标、对照和结果是否支撑主张。",
         "contribution": "它是用户汇报时必须讲清的“这篇论文到底新在哪里”。",
         "limitation": "它防止过度理解论文，帮助用户讲清适用边界。",
     }
@@ -1167,9 +1167,9 @@ def _connection_text(kind: str, language: str) -> str:
     if language == "en":
         return "Read this node together with its incoming and outgoing arrows."
     zh = {
-        "background": "背景给动机提供前提：如果不了解符号规划约束，就看不出为什么普通文本生成不够。",
+        "background": "背景与动机的关系需要结合原文核对。",
         "motivation": "动机把背景中的困难变成论文要补的空缺。",
-        "problem": "问题定义约束了方法：方法必须让计划步骤可解释、可检查。",
+        "problem": "问题定义约束方法需要解决的对象与条件。",
         "methodology": "方法承接问题，并交给实验去验证是否真的有效。",
         "experiment": "实验把方法的效果转化成可报告的证据。",
         "contribution": "贡献由方法和实验共同支撑，同时受到局限节点约束。",
@@ -1181,16 +1181,7 @@ def _connection_text(kind: str, language: str) -> str:
 def _talking_point(kind: str, label: str, language: str) -> str:
     if language == "en":
         return f"In a presentation, explain this as the paper's {kind}: {label}."
-    zh = {
-        "background": f"汇报时可以说：这篇论文建立在 {label} 这些背景上。",
-        "motivation": "汇报时可以说：作者真正担心的是“会说”不等于“会做合法规划”。",
-        "problem": "汇报时可以说：目标是让每一步计划都能对上规则，而不是只输出最终答案。",
-        "methodology": f"汇报时可以说：核心方法是 {label}，用带逻辑轨迹的样例训练模型。",
-        "experiment": f"汇报时可以说：实验用 {label} 这类验证来检查计划是否真能执行。",
-        "contribution": "汇报时可以说：贡献是把逻辑 CoT 和符号规划执行性连接起来，并给出验证证据。",
-        "limitation": "汇报时可以说：这套方法依赖轨迹质量和领域覆盖，长程/未见领域仍有风险。",
-    }
-    return zh.get(kind, f"汇报时围绕 {label} 讲清这一节点。")
+    return f"汇报时围绕{_kind_label(kind, language)}的来源说明 {label}，并明确尚未核对的部分。"
 
 
 def _concept_phrase(metadata: dict[str, Any], source: str) -> str:
@@ -1263,9 +1254,6 @@ def _label(language: str, key: str) -> str:
         "target_why": ("The whole map exists to make this paper easier to explain and remember.", "整张图都是为了更快讲清并记住这篇论文。"),
         "target_connection": ("Core nodes explain how the paper's argument is assembled.", "核心节点解释论文论证是怎么拼起来的。"),
         "target_talk": ("Start with the map, then open Paper Lens for details.", "先讲逻辑图，再进入精读阅读器补细节。"),
-        "motivation_label": ("Fluent text is not valid planning", "会说不等于会合法规划"),
-        "problem_label": ("Make each planning step checkable", "让每一步规划可检查"),
-        "contribution_label": ("Logical CoT improves planning validity", "逻辑 CoT 提升规划有效性"),
         "limitation_label": ("Trace quality and coverage limits", "轨迹质量与覆盖限制"),
         "formula_plain": ("This formula branch helps pin the method to a derivation or symbolic relation.", "公式支线用于把方法落到可推导的符号关系上。"),
         "resource_plain": ("This resource helps explain or verify the selected logic node.", "这份资料用于解释或验证图中的关键节点。"),
@@ -1437,13 +1425,9 @@ def _detail_html(node: dict[str, Any], language: str) -> str:
     """
 
 
-def _missing_evidence(language: str) -> dict[str, Any]:
-    return {"source_title": _label(language, "evidence"), "snippet": _label(language, "evidence_missing"), "score": 0}
-
-
 def _sentences(text: str) -> list[str]:
     normalized = re.sub(r"\s+", " ", str(text)).strip()
-    return [_clip(item.strip(), 420) for item in re.split(r"(?<=[.!?。！？])\s+", normalized) if len(item.strip()) > 24]
+    return [item.strip() for item in re.split(r"(?<=[.!?。！？])\s+", normalized) if len(item.strip()) > 24]
 
 
 def _tokens(text: str) -> set[str]:

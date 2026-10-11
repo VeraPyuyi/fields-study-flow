@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from fields_study_flow.paper_lens import build_paper_lens, render_paper_lens_html, render_paper_lens_latex, write_paper_lens_latex
 
 
@@ -10,19 +12,19 @@ def _roadmap_with_target_paper() -> dict:
     text_preview = "\n\n".join(
         [
             "Abstract",
-            "Large language models struggle with symbolic planning because valid plans must satisfy action preconditions and effects.",
+            "Large language models struggle with symbolic planning because valid plans must satisfy action preconditions and effects.\n"
             "Logical chain-of-thought traces expose state transitions so the model learns why a plan step is allowed.",
             "Introduction",
             "Symbolic planning is different from open-ended text generation because every action changes a structured world state.",
             "A planner must check whether the current state contains the facts required by the next action.",
             "Method",
-            "We construct PDDL-Instruct examples that pair natural language tasks with PDDL domains and logical reasoning traces.",
-            "The trace acts like a worked example: it names the current state, checks preconditions, applies effects, and moves to the next state.",
+            "We construct PDDL-Instruct examples that pair natural language tasks with PDDL domains and logical reasoning traces.\n"
+            "The trace acts like a worked example: it names the current state, checks preconditions, applies effects, and moves to the next state.\n"
             "The model is instruction tuned on these logical traces instead of only final answers.",
             "Formula",
             "The state transition can be written as s_{t+1} = apply(a_t, s_t) when preconditions(a_t) are satisfied.",
             "Experiments",
-            "PlanBench evaluates whether generated plans are executable under PDDL-style domain constraints.",
+            "PlanBench evaluates whether generated plans are executable under PDDL-style domain constraints.\n"
             "VAL-style validation checks whether the proposed action sequence actually reaches the goal.",
             "Results show that logical traces help models produce plans that better obey symbolic constraints.",
             "Limitations",
@@ -200,8 +202,6 @@ def test_build_paper_lens_generates_dense_segments_and_chinese_inline_explanatio
     assert not explanation["why_it_matters"].startswith("为什么重要")
     assert not explanation["method_note"].startswith("方法怎么理解")
     assert "接下来读什么" not in explanation["related_resources"][0]
-    for field in ("plain_meaning", "why_it_matters", "method_note"):
-        assert len({item[field] for item in dense["inline_explanations"]}) >= min(8, len(dense["inline_explanations"]))
     segment_lookup = {segment["id"]: segment for segment in dense["segments"]}
     explanation_lookup = {item["segment_id"]: item for item in dense["inline_explanations"]}
     instruction_segment = next(segment for segment in dense["segments"] if "only final answers" in segment["original_text"])
@@ -217,9 +217,8 @@ def test_build_paper_lens_generates_dense_segments_and_chinese_inline_explanatio
     assert "PlanBench" in experiment_text
     assert "VAL" in experiment_text
     assert segment_lookup[instruction_segment["id"]]["section_kind"] == "method"
-    confidences = [item["confidence"] for item in dense["inline_explanations"]]
-    assert len(set(confidences)) > 1
-    assert max(confidences) < 0.95
+    assert all(item["confidence"] is None for item in dense["inline_explanations"])
+    assert all(item["evidence_status"] in {"partial", "located"} for item in dense["inline_explanations"])
     assert dense["reading_recommendations"]
     first_recommendation = dense["reading_recommendations"][0]
     assert {"section_id", "section_title", "summary", "resources"} <= set(first_recommendation)
@@ -428,3 +427,105 @@ def test_render_paper_lens_latex_does_not_emit_empty_enumerate_for_missing_segme
 
     assert "\\begin{enumerate}\n\\end{enumerate}" not in source
     assert "\\begin{enumerate}\r\n\\end{enumerate}" not in source
+
+
+def _generic_lens_roadmap(metadata: dict) -> dict:
+    return {"profile": {"output_language": "zh-CN"}, "phases": [{"resources": [{
+        "title": "Generic paper", "type": "paper", "url": "https://example.invalid/paper",
+        "metadata": {"target_paper": True, "paper_metadata": metadata},
+    }]}]}
+
+
+@pytest.mark.parametrize("language", ["zh-CN", "en", "bilingual"])
+def test_cross_domain_lens_explanations_are_content_specific_and_honest(language):
+    attention = "Self-attention compares queries and keys to weight token values."
+    denoising = "The diffusion model predicts noise to denoise corrupted images."
+    text = f"Method\n{attention}\n\n{denoising}\n\nExperiments\nEvaluation reports held-out accuracy."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": text}), paper_lens_language=language)
+    serialized = json.dumps(lens, ensure_ascii=False)
+    for unsupported in ("PDDL", "PlanBench", "VAL", "符号规划", "planning rules", "合法动作"):
+        assert unsupported not in serialized
+    by_text = {segment["original_text"]: explanation for segment, explanation in zip(lens["segments"], lens["inline_explanations"])}
+    first, second = by_text[attention], by_text[denoising]
+    for field in ("plain_meaning", "why_it_matters", "method_note"):
+        assert first[field] != second[field]
+        assert "Specific cue" not in first[field] + second[field]
+        assert "本段具体落在" not in first[field] + second[field]
+    assert attention in first["plain_meaning"]
+    assert denoising in second["plain_meaning"]
+    assert "未" in first["method_note"] or "not" in first["method_note"]
+
+
+def test_pdf_wrapped_lines_preserve_paragraphs_pages_and_short_sentences():
+    from fields_study_flow.paper_lens import _split_paper_segments
+
+    first = "Self-attention compares token queries\nand keys before weighting values."
+    second = "Positional encodings retain token order."
+    segments = _split_paper_segments(f"[page 2]\nMethod\n{first}\n\n{second}")
+    assert [item["text"] for item in segments] == [first.replace("\n", " "), second]
+    assert [item["paragraph_index"] for item in segments] == [1, 2]
+    assert all(item["page"] == 2 for item in segments)
+
+
+def test_identical_paragraphs_have_identical_explanations_without_fake_suffixes():
+    text = "The system combines features from multiple measurements."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": f"Method\n{text}\n\n{text}"}))
+    assert len(lens["segments"]) == 2
+    first, second = lens["inline_explanations"]
+    for field in ("plain_meaning", "why_it_matters", "method_note"):
+        assert first[field] == second[field]
+
+
+def test_abstract_only_and_empty_lens_do_not_turn_guidance_into_evidence():
+    abstract = "We study representations of noisy images."
+    lens = build_paper_lens(_generic_lens_roadmap({"abstract_snippet": abstract}))
+    assert [segment["original_text"] for segment in lens["segments"]] == [abstract]
+    for section in lens["sections"]:
+        if section["kind"] in {"method", "experiment", "formula", "limitation"}:
+            assert section["evidence_status"] == "missing"
+            assert abstract not in section["summary"]
+    empty = build_paper_lens(_generic_lens_roadmap({}))
+    assert empty["segments"] == []
+    assert empty["inline_explanations"] == []
+    assert empty["summary"]["evidence_backed_sections"] == 0
+
+
+def test_keyword_lists_and_duplicate_headings_are_not_body_paragraphs():
+    text = "Method\nMethod\nKeywords: transformer, attention, encoder, decoder, tokens, sequence\n\nSelf-attention compares tokens using learned projections."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": text}))
+    assert [segment["original_text"] for segment in lens["segments"]] == ["Self-attention compares tokens using learned projections."]
+
+
+def test_long_paragraph_is_retained_without_silent_truncation():
+    paragraph = "The model compares token representations using learned projection weights " * 30 + "and retains the final marker."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": f"Method\n{paragraph}"}))
+    assert len(lens["segments"]) == 1
+    assert lens["segments"][0]["original_text"] == paragraph
+    assert paragraph in lens["inline_explanations"][0]["plain_meaning"]
+
+
+def test_planning_examples_do_not_invent_unmentioned_tools():
+    text = "Method\nWe use worked examples of symbolic planning and instruction tuning."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": text}))
+    explanations = json.dumps(lens["inline_explanations"], ensure_ascii=False)
+    for absent in ("PDDL-Instruct", "PlanBench", "VAL"):
+        assert absent not in explanations
+
+
+def test_inline_evidence_contains_the_actual_paragraph_and_page():
+    text = "Self-attention compares token queries and keys before weighting values."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": f"[page 4]\nMethod\n{text}"}))
+    explanation = lens["inline_explanations"][0]
+    assert explanation["evidence_status"] == "located"
+    assert any(ref.get("snippet") == text and ref.get("page") == 4 for ref in explanation["evidence_refs"])
+
+
+def test_two_attention_mechanisms_get_distinct_notes_without_denying_supplied_details():
+    first = "Self-attention compares queries and keys before weighting token values."
+    second = "Multi-head attention uses 8 heads to concatenate separate projected representations."
+    lens = build_paper_lens(_generic_lens_roadmap({"text_preview": f"Method\n{first}\n\n{second}"}), paper_lens_language="en")
+    left, right = lens["inline_explanations"]
+    for field in ("plain_meaning", "why_it_matters", "method_note"):
+        assert left[field] != right[field]
+    assert "Head counts" not in right["method_note"]
+    assert "8 heads" in right["plain_meaning"]

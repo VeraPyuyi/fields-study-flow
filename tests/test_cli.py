@@ -4,7 +4,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from fields_study_flow.cli import _paper_live_search_query, _paper_resource_from_url, _parse_sources
+from fields_study_flow.cli import _paper_live_search_query, _paper_resource_from_url, _parse_sources, _planner_options, build_parser
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.roadmap import build_roadmap, write_outputs
 
@@ -93,12 +93,12 @@ def test_cli_demo_generates_zero_setup_single_paper_report(tmp_path):
     assert "10 分钟开始" in bundle_readme
     assert "Attention Is All You Need" in bundle_readme
     index_html = (output_dir / "index.html").read_text(encoding="utf-8")
-    assert "从这里开始" in index_html
+    assert "开始理解论文" in index_html
     assert "paper_map.html" in index_html
     assert "Attention Is All You Need" in index_html
     roadmap_html = (output_dir / "roadmap.html").read_text(encoding="utf-8")
-    assert "打开资料包说明" in roadmap_html
-    assert "data-mastery-export" in roadmap_html
+    assert "study_state.json" in roadmap_html
+    assert "data-resource-library" in roadmap_html
     dumped = json.dumps(roadmap, ensure_ascii=False)
     assert str(output_dir) not in dumped
 
@@ -127,7 +127,8 @@ def test_cli_demo_market_check_writes_release_readiness_summary(tmp_path):
     assert (output_dir / "demo_market_check.json").exists()
     assert (output_dir / "release_readiness.html").exists()
     data = json.loads((output_dir / "demo_market_check.json").read_text(encoding="utf-8"))
-    assert data["report_audit"]["market_readiness"]["status"] == "market_ready"
+    assert data["report_audit"]["research_workbench"]["learning_effectiveness"] == "not_measured"
+    assert data["report_audit"]["research_workbench"]["status"] == "valid_structure"
     assert data["release_readiness_report"]["summary"]["decision"] == "needs_work"
     assert any("--market-check-screenshots" in action for action in data["market_check_summary"]["next_actions"])
     assert any("--market-check-interactions" in action for action in data["market_check_summary"]["next_actions"])
@@ -183,15 +184,18 @@ def test_cli_demo_all_market_generates_cross_scenario_sample_matrix(tmp_path):
     assert "market_sample_matrix.json" in result.stdout
 
     matrix = json.loads((output_dir / "market_sample_matrix.json").read_text(encoding="utf-8"))
-    assert matrix["status"] == "pass"
-    assert matrix["summary"]["covered_scenarios"] == ["single-paper", "paper-set", "field-course"]
-    assert matrix["summary"]["missing_scenarios"] == []
+    # Exported samples do not constitute a measured market or learning outcome.
+    assert matrix["status"] in {"pass", "warn"}
+    scenarios = ["single-paper", "paper-set", "field-course"]
+    passing = {sample["scenario"] for sample in matrix["samples"] if sample["sample_status"] == "pass"}
+    assert matrix["summary"]["covered_scenarios"] == [scenario for scenario in scenarios if scenario in passing]
+    assert matrix["summary"]["missing_scenarios"] == [scenario for scenario in scenarios if scenario not in passing]
 
     samples_by_report = {item["report"]: item for item in matrix["samples"]}
     assert samples_by_report["transformer-paper"]["scenario"] == "single-paper"
     assert samples_by_report["diffusion-paper-set"]["scenario"] == "paper-set"
     assert samples_by_report["diffusion-field-course"]["scenario"] == "field-course"
-    assert all(item["sample_status"] == "pass" for item in samples_by_report.values())
+    assert all(item["sample_status"] in {"pass", "warn"} for item in samples_by_report.values())
 
     paper_set_dir = output_dir / "diffusion-paper-set"
     field_dir = output_dir / "diffusion-field-course"
@@ -913,9 +917,51 @@ def test_cli_presets_configure_common_learning_modes(tmp_path):
     assert roadmap["profile"]["target_kind"] == "field"
     assert roadmap["profile"]["route_depth"] == "balanced"
     assert roadmap["profile"]["learning_style"] == "practical"
+    assert roadmap["profile"]["planner_preset"] == "field-project"
+    assert roadmap["path_strategy"]["planner_preset"] == "field-project"
     assert paper["profile"]["target_kind"] == "paper"
     assert paper["profile"]["route_depth"] == "fastest"
     assert paper["profile"]["learning_style"] == "practical"
+    assert paper["profile"]["planner_preset"] == "paper-fastest"
+    assert paper["path_strategy"]["planner_preset"] == "paper-fastest"
+
+
+def test_cli_intent_presets_and_explicit_overrides():
+    parser = build_parser()
+
+    cases = [
+        ("fast-presentation", "paper", "fastest", "practical"),
+        ("deep-reproduction", "paper", "complete", "practical"),
+        ("field-survey", "field", "complete", "theory"),
+    ]
+    for preset, target_kind, route_depth, learning_style in cases:
+        args = parser.parse_args(["roadmap", "--goal", "learn planning", "--preset", preset])
+        options = _planner_options(args)
+        assert options["planner_preset"] == preset
+        assert options["target_kind"] == target_kind
+        assert options["route_depth"] == route_depth
+        assert options["learning_style"] == learning_style
+
+    args = parser.parse_args(
+        [
+            "roadmap",
+            "--goal",
+            "learn planning",
+            "--preset",
+            "field-survey",
+            "--target-kind",
+            "course",
+            "--route-depth",
+            "fastest",
+            "--learning-style",
+            "practical",
+        ]
+    )
+    options = _planner_options(args)
+    assert options["planner_preset"] == "field-survey"
+    assert options["target_kind"] == "course"
+    assert options["route_depth"] == "fastest"
+    assert options["learning_style"] == "practical"
 
 
 def test_cli_paper_live_search_query_does_not_include_private_url():

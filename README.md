@@ -6,6 +6,40 @@ Agent-native mastery-path generator for AI/CS papers, fields, and courses.
 
 fields-study-flow turns goals such as "master this paper", "learn diffusion models", or "reproduce YOLO" into a traceable learning path. It combines learner profile, route depth, language preferences, live open-source discovery, and explicit local resources, then exports Markdown, JSON, SVG, and a polished static HTML report.
 
+## Research Understanding Workbench
+
+For researchers taking over a paper and project materials, start with a goal and files you are authorized to read:
+
+```bash
+fields-study-flow paper --url ./paper.pdf --local-resource ./project --learning-outcome understand --offline --explanation-provider local --output-dir ./research-report --resource-dir ./research-report/study-assets
+```
+
+Open `research-report/index.html`, then `paper_map.html`. The B three-column workbench puts necessary steps on the left, paper logic or paragraph reading in the center, and explanations with source locations on the right. Follow a claim to its paragraph, available code/configuration/results, and a question answered in your own words. Export notes and answers through `study_state.json`, separately from the public report; recheck affected answers when source fingerprints change. Move the **whole report directory including study-assets** for handoff. Separately configured resource directories must move with it, preserving relative paths.
+
+| Input / option | Purpose |
+| --- | --- |
+| Repeatable `--local-resource` | Explicit PDF, README/Markdown, Python, Notebook, JSON/YAML configuration, CSV/JSON existing results, or project directory. Static analysis only: no project execution or experiment reruns. |
+| `--learning-outcome understand\|present\|extend` | Explain problem/method/boundaries; add a source-linked presentation; or locate implementation/configuration/results and propose a change. Default understand; fast-presentation maps to present, explicit outcome wins. Existing derivation/reproduction/critique tasks remain, not automatically completed. |
+| `--known-topic "linear algebra" --level programming=familiar` | Optional background. Repeat either option; levels: beginner, familiar, advanced. |
+| `--explanation-provider local\|auto\|llm` | Local source-constrained reading aids, opt-in selection, or explicitly requested model explanations. |
+| `--offline` | Disable all generation-time networking, including discovery, downloads, and models. `--no-live-search` alone controls discovery only. |
+
+Model explanations require explicit `FIELDS_STUDY_FLOW_LLM_ENABLED=true`, plus `FIELDS_STUDY_FLOW_LLM_BASE_URL`, `FIELDS_STUDY_FLOW_LLM_MODEL`, and `FIELDS_STUDY_FLOW_LLM_API_KEY`. The endpoint is user-selected and OpenAI-compatible; no model or paid service is bundled. Auto stays local without opt-in, even if another API key exists. Llm without configuration reports an error; offline always stays local. Review materials before enabling an endpoint: relevant excerpts are sent there and its fees/data policies apply. Reading HTML or ordinary snapshot re-export makes no new explanation calls. Generation may incur fees; source/configuration changes invalidate the explanation cache. Provider failures record a warning and fall back to local output.
+
+**Limits:** located evidence and valid locators do not establish scientific correctness or mastery. Suggested paper/code relations stay unreviewed; absent files stay gaps; self-checks and model feedback are not independently verified understanding. Scan limits, malformed files, and text-only handling of other code formats reduce coverage. Abstract-only input cannot support full-method explanations. The new workbench targets one paper; existing field/course and paper-set routes remain available without expanded project semantics.
+
+Validated generation-time model explanations use a private cache at `Path.home() / ".cache" / "fields-study-flow" / "explanations"`, which is not copied into reports. Local/offline modes bypass cache and model access. Opt-in bilingual generation uses two bounded language calls before cache hits; cached reuse avoids new successful-generation calls, and ordinary export adds no explanation cost. Validation checks supplied anchors, not scientific truth or learner mastery.
+
+The added value to test is persistent cross-material anchors, explicit gaps, and a recheckable handoff. GPT/Claude agents can also build generic maps, explanations, and HTML; those are not exclusive advantages or proof of faster learning. [ChatGPT Study Mode](https://help.openai.com/en/articles/11780217-using-study-mode-in-chatgpt) and [Claude Artifacts](https://claude.com/resources/articles/build-artifacts) are relevant baseline capabilities.
+
+Try the [three offline scenarios](examples/research-workbench/README.md): planning-paper, transformer-paper-project (**own toy demonstration, NOT actual paper reproduction**), and diffusion-missing-materials. No remote API or external LLM is used. Actual HTML and screenshots must be generated and inspected before publication; placeholder images are not captures. The [8-12-person protocol](docs/evaluation/research-understanding-protocol.md) uses a strong same-model/tool-budget baseline and retains failed cases. Human evaluation, time savings, and comparative effectiveness are **pending**. Legacy readiness scores below describe report checks, not validated learning outcomes; sample timing values are syntax examples, never study results.
+
+Actual exported reports have been checked under file:// at desktop and mobile sizes. See the [engineering verification record](docs/evaluation/workbench-verification-2026-10-10.md), which separates technical checks from the pending human study.
+
+![Offline Paper Map, own toy demonstration](docs/assets/research-workbench/paper-map-desktop.png)
+
+Contribute a parsing adapter with a fixture, source-backed explanation correction, licensed cross-domain example with gap checks, or reproducible desktop/mobile interface issue. Include source version, actual/expected behavior, and sanitized evidence.
+
 <p align="center">
   <img src="docs/assets/fields-study-flow-architecture-en.svg" alt="fields-study-flow architecture diagram" width="100%">
 </p>
@@ -40,12 +74,11 @@ fields-study-flow turns goals such as "master this paper", "learn diffusion mode
 - Quick brief: every export writes `quick_brief.md`, a one-page first-read summary with the paper logic chain, evidence links, resources, and next actions.
 - Evidence coverage and mastery readiness: every export writes `evidence_coverage.md` and `evidence_coverage.html`, showing which Paper Map claims, Paper Lens paragraphs, mastery tasks, and resources are source-backed, plus clickable source diagnostics, a measured coverage score, an explain/derive/reproduce/critique readiness scorecard with concrete action links, and a prioritized evidence-gap queue.
 - Export consistency audit: `report_audit.json` checks that `roadmap.json`, `roadmap.html`, `paper_map.html`, and `paper_lens.html` agree on the current route, so stale companion pages or mismatched embedded payloads are caught before a report is treated as market-ready.
-- First study session plan: `index.html` now gives a 45-60 minute timeboxed loop that links Paper Map, Paper Lens, active recall, and the first mastery task so learners can start productively without planning the session themselves.
-- Action-first start page: secondary product rationale, report-health checks, alternate guidance, and bring-your-own-paper commands are collapsed behind a single disclosure so the default view stays focused on learning.
-- Intent router: the start page lets learners choose the right first click by goal: fastest understanding, presentation preparation, or mastery validation/reproduction.
+- Outcome-specific steps: understand/present/extend shape the necessary learning steps; the new single-paper start page has one clear primary entry.
+- Lightweight start page: the research workbench index links to the paper graph, paragraph reader, and learning resources without repeating a full dashboard.
 - Progressive support files: technical JSON/Markdown/SVG artifacts stay collapsed on the start page, so new learners see the learning path before implementation files.
-- Interactive learning console: `roadmap.html` contains the roadmap, draggable/zoomable KG network, right-side task guide with local progress checks, local-first resource links, multi-dimensional resource filter chips, evidence expand/collapse, and collapsible phases.
-- Worksheet readiness sync: `roadmap.html` shows how checked tasks and source-anchored tasks flow into the downloadable `mastery_worksheet.md`, so browser progress and portable review evidence stay aligned.
+- Interactive workbench: `paper_map.html` provides the stable draggable graph; `roadmap.html` contains learning steps, required tasks, resource filters, and downloads. All three reports share adjustable context rails and local learning records.
+- Portable records: browser answers and notes are exported separately as `study_state.json`; worksheet templates remain auxiliary exports. Neither is independent proof of mastery.
 - Resource purpose, strength, provenance, and coverage badges: roadmap resources explain whether they are primary evidence, background, implementation/reproduction help, or validation material, where they came from, which paper-logic or learning surface they cover, plus a short "why read" hint and core/support/fallback strength signal.
 - Portable mastery worksheet: every export writes `mastery_worksheet.md`, turning explain/derive/reproduce/critique tasks into a fillable, shareable evidence log with source anchors and ready-to-present checkpoints.
 - Study bundle start page: the local resource folder includes a Chinese-first `README.md` dashboard with a 10-minute start path, local file groups, link-only resources, and retry guidance.
@@ -170,8 +203,8 @@ The audit also emits `report_audit.json` with market-readiness, fresh-user-flow,
 
 ```bash
 fields-study-flow roadmap \
-  --goal "learn diffusion models and build a small project" \
-  --preset field-project \
+  --goal "survey diffusion models and key papers" \
+  --preset field-survey \
   --output-language en \
   --resource-language en-first \
   --local-resource ./my-notes/diffusion \
@@ -193,13 +226,13 @@ Paper route:
 ```bash
 fields-study-flow paper \
   --url https://arxiv.org/abs/1706.03762 \
-  --preset paper-fastest \
+  --preset fast-presentation \
   --output-language bilingual \
   --resource-language en-first \
   --resource-dir ./study-assets/transformer
 ```
 
-Guided mode asks for language, storage, learning preferences, and `bundle_scope` when a study bundle is enabled:
+Guided mode asks for language, storage, an intent preset, learning preferences, and `bundle_scope` when a study bundle is enabled:
 
 ```bash
 fields-study-flow paper --interactive
@@ -254,7 +287,7 @@ fields-study-flow ask \
 
 | Option | Meaning |
 | --- | --- |
-| `--preset fastest\|balanced\|complete\|paper-fastest\|paper-deep\|field-project\|course-complete` | Start from a common planning mode; explicit options can still override it. |
+| `--preset fast-presentation\|deep-reproduction\|field-survey\|fastest\|balanced\|complete\|paper-fastest\|paper-deep\|field-project\|course-complete` | Start from a first-run intent or legacy planning mode; explicit options can still override it. |
 | `--target-kind paper\|field\|course\|auto` | Select or infer the planning mode. |
 | `--route-depth fastest\|balanced\|complete` | Control how short or comprehensive the route should be. |
 | `--learning-style practical\|theory\|video\|auto` | Bias ranking toward implementation, theory, or intuition resources. |

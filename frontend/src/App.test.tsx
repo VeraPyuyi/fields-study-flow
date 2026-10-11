@@ -1,8 +1,19 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { vi } from "vitest";
 import { App } from "./App";
 import stylesCss from "./styles.css?raw";
+import type { Roadmap } from "./types";
+import { createMapNodes, projectMap } from "./workbench/mapState";
+
+function readBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(blob);
+  });
+}
 
 function installPayload(payload: unknown) {
   document.body.innerHTML = '<div id="root"></div><script type="application/json" id="fields-study-flow-data"></script>';
@@ -11,6 +22,8 @@ function installPayload(payload: unknown) {
 }
 
 afterEach(() => {
+  cleanup();
+  history.replaceState(null, "", location.pathname);
   document.body.innerHTML = "";
   localStorage.clear();
   vi.restoreAllMocks();
@@ -61,15 +74,10 @@ describe("fields-study-flow React report app", () => {
     expect(document.body.textContent).not.toContain("…");
   });
 
-  it("renders the roadmap learning console from embedded JSON", () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    const createObjectURL = vi.fn(() => "blob:mastery-worksheet");
+  it("renders learning tasks, local resources and portable private records from embedded JSON", async () => {
+    const createObjectURL = vi.fn((_blob: Blob) => "blob:mastery-worksheet");
     const revokeObjectURL = vi.fn();
     const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
       value: createObjectURL,
@@ -149,77 +157,53 @@ describe("fields-study-flow React report app", () => {
     });
 
     render(<App />);
-    const resourceLibrary = document.querySelector("#resource-library") as HTMLElement;
-    const readinessPanel = document.querySelector("[data-roadmap-mastery-readiness]") as HTMLElement;
-    const worksheetSyncPanel = document.querySelector("[data-roadmap-worksheet-sync]") as HTMLElement;
-    const readinessGates = Array.from(document.querySelectorAll("[data-roadmap-mastery-gate]"));
 
-    expect(screen.getByText("学习中控台")).toBeInTheDocument();
-    expect(readinessPanel).toBeInTheDocument();
-    expect(worksheetSyncPanel).toBeInTheDocument();
-    expect(worksheetSyncPanel).toHaveAttribute("data-worksheet-source-anchored", "2");
-    expect(worksheetSyncPanel).toHaveAttribute("data-worksheet-ready-slots", "0");
-    expect(within(readinessPanel).getByText("63%")).toBeInTheDocument();
-    expect(readinessGates).toHaveLength(4);
-    expect(document.querySelector('[data-roadmap-mastery-gate="explain"]')).toHaveAttribute("data-roadmap-mastery-status", "ready");
-    expect(document.querySelector('[data-roadmap-mastery-gate="reproduce"]')).toHaveAttribute("data-roadmap-mastery-status", "ready");
-    expect(document.querySelector('[data-roadmap-mastery-gate="derive"]')).toHaveAttribute("data-roadmap-mastery-status", "needs_evidence");
-    expect(document.querySelector('[data-roadmap-mastery-gate="critique"]')).toHaveAttribute("data-roadmap-mastery-status", "missing");
-    expect(screen.getByText("先从这里开始")).toBeInTheDocument();
-    expect(screen.getByText("1 先看论文逻辑图")).toBeInTheDocument();
-    expect(screen.getByText("2 再做段落精读")).toBeInTheDocument();
-    expect(screen.getByText("3 最后按任务验收")).toBeInTheDocument();
-    expect(screen.getByText("1分钟上手")).toBeInTheDocument();
-    expect(screen.getByText("先点论文逻辑图")).toBeInTheDocument();
-    expect(screen.getByText("打开一份本地资料")).toBeInTheDocument();
-    expect(screen.getByText("勾掉第一个验收任务")).toBeInTheDocument();
-    expect(screen.getByText("资料包完成率")).toBeInTheDocument();
-    expect(screen.getByText("50%")).toBeInTheDocument();
-    expect(screen.getByText("打开资料包说明")).toBeInTheDocument();
-    expect(screen.getByText("原始链接清单")).toBeInTheDocument();
-    expect(screen.getByText("重试失败项")).toBeInTheDocument();
-    expect(screen.getByText("下载队列")).toBeInTheDocument();
-    expect(screen.getByText("把学习变成可检查证据")).toBeInTheDocument();
-    expect(screen.getByText("0/3 · 0%")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "复制证据清单" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "下载 worksheet.md" })).toBeInTheDocument();
-    expect(screen.getByLabelText("解释")).toBeInTheDocument();
-    fireEvent.click(screen.getByLabelText("解释"));
-    expect(screen.getByText("1/3 · 33%")).toBeInTheDocument();
-    expect(worksheetSyncPanel).toHaveAttribute("data-worksheet-ready-slots", "1");
-    fireEvent.click(screen.getByRole("button", { name: "复制证据清单" }));
-    const copiedWorksheet = String(writeText.mock.calls[0]?.[0] || "");
-    expect(copiedWorksheet).toContain("Ready-to-present rule");
-    expect(copiedWorksheet).toContain("Source anchors to use");
-    expect(copiedWorksheet).toContain("Ready-to-present checkpoint");
-    expect(copiedWorksheet).toContain("Explains the main claim.");
-    expect(copiedWorksheet).toContain("Shows a minimal reproduction.");
-    expect(copiedWorksheet).toContain("Copied Notebook");
-    expect(copiedWorksheet).not.toContain("D:\\");
-    fireEvent.click(screen.getByRole("button", { name: "下载 worksheet.md" }));
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    expect(anchorClick).toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:mastery-worksheet");
-    expect(screen.getAllByText("本地可打开").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("下载失败").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText("仅链接").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("阶段 1")).toBeInTheDocument();
-    expect(screen.getAllByText("打开本地").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByLabelText("搜索资料")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "全部资料" })).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("Local PDF")).toBeInTheDocument();
+    const library = document.querySelector("#resource-library") as HTMLElement;
+    expect(screen.getByRole("link", { name: "逻辑图" })).toHaveAttribute("href", "paper_map.html?lang=zh-CN");
+    expect(screen.getByRole("link", { name: "学习" })).toHaveAttribute("aria-current", "page");
+    expect(document.querySelector("[data-roadmap-mastery-readiness]")).toBeNull();
+    expect(document.querySelector("[data-roadmap-worksheet-sync]")).toBeNull();
+    expect(screen.getByRole("link", { name: "资料包说明", hidden: true })).toHaveAttribute("href", "../study-assets/README.md");
+    expect(screen.getByRole("link", { name: "重试清单", hidden: true })).toHaveAttribute("href", "../study-assets/retry_failed.md");
+    expect(screen.getByRole("link", { name: "下载队列", hidden: true })).toHaveAttribute("href", "../study-assets/download_queue.json");
+    expect(within(library).getByText("Local PDF")).toBeInTheDocument();
+    expect(within(library).getAllByRole("link", { name: "打开本地" }).map(a => a.getAttribute("href"))).toEqual(["../assets/a.pdf", "../assets/b.ipynb"]);
+    expect(screen.getByLabelText("当前步骤资料")).not.toBeChecked();
 
-    fireEvent.click(screen.getByRole("button", { name: "下载失败" }));
-    expect(within(resourceLibrary).getByText("Broken Repo")).toBeInTheDocument();
-    expect(within(resourceLibrary).queryByText("Local PDF")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "全部资料" }));
+    fireEvent.click(within(library).getByRole("button", { name: "下载失败" }));
+    expect(within(library).getByText("Broken Repo")).toBeInTheDocument();
+    expect(within(library).queryByText("Local PDF")).not.toBeInTheDocument();
+    fireEvent.click(within(library).getByRole("button", { name: "全部" }));
     fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "notebook" } });
-    expect(within(resourceLibrary).getByText("Copied Notebook")).toBeInTheDocument();
-    expect(within(resourceLibrary).queryByText("Manual Link")).not.toBeInTheDocument();
+    expect(within(library).getByText("Copied Notebook")).toBeInTheDocument();
+    expect(within(library).queryByText("Manual Link")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "记录" }));
+    fireEvent.change(screen.getByLabelText("我的回答"), { target: { value: "注意力以查询和键计算权重。" } });
+    fireEvent.change(screen.getByLabelText("笔记"), { target: { value: "仍需检查缩放项。" } });
+    fireEvent.change(screen.getByLabelText("记录状态"), { target: { value: "self_checked" } });
+    expect(screen.queryByText("完全掌握")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "导出学习记录" }));
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
+    const exported = JSON.parse(await readBlob(createObjectURL.mock.calls[0][0]));
+    expect(exported.schema_version).toBe(1);
+    expect(exported.records["task-explain"]).toMatchObject({ answer: "注意力以查询和键计算权重。", notes: "仍需检查缩放项。", status: "self_checked" });
+    expect(exported.bundle_id).toBeTruthy();
+    expect(exported.source_fingerprints).toBeTruthy();
+    expect(exported.graph).toMatchObject({ positions: {}, expanded: [] });
+    expect(anchorClick).toHaveBeenCalled();
+    expect((anchorClick.mock.contexts[0] as HTMLAnchorElement).download).toBe("study_state.json");
+    expect(JSON.stringify(exported)).not.toContain("D:\\\\");
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = new File([JSON.stringify(exported)], "study_state.json", { type: "application/json" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(JSON.stringify(exported)) });
+    fireEvent.change(screen.getByLabelText("我的回答"), { target: { value: "Temporary edit" } });
+    await act(async () => fireEvent.change(input, { target: { files: [file] } }));
+    expect(screen.getByText("学习记录已导入")).toBeInTheDocument();
+    expect(screen.getByLabelText("我的回答")).toHaveValue("注意力以查询和键计算权重。");
   });
 
-  it("shows recovery next steps when a roadmap has no phases tasks or resources", () => {
+  it("keeps empty reports readable without invented readiness or material", () => {
     installPayload({
       reportKind: "roadmap",
       roadmap: {
@@ -232,22 +216,18 @@ describe("fields-study-flow React report app", () => {
     });
 
     render(<App />);
-    const readinessPanel = document.querySelector("[data-roadmap-mastery-readiness]") as HTMLElement;
 
-    expect(screen.getByText("下一步补齐路线")).toBeInTheDocument();
-    expect(readinessPanel).toBeInTheDocument();
-    expect(within(readinessPanel).getByText("0%")).toBeInTheDocument();
-    expect(document.querySelectorAll('[data-roadmap-mastery-status="missing"]')).toHaveLength(4);
-    expect(screen.getByText("补齐学习阶段")).toBeInTheDocument();
-    expect(screen.getByText(/补充目标论文或本地资料/)).toBeInTheDocument();
-    expect(screen.getByText("补齐验收任务")).toBeInTheDocument();
-    expect(screen.getByText(/至少生成解释、推导、复现、批判/)).toBeInTheDocument();
-    expect(screen.getByText("暂无学习阶段")).toBeInTheDocument();
-    expect(screen.getByText("暂无验收任务")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sparse route" })).toBeInTheDocument();
+    expect(screen.getAllByText("暂无学习步骤").length).toBeGreaterThan(0);
     expect(screen.getByText("暂无可打开资料")).toBeInTheDocument();
+    expect(screen.getByText("材料待补")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "逻辑图" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "导出学习记录" })).toBeEnabled();
+    expect(document.querySelector("[data-roadmap-mastery-readiness]")).toBeNull();
+    expect(document.querySelector('[data-roadmap-mastery-status="ready"]')).toBeNull();
   });
 
-  it("renders Paper Lens as paragraph-level reading instead of sentence cards", () => {
+  it("renders full selectable paragraphs with a separate explanation selection", () => {
     installPayload({
       reportKind: "paper_lens",
       roadmap: {
@@ -283,18 +263,21 @@ describe("fields-study-flow React report app", () => {
 
     render(<App />);
 
-    expect(screen.getByText("段落式论文精读")).toBeInTheDocument();
-    expect(screen.getByText("段落解释支撑度")).toBeInTheDocument();
-    expect(screen.getByText("中（0.78）")).toBeInTheDocument();
-    expect(screen.getByText(/不是资源可信度/)).toBeInTheDocument();
-    expect(screen.queryByText("证据置信度")).not.toBeInTheDocument();
-    expect(screen.getByText(/不是绝对正确率/)).toBeInTheDocument();
+    const paragraph = screen.getByText("This paragraph explains how logical traces check preconditions, apply effects, and update states.");
+    expect(paragraph.tagName).toBe("P");
+    expect(paragraph.closest("button")).toBeNull();
+    const selector = screen.getByRole("button", { name: "选择段落 1" });
+    fireEvent.click(selector);
+    expect(selector).toHaveAttribute("aria-pressed", "true");
+    expect(location.hash).toBe("#segment-seg-1");
     expect(screen.getAllByText("这段把方法讲成一个可检查的状态更新过程。")).toHaveLength(1);
-    expect(screen.getByText("右侧正在显示这段的直白解释、方法理解和证据。")).toBeInTheDocument();
-    expect(screen.queryByText("关键句速读")).not.toBeInTheDocument();
+    expect(screen.getByText("先看前提，再应用效果，最后检查新状态。")).toBeInTheDocument();
+    expect(screen.getByText("材料待补")).toBeInTheDocument();
+    expect(screen.queryByText("段落解释支撑度")).not.toBeInTheDocument();
+    expect(screen.queryByText("中（0.78）")).not.toBeInTheDocument();
   });
 
-  it("shows purpose badges that explain why roadmap resources matter", () => {
+  it("keeps resource provenance and legacy evidence searchable without promoting scores to verification", () => {
     installPayload({
       reportKind: "roadmap",
       roadmap: {
@@ -359,51 +342,27 @@ describe("fields-study-flow React report app", () => {
     });
 
     render(<App />);
-    const resourceLibrary = document.querySelector("#resource-library") as HTMLElement;
 
-    expect(within(resourceLibrary).getByText("主证据")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("代码/复现")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("背景补充")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("验收材料")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("核心资料")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("推荐补充")).toBeInTheDocument();
-    expect(within(resourceLibrary).getAllByText("手动兜底").length).toBeGreaterThanOrEqual(1);
-    expect(within(resourceLibrary).getByText(/证据强度：高/)).toBeInTheDocument();
-    expect(within(resourceLibrary).getAllByText(/依据：本地可打开/).length).toBeGreaterThanOrEqual(1);
-    expect(within(resourceLibrary).getByText(/证据分 2.50/)).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText(/可信分 0.96/)).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText(/最强证据：PDDL preconditions and VAL validation/)).toBeInTheDocument();
-    expect(within(resourceLibrary).getByRole("link", { name: "查看证据" })).toHaveAttribute(
-      "href",
-      "paper_lens.html#detail-seg-pddl-validation",
-    );
-    expect(within(resourceLibrary).getByText(/推荐理由：Target paper for claims and experiments/)).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText(/为什么读：定位论文原始论点/)).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText(/为什么读：把理解变成可运行或可检查的结果/)).toBeInTheDocument();
-
-    expect(within(resourceLibrary).getByText("目标论文")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("代码来源")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("生成模板")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("Weak Related Paper")).toBeInTheDocument();
-    expect(within(resourceLibrary).getByText("尚未匹配到明确论文环节，适合作为补充阅读或手动核验资料。")).toBeInTheDocument();
-    expect(within(resourceLibrary).getAllByText("覆盖范围").length).toBeGreaterThanOrEqual(1);
-    expect(within(resourceLibrary).getAllByText("方法").length).toBeGreaterThanOrEqual(1);
-    expect(within(resourceLibrary).getAllByText("实验").length).toBeGreaterThanOrEqual(1);
-    expect(within(resourceLibrary).getAllByText(/覆盖 3 个学习面/).length).toBeGreaterThanOrEqual(1);
-
+    const library = document.querySelector("#resource-library") as HTMLElement;
+    expect(within(library).getByText("Reference Implementation")).toBeInTheDocument();
+    const localLinks = within(library).getAllByRole("link", { name: "打开本地" }).map(a => a.getAttribute("href"));
+    expect(localLinks).toContain("assets/paper.pdf");
+    expect(localLinks).toContain("assets/code.zip");
+    expect(localLinks).toContain("artifact_template/task_checklist.md");
+    expect(within(library).getByText("Target paper for claims and experiments.")).toBeInTheDocument();
+    expect(within(library).getByText(/PDDL preconditions and VAL validation directly/)).toBeInTheDocument();
+    expect(within(library).queryByText(/证据强度：高/)).not.toBeInTheDocument();
+    expect(within(library).queryByText(/可信分/)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "VAL validation" } });
-    expect(within(resourceLibrary).getByText("Target Paper PDF")).toBeInTheDocument();
-    expect(within(resourceLibrary).queryByText("Reference Implementation")).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "目标论文" } });
-    expect(within(resourceLibrary).getByText("Target Paper PDF")).toBeInTheDocument();
-    expect(within(resourceLibrary).queryByText("Reference Implementation")).not.toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "复现" } });
-    expect(within(resourceLibrary).getByText("Reference Implementation")).toBeInTheDocument();
+    expect(within(library).getByText("Target Paper PDF")).toBeInTheDocument();
+    expect(within(library).queryByText("Reference Implementation")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("搜索资料"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("资料类型"), { target: { value: "repository" } });
+    expect(within(library).getByText("Reference Implementation")).toBeInTheDocument();
+    expect(within(library).queryByText("Planning Background")).not.toBeInTheDocument();
   });
 
-  it("renders a paper set synthesis panel when multiple papers are present", () => {
+  it("keeps paper-set reading order, comparison and synthesis available on demand", () => {
     installPayload({
       reportKind: "roadmap",
       roadmap: {
@@ -436,31 +395,22 @@ describe("fields-study-flow React report app", () => {
 
     render(<App />);
 
-    expect(screen.getByText(/Paper set synthesis/)).toBeInTheDocument();
-    expect(screen.getByText("Denoising Diffusion Probabilistic Models")).toBeInTheDocument();
-    expect(screen.getByText("diffusion models")).toBeInTheDocument();
-    expect(screen.getByText("Evaluation evidence")).toBeInTheDocument();
-    expect(screen.getByText("Write one synthesis paragraph.")).toBeInTheDocument();
+    const summary = screen.getByText("Paper set");
+    const section = summary.closest("details")!;
+    expect(section).not.toHaveAttribute("open");
+    fireEvent.click(summary);
+    expect(section).toHaveAttribute("open");
+    expect(within(section).getAllByText("Denoising Diffusion Probabilistic Models").length).toBeGreaterThan(0);
+    expect(within(section).getByText("Classifier-Free Diffusion Guidance")).toBeInTheDocument();
+    expect(within(section).getByText("diffusion models")).toBeInTheDocument();
+    expect(within(section).getByText("Start here.")).toBeInTheDocument();
+    expect(within(section).getByText("Read next.")).toBeInTheDocument();
+    expect(within(section).getByText("Evaluation evidence")).toBeInTheDocument();
+    expect(within(section).getByText("Write one synthesis paragraph.")).toBeInTheDocument();
+    expect(within(section).getByText("Compare evidence.")).toBeInTheDocument();
   });
 
-  it("keeps Paper Map focused on the core chain until supporting branches are requested", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    const createObjectURL = vi.fn(() => "blob:presentation-script");
-    const revokeObjectURL = vi.fn();
-    const anchorClick = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    Object.defineProperty(URL, "createObjectURL", {
-      configurable: true,
-      value: createObjectURL,
-    });
-    Object.defineProperty(URL, "revokeObjectURL", {
-      configurable: true,
-      value: revokeObjectURL,
-    });
-
+  it("expands only the requested parent branches and synchronizes node context", () => {
     installPayload({
       reportKind: "paper_map",
       roadmap: {
@@ -502,39 +452,28 @@ describe("fields-study-flow React report app", () => {
 
     render(<App />);
 
-    expect(screen.getByText("先看主链")).toBeInTheDocument();
-    expect(screen.getByText("再点节点")).toBeInTheDocument();
-    expect(screen.getByText("最后展开资料")).toBeInTheDocument();
-    expect(screen.getByText("3 分钟汇报稿")).toBeInTheDocument();
-    expect(screen.getByText("按这条线讲：背景 → 动机 → 问题 → 方法 → 实验 → 贡献 → 局限")).toBeInTheDocument();
-    expect(screen.getByText("先交代符号规划要求每一步动作都合法。")).toBeInTheDocument();
+    const roadmap = JSON.parse(document.getElementById("fields-study-flow-data")!.textContent!).roadmap as Roadmap;
+    const nodes = createMapNodes(roadmap.paper_map!.nodes!);
+    const focused = projectMap(nodes, roadmap.paper_map!.edges!, [], "methodology");
+    expect(focused.nodes.find(n => n.id === "resource-pddl")).toHaveProperty("hidden", true);
+    expect(focused.nodes.find(n => n.id === "task-report")).toHaveProperty("hidden", true);
+    const parent = document.querySelector('[data-id="methodology"]') as HTMLElement;
+    const expand = within(parent).getByRole("button", { hidden: true });
+    expect(expand).toHaveAttribute("aria-label", "展开分支 Logical CoT 方法");
+    fireEvent.click(expand);
+    expect(within(parent).getByRole("button", { hidden: true })).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector('[data-id="resource-pddl"]')).not.toBeNull();
+    expect(document.querySelector('[data-id="task-report"]')).not.toBeNull();
+    act(() => { location.hash = "methodology"; window.dispatchEvent(new Event("hashchange")); });
     expect(screen.getByText("再说明 Logical CoT 如何把动作选择变成可检查轨迹。")).toBeInTheDocument();
-    expect(screen.getAllByText("证据覆盖：已绑定 1 条").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("原文证据已绑定，可直接点节点复核。")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "复制汇报稿" }));
-    expect(await screen.findByText("已复制，可直接粘贴到 PPT 备注或文档。")).toBeInTheDocument();
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("《Teaching LLMs to Plan》3 分钟汇报稿"));
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("先交代符号规划要求每一步动作都合法。"));
-    fireEvent.click(screen.getByRole("button", { name: "下载汇报稿.md" }));
-    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob));
-    expect(anchorClick).toHaveBeenCalled();
-    expect(revokeObjectURL).toHaveBeenCalledWith("blob:presentation-script");
-    expect(screen.getByText("阅读密度")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /速览主链/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByRole("button", { name: /完整探索/ })).toHaveAttribute("aria-pressed", "false");
-    expect(screen.getByText("默认只显示目标论文和核心因果链，先让用户在 3 分钟内看懂论文为什么这样做。")).toBeInTheDocument();
-    expect(screen.getByText("符号规划背景")).toBeInTheDocument();
-    expect(screen.queryByText("PDDL Notes")).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: /完整探索/ }));
-
-    expect(screen.getByText("PDDL Notes")).toBeInTheDocument();
-    expect(screen.getByText("汇报任务")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /完整探索/ })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("显示资料、证据、公式和验收任务，用来做复查、实现和汇报准备。")).toBeInTheDocument();
+    expect(within(document.querySelector(".context-panel") as HTMLElement).getByText("材料待补")).toBeInTheDocument();
+    expect(screen.queryByText("Logical Chain-of-Thought Instruction Tuning")).not.toBeInTheDocument();
+    fireEvent.click(within(parent).getByRole("button", { hidden: true }));
+    expect(within(parent).getByRole("button", { hidden: true })).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelector('[data-id="resource-pddl"]')).toBeNull();
   });
 
-  it("deduplicates repeated target titles in Paper Lens headers", () => {
+  it("uses the literal paper title once and preserves safe portable reading entries", () => {
     const paperTitle = "Teaching LLMs to Plan: Logical Chain-of-Thought Instruction Tuning for Symbolic Planning";
     installPayload({
       reportKind: "paper_lens",
@@ -543,6 +482,7 @@ describe("fields-study-flow React report app", () => {
         profile: { goal: `快速理解并能够中文汇报 ${paperTitle}: ${paperTitle}`, output_language: "zh-CN" },
         paper_lens: {
           title: "Teaching LLMs to Plan 目标论文增强阅读器",
+          latex_export: { pdf_file: "../../study-assets/reading.pdf", tex_file: "../../study-assets/reading.tex", compile_status: "ok" },
           target_papers: [{ title: paperTitle, url: "local://private-paper" }],
           explanation_summary: { granularity: "paragraph" },
           sections: [{ kind: "abstract", title: "一遍读懂论文" }],
@@ -562,9 +502,16 @@ describe("fields-study-flow React report app", () => {
 
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Teaching LLMs to Plan 目标论文增强阅读器" })).toBeInTheDocument();
-    expect(screen.getByText("快速理解并能够中文汇报")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Teaching LLMs to Plan" })).toHaveAttribute("title", paperTitle);
+    expect(document.querySelectorAll("h1")).toHaveLength(1);
     expect(screen.queryByText(`快速理解并能够中文汇报 ${paperTitle}: ${paperTitle}`)).not.toBeInTheDocument();
     expect(document.querySelector('a[href^="local://"]')).toBeNull();
+    expect(screen.getByRole("link", { name: "精读 PDF" })).toHaveAttribute("href", "../../study-assets/reading.pdf");
+    expect(screen.getByRole("link", { name: "TeX 源码" })).toHaveAttribute("href", "../../study-assets/reading.tex");
+    const paragraph = screen.getByText("This paragraph states the paper problem and contribution.");
+    expect(paragraph.closest("button")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "选择段落 1" }));
+    expect(location.hash).toBe("#segment-seg-1");
   });
+
 });

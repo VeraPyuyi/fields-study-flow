@@ -9,7 +9,7 @@ from fields_study_flow.language import ResourceLanguagePreference, normalize_res
 VALID_TARGET_KINDS = {"auto", "paper", "field", "course"}
 VALID_ROUTE_DEPTHS = {"fastest", "balanced", "complete"}
 VALID_LEARNING_STYLES = {"auto", "practical", "theory", "video"}
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+from fields_study_flow.privacy import PRIVATE_PATH_RE
 
 
 @dataclass(slots=True)
@@ -25,16 +25,22 @@ class LearnerProfile:
     target_kind: str = "auto"
     route_depth: str = "balanced"
     learning_style: str = "practical"
+    planner_preset: str | None = None
+    learning_outcome: str = "understand"
 
     def __post_init__(self) -> None:
         self.resource_language_preference = normalize_resource_language_preference(self.resource_language_preference)
         self.target_kind = _normalize_choice(self.target_kind, VALID_TARGET_KINDS, "auto")
         self.route_depth = _normalize_choice(self.route_depth, VALID_ROUTE_DEPTHS, "balanced")
         self.learning_style = _normalize_choice(self.learning_style, VALID_LEARNING_STYLES, "practical")
+        self.planner_preset = (self.planner_preset or "").strip() or None
+        self.learning_outcome = _normalize_choice(self.learning_outcome, {"understand", "present", "extend"}, "understand")
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
         data["resource_language_preference"] = str(self.resource_language_preference)
+        if data.get("planner_preset") is None:
+            data.pop("planner_preset", None)
         return _sanitize_public_value(data)
 
 

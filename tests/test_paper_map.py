@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import re
 
+import pytest
+
 from fields_study_flow.models import LearnerProfile, Resource
 from fields_study_flow.paper_map import build_paper_map, render_paper_map_html
 from fields_study_flow.roadmap import build_roadmap, write_outputs
@@ -117,7 +119,8 @@ def test_build_paper_map_creates_causal_chain_with_evidence_and_chinese():
         assert node["plain_explanation"]
         assert node["why_it_matters"]
         assert node["talking_point"]
-        assert node["confidence"] > 0
+        assert node["confidence"] is None
+        assert node["evidence_status"] in {"partial", "located"}
         assert "evidence" in node
     serialized = json.dumps(paper_map, ensure_ascii=False)
     assert "C:/" not in serialized
@@ -219,3 +222,81 @@ def test_write_outputs_writes_paper_map_and_links_from_roadmap(tmp_path):
     assert "paper_map.html" in roadmap_html
     assert 'data-report-kind="paper_map"' in paper_map_html
     assert "fields-study-flow-data" in paper_map_html
+
+
+def _generic_roadmap(metadata: dict) -> dict:
+    return {"profile": {"output_language": "zh-CN"}, "phases": [{"resources": [{
+        "title": metadata.get("title", "Generic paper"), "type": "paper",
+        "url": "https://example.invalid/paper", "metadata": {
+            "target_paper": True, "paper_metadata": metadata,
+        },
+    }]}]}
+
+
+@pytest.mark.parametrize("language", ["zh-CN", "en", "bilingual"])
+@pytest.mark.parametrize("topic,method,experiment", [
+    ("Transformer", "Self-attention compares queries and keys to weight token values.",
+     "Evaluation measures translation quality on a held-out dataset."),
+    ("Diffusion", "The denoising model predicts noise in corrupted images.",
+     "Evaluation compares generated images using FID."),
+    ("Behavioral study", "Participants were randomly assigned to two reading conditions.",
+     "Experiments measured recall after a delayed test without releasing code."),
+])
+def test_generic_map_explanations_stay_in_the_supplied_domain(language, topic, method, experiment):
+    roadmap = _generic_roadmap({"title": topic, "abstract_snippet": f"We study {topic}.",
+                               "method_hints": [method], "experiment_hints": [experiment]})
+    paper_map = build_paper_map(roadmap, paper_map_language=language, paper_map_depth="core")
+    serialized = json.dumps(paper_map, ensure_ascii=False)
+    for unsupported in ("PDDL", "PlanBench", "VAL", "符号规划", "symbolic plan", "规划轨迹"):
+        assert unsupported not in serialized
+    nodes = {node["kind"]: node for node in paper_map["nodes"]}
+    assert method in nodes["methodology"]["plain_explanation"]
+    assert experiment in nodes["experiment"]["plain_explanation"]
+    assert nodes["methodology"]["evidence_status"] == "partial"
+
+
+def test_abstract_only_map_does_not_fill_missing_sections_or_count_placeholders():
+    abstract = "We study representations of noisy images."
+    paper_map = build_paper_map(_generic_roadmap({"abstract_snippet": abstract}), paper_map_depth="core")
+    nodes = {node["kind"]: node for node in paper_map["nodes"]}
+    for kind in ("methodology", "experiment", "limitation", "contribution"):
+        assert nodes[kind]["evidence_status"] == "missing"
+        assert nodes[kind]["evidence"] == []
+        assert abstract not in nodes[kind]["plain_explanation"]
+    assert paper_map["summary"]["evidence_backed_nodes"] == sum(bool(node["evidence"]) for node in paper_map["nodes"])
+
+
+def test_map_val_is_a_word_and_does_not_invent_other_planning_tools():
+    from fields_study_flow.paper_map import _source_for_kind
+
+    assert _source_for_kind("experiment", {}, "The model adds value to token representations.") == ""
+    paper_map = build_paper_map(_generic_roadmap({"experiment_hints": ["VAL checks a PDDL plan."]}))
+    experiment = next(node for node in paper_map["nodes"] if node["kind"] == "experiment")
+    assert "VAL" in experiment["label"]
+    assert "PlanBench" not in json.dumps(experiment)
+
+
+def test_planning_map_keeps_grounded_method_and_evaluation_without_integrator():
+    paper_map = build_paper_map(_generic_roadmap({
+        "method_hints": ["PDDL-Instruct pairs tasks with logical traces."],
+        "experiment_hints": ["PlanBench and VAL validate PDDL plans."],
+        "text_preview": "Results\nResults show logical traces improve plan validity.",
+    }))
+    nodes = {node["kind"]: node for node in paper_map["nodes"] if node["role"] == "core"}
+    assert nodes["methodology"]["label"] == "PDDL-Instruct"
+    assert nodes["experiment"]["label"] == "PlanBench / VAL"
+    assert "improve plan validity" in nodes["contribution"]["plain_explanation"]
+    assert all(nodes[kind]["evidence"] for kind in ("methodology", "experiment", "contribution"))
+
+
+def test_real_formula_and_evidence_branches_are_counted_but_task_guidance_is_not():
+    roadmap = _generic_roadmap({"formula_candidates": ["loss = mse(predicted_noise, noise)"]})
+    roadmap["rag_evidence"] = {"evidence": [{"resource_title": "Noise paper", "snippet": "The model predicts noise."}]}
+    roadmap["study_tasks"] = [{"title": "Explain the objective"}]
+    paper_map = build_paper_map(roadmap)
+    for kind in ("formula", "evidence"):
+        node = next(item for item in paper_map["nodes"] if item["kind"] == kind)
+        assert node["evidence_status"] == "partial"
+        assert node["evidence"]
+    task = next(item for item in paper_map["nodes"] if item["kind"] == "task")
+    assert task["evidence_status"] == "missing" and not task["evidence"]

@@ -483,6 +483,34 @@ def test_build_roadmap_tool_accepts_unified_planning_options():
     assert plan["final_artifact"]["type"] == "project"
 
 
+def test_build_roadmap_tool_preserves_planner_preset_visibility():
+    plan = buildRoadmap(
+        goal="prepare a fast paper presentation",
+        profile={"output_language": "en"},
+        rankedResources=[
+            {
+                "title": "Target paper",
+                "url": "https://arxiv.org/abs/1706.03762",
+                "source": "arxiv",
+                "type": "paper",
+                "language": "en",
+                "concepts": ["attention"],
+                "estimated_minutes": 120,
+                "trust_score": 0.9,
+                "metadata": {"target_paper": True},
+            }
+        ],
+        outputLanguage="en",
+        routeDepth="fastest",
+        learningStyle="practical",
+        targetKind="paper",
+        plannerPreset="fast-presentation",
+    )
+
+    assert plan["profile"]["planner_preset"] == "fast-presentation"
+    assert plan["path_strategy"]["planner_preset"] == "fast-presentation"
+
+
 def test_build_roadmap_tool_sanitizes_private_resource_urls():
     plan = buildRoadmap(
         goal="master C:/Users/example/private folder/paper.pdf",

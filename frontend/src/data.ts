@@ -9,7 +9,7 @@ export function readPayload(): Required<Pick<ReportPayload, "reportKind">> & { r
     const parsed = JSON.parse(script.textContent) as ReportPayload;
     return {
       reportKind: normalizeReportKind(parsed.reportKind),
-      roadmap: parsed.roadmap ?? { title: "fields-study-flow" },
+      roadmap: { ...(parsed.roadmap ?? { title: "fields-study-flow" }), ...(parsed.pageLanguage ? { page_language: parsed.pageLanguage } : {}) },
     };
   } catch {
     return { reportKind: "roadmap", roadmap: { title: "fields-study-flow" } };
@@ -31,8 +31,13 @@ export function compactTitle(value?: string, limit = 72): string {
 }
 
 export function linkHref(item?: { local_href?: string; url?: string; href?: string }): string {
-  const href = item?.local_href || item?.href || item?.url || "";
-  return href.startsWith("local://") ? "" : href;
+  for (const candidate of [item?.local_href, item?.href, item?.url]) {
+    const href = String(candidate || "").trim();
+    if (!href || /[\u0000-\u0020]/.test(href.replace(/ /g, ""))) continue;
+    if (/^[a-z][a-z\d+.-]*:/i.test(href) && !/^(https?:|file:)/i.test(href)) continue;
+    return href;
+  }
+  return "";
 }
 
 export function targetPaperTitle(roadmap: Roadmap): string {
@@ -49,7 +54,7 @@ export function targetPaperLink(roadmap: Roadmap): ResourceLink | undefined {
 }
 
 export function reportHeadingTitle(roadmap: Roadmap, fallbackTitle: string): string {
-  return collapseRepeatedTail(stripRoadmapPrefix(targetPaperTitle(roadmap) || fallbackTitle || roadmap.title || ""));
+  return compactAcademicTitle(collapseRepeatedTail(stripRoadmapPrefix(targetPaperTitle(roadmap) || fallbackTitle || roadmap.title || "")));
 }
 
 export function cleanHeaderSubtitle(value?: string, heading?: string): string {

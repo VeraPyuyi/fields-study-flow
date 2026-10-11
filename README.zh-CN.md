@@ -1,5 +1,39 @@
 # fields-study-flow
 
+新版三栏研究理解工作台已进行离线桌面与移动端检查，详见[工程验收记录](docs/evaluation/workbench-verification-2026-10-10.md)。实际学习效率与模型对照试用仍待验证，不把页面生成成功当作学习效果证明。
+
+![离线论文逻辑图，自有玩具项目示例](docs/assets/research-workbench/paper-map-desktop.png)
+
+## 研究理解工作台
+
+面向需要理解并接手论文与项目材料的研究者。先提供目标和获准读取的材料，高级设置按需增加：
+
+```bash
+fields-study-flow paper --url ./paper.pdf --local-resource ./project --learning-outcome understand --offline --explanation-provider local --output-dir ./research-report --resource-dir ./research-report/study-assets
+```
+
+打开 `research-report/index.html`，再进入 `paper_map.html`。B 三栏工作台：左侧必要学习步骤，中间论文逻辑图或段落精读，右侧解释与来源。沿着论点、段落、已有代码/配置/结果定位，再留下自己的回答。笔记和回答通过 `study_state.json` 导出，与公开报告分开；来源指纹变化后重新核对受影响的回答。交接时一起移动**整个报告目录及 study-assets**；资料目录另设时，也需一起移动并保持相对位置。
+
+| 输入 / 参数 | 用途 |
+| --- | --- |
+| 可重复的 `--local-resource` | 明确提供 PDF、README/Markdown、Python、Notebook、JSON/YAML 配置、CSV/JSON 已有结果或项目目录。只静态分析，不执行项目或重跑实验。 |
+| `--learning-outcome understand\|present\|extend` | 看懂问题/方法/边界；增加有出处的汇报；或定位实现/配置/结果并提出后续修改。默认 understand；fast-presentation 对应 present，显式目标优先。原有推导、复现、批判任务保留，不自动完成。 |
+| `--known-topic "linear algebra" --level programming=familiar` | 可选已有背景，两项均可重复。水平可选 beginner、familiar、advanced。 |
+| `--explanation-provider local\|auto\|llm` | 本地来源约束的阅读辅助、显式启用后的自动选择、或明确请求模型解释。 |
+| `--offline` | 关闭生成时全部网络请求，包括检索、下载与解释模型。`--no-live-search` 只控制资料发现。 |
+
+模型解释必须显式配置 `FIELDS_STUDY_FLOW_LLM_ENABLED=true`、`FIELDS_STUDY_FLOW_LLM_BASE_URL`、`FIELDS_STUDY_FLOW_LLM_MODEL`、`FIELDS_STUDY_FLOW_LLM_API_KEY`。端点为用户选择的 OpenAI-compatible 服务，不内置模型或付费服务。auto 未获显式启用时使用 local，不因发现其他密钥就上传材料；llm 缺配置时报错，offline 始终本地。启用前检查材料范围：相关摘录会发送给该端点，费用和数据政策由端点决定。阅读 HTML 和普通快照重导出不再调用解释模型；生成可能计费，来源/配置变化会使解释缓存失效。请求失败会记录警告并降级到本地输出。
+
+**边界：**定位有效、摘录已找到，不代表科学结论正确或用户掌握。自动论文/代码关系保持待核对；缺失材料保持缺口；自我勾选和模型反馈不是独立验证。其他代码格式可能只有文本检索，解析失败和扫描限额会缩小覆盖范围；摘要不能支持完整方法讲解。本次工作台面向单篇论文，原有领域/课程及论文集合入口保留，但不扩展新项目语义。
+
+生成期通过来源校验的模型解释使用私有缓存 `Path.home() / ".cache" / "fields-study-flow" / "explanations"`，不复制进报告。local/offline 跳过模型和缓存访问；显式启用的双语生成在缓存命中前分别进行两次有界语言调用，后续缓存复用和普通导出不增加解释调用费用。校验锚点不等于确认科学正确性或用户掌握。
+
+需要检验的增值是持续保留的跨材料锚点、明确缺口和可重新核对的研究交接。GPT/Claude Agent 也能生成通用图谱、解释及 HTML，这些不作为独占能力或已验证的学习提升。[ChatGPT Study Mode](https://help.openai.com/en/articles/11780217-using-study-mode-in-chatgpt) 和 [Claude Artifacts](https://claude.com/resources/articles/build-artifacts) 是相关基线能力。
+
+[三个离线案例](examples/research-workbench/README.md) 分别是 planning-paper、transformer-paper-project（**自有玩具演示，NOT actual paper reproduction，不是真实论文复现**）和 diffusion-missing-materials。生成器不调用远程 API 或外部 LLM。实际 HTML 和截图需生成、检查后发布，不用占位图冒充截图。[8-12 人试用协议](docs/evaluation/research-understanding-protocol.md) 使用强同模型/同工具预算基线并保留失败案例；人工结果、节省时间和效果比较均为**待执行**。下文历史就绪分数只描述报告检查，不证明学习效果；命令中的示例时间只是语法示例，不是实测结果。
+
+欢迎认领带 fixture 的解析适配、附出处的解释修正、许可清晰并检查材料缺口的跨领域案例，以及可复现的桌面/移动端界面问题。请附来源版本、实际/预期行为和脱敏证据。
+
 ## 最新功能快速说明
 
 - 单篇论文路线现在会额外生成 `paper_map.html`，这是一个离线可打开的 Xmind-flow 图形画布：支持节点拖拽、缩放、SVG 因果连线、分支展开/收起，以及右侧证据和汇报话术详情。
@@ -33,19 +67,18 @@ fields-study-flow 可以把“掌握这篇论文”“学习 diffusion models”
 - RAG 证据路线：目标论文、本地资源和资料包会被切分成轻量证据片段，写入 `.rag_index`，关键点、推荐理由和验收任务都可以引用来源片段。
 - 学习知识图谱：报告会展示本地轻量的 concept -> resource -> task -> assessment 图谱，用于导航和掌握追踪。
 - 实时搜索：默认搜索开放官方 API；需要凭证或只适合手动链接的平台不会被自动抓取。
-- 路线审计：每条路线都会说明覆盖度、省略资源、节省耗时，以及为什么这是当前候选和路线深度下的最短可行路径。
+- 路线审计：说明覆盖度、省略资源和预计耗时。路线采用确定性启发式，不保证全局最短或完全掌握。
 - 可执行任务：报告包含学习任务、下一步行动、质量门、最终证据和可运行产物验收。
 - 文件夹入口：导出后优先打开 `index.html`，它会根据当前计划引导用户进入 Paper Map、Paper Lens 或路线验收清单。
-- 学习意图路由：`index.html` 会按“最快理解、准备汇报、验收/复现”给出入口，用户不需要先理解所有报告类型。
-- 第一轮学习会话：`index.html` 会给出约 45-60 分钟的时间盒学习闭环，把 Paper Map、Paper Lens、主动回忆和第一项掌握验收任务串起来，用户不用自己先规划学习节奏。
+- 学习目标：通过 understand/present/extend 生成必要步骤；新版单篇论文首页只保留一个清晰的开始入口。
 - 可带走练习卡：每次导出都会写出 `study_cards.md`，把首页主动回忆小测变成可打印、可复制到笔记里的本地练习集。
 - 证据链接小测：每次导出也会写出 `study_quiz.md`，用题目、答案钥匙和证据入口帮助用户快速确认“我是不是真的理解了”。
 - 速读 Brief：每次导出都会写出 `quick_brief.md`，用一页内容串起论文逻辑主链、证据入口、核心资料和下一步动作。
 - 证据覆盖与掌握就绪：每次导出都会写出 `evidence_coverage.md` 和 `evidence_coverage.html`，标明 Paper Map 结论、Paper Lens 段落、掌握任务和资料是否已有来源证据支撑，并给出可点击证据来源诊断、覆盖分数、解释/推导/复现/批判四门槛就绪评分卡和优先补证据队列。
-- 行动优先首页：产品价值说明、报告健康检查、替代向导和换论文命令会默认收进一个“更多说明与检查”折叠区，让默认视图先服务学习行动，而不是堆满说明文字。
-- 交互式学习中控台：`roadmap.html` 提供学习路线、可拖动/缩放的 KG 学习路径网络、右侧任务向导、本地进度勾选、本地优先资料链接、多维资料筛选 chips、证据展开/收起和阶段折叠。
+- 轻量首页：新版研究工作台的 `index.html` 是入口，JSON/Markdown/SVG 是辅助导出，不重复堆叠完整仪表盘。
+- 交互式工作台：`paper_map.html` 提供稳定的拖拽图谱；`roadmap.html` 展示学习步骤、全部正式任务、资料库和下载管理；三个页面共享可调整侧栏和本地学习记录。
 - 资源来源与覆盖范围：`roadmap.html` 的资料卡会显示资料用途、证据强度、来源类型，以及它覆盖论文逻辑或学习任务的哪一部分，方便用户先打开最有用的资料。
-- 可带走的掌握证据：每次导出都会写出 `mastery_worksheet.md`，把解释、推导、复现和批判任务变成可填写、可提交、可复查的学习证据表，并为每个槽位提供来源锚点和汇报就绪检查；`roadmap.html` 也会同步显示已勾选、有来源锚点、可汇报和待补齐槽位。
+- 可带走的学习记录：正式任务模板保留在 `mastery_worksheet.md`；浏览器中的回答、笔记和自我核对状态单独导出为 `study_state.json`，不自动写入公开报告或认定掌握。
 - 资料包开始页：本地资料目录会生成中文优先的 `README.md` 仪表盘，包含 10 分钟开始路径、路线资料、补充资料、仅链接资源和失败重试说明。
 
 ## 快速开始
@@ -143,8 +176,8 @@ fields-study-flow audit-report \
 
 ```bash
 fields-study-flow roadmap \
-  --goal "学习 diffusion models 并做一个小项目" \
-  --preset field-project \
+  --goal "梳理 diffusion models 领域和关键论文" \
+  --preset field-survey \
   --output-language zh-CN \
   --resource-language en-first \
   --local-resource ./my-notes/diffusion \
@@ -166,7 +199,7 @@ fields-study-flow roadmap \
 ```bash
 fields-study-flow paper \
   --url https://arxiv.org/abs/1706.03762 \
-  --preset paper-fastest \
+  --preset fast-presentation \
   --output-language bilingual \
   --resource-language en-first \
   --resource-dir ./study-assets/transformer
@@ -213,7 +246,7 @@ study-assets/
 
 使用 `--resource-dir` 时，`roadmap.html`、`paper_map.html`、`paper_lens.html` 和 `roadmap.md` 中已下载/复制的资料会优先链接到本地资料包。原始网页链接仍作为来源或兜底入口展示，共享型输出仍不会暴露本地绝对路径。
 资料包里的 `README.md` 可以直接打开：它会显示完成率、推荐前 10 分钟怎么学、路线资料和补充资料分组，以及失败下载如何重试。每次导出也会写出 `mastery_worksheet.md`，带来源锚点和汇报就绪检查，方便写笔记、做汇报或交给别人检查。
-`roadmap.html` 的验收表同步面板会把浏览器里的勾选进度和来源锚点状态写进复制/下载的 `mastery_worksheet.md`，避免本地进度和可带走证据脱节。
+新版工作台通过 `study_state.json` 导入导出个人进度，正式任务模板仍是辅助导出；两者都不等同于独立验收。
 
 只基于已经下载/复制的资料包提问：
 
@@ -228,7 +261,7 @@ fields-study-flow ask \
 
 | 参数 | 含义 |
 | --- | --- |
-| `--preset fastest\|balanced\|complete\|paper-fastest\|paper-deep\|field-project\|course-complete` | 使用常见学习模式快速启动；显式参数仍可覆盖 preset。 |
+| `--preset fast-presentation\|deep-reproduction\|field-survey\|fastest\|balanced\|complete\|paper-fastest\|paper-deep\|field-project\|course-complete` | 使用首轮上手意图模板或兼容学习模式快速启动；显式参数仍可覆盖 preset。 |
 | `--target-kind paper\|field\|course\|auto` | 指定或自动判断论文、领域、课程模式。 |
 | `--route-depth fastest\|balanced\|complete` | 控制路线是最短、平衡还是最完整。 |
 | `--learning-style practical\|theory\|video\|auto` | 控制资源排序偏向实战、理论或直觉材料。 |

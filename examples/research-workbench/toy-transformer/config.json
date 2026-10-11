@@ -1,0 +1,10 @@
+{
+  "demonstration_only": true,
+  "version": "own-demo-v1",
+  "symbol": "scalar_attention",
+  "query": 0,
+  "keys": [1, 2],
+  "values": [2, 4],
+  "temperature": 1.0,
+  "result_file": "expected_trace.json"
+}

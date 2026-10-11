@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|\\\\[A-Za-z0-9._$-]+[\\/][A-Za-z0-9._$-]+(?:[\\/][^)\]}\"'<\r\n]+)?|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+from fields_study_flow.privacy import PRIVATE_PATH_RE
 VISIBLE_MOJIBAKE_RE = re.compile(r"(?:\ufffd|锟斤拷|Ã.|Â.|â[€\x80-\x9f]|ðŸ)")
 
 
@@ -30,6 +30,28 @@ BrowserInteractionRunner = Callable[[Path], dict[str, Any] | None]
 
 class BrowserSnapshotUnavailable(RuntimeError):
     """Raised when optional browser screenshot capture cannot run on this machine."""
+
+
+def _research_workbench_check(roadmap: dict[str, Any]) -> dict[str, Any]:
+    context = roadmap.get("research_context")
+    if not isinstance(context, dict):
+        return {"status": "legacy", "learning_effectiveness": "not_measured"}
+    from fields_study_flow.research_context import validate_research_context
+
+    validation = validate_research_context(context)
+    claims = [c for c in context.get("claims", []) if isinstance(c, dict)] if isinstance(context.get("claims"), list) else []
+    explanations = context.get("explanations")
+    return {
+        "status": "valid_structure" if validation["valid"] else "invalid_structure",
+        "issues": validation["issues"],
+        "sources": len(context.get("sources", [])),
+        "located_claims": sum(c.get("evidence_status") == "located" for c in claims),
+        "unresolved_claims": sum(c.get("evidence_status") != "located" for c in claims),
+        "learning_steps": len(context.get("learning_steps", [])),
+        "explanation_mode": explanations.get("mode", "local") if isinstance(explanations, dict) else "legacy",
+        "scientific_correctness": "not_verified",
+        "learning_effectiveness": "not_measured",
+    }
 
 
 def audit_report_directory(report_dir: Path | str) -> dict[str, Any]:
@@ -73,6 +95,7 @@ def build_report_audit(report_dir: Path | str, roadmap: dict[str, Any]) -> dict[
     competitive_benchmark = _competitive_benchmark(root, roadmap, surfaces, visual_audit, experience_risks, viewport_risks)
     return {
         "status": visual_audit["status"],
+        "research_workbench": _research_workbench_check(roadmap),
         "recommended_first_action": _recommended_first_action(roadmap, surfaces),
         "surfaces": surfaces,
         "visual_audit": visual_audit,
@@ -4664,6 +4687,20 @@ def _react_payload_for_text_quality_check(html: str) -> str:
 
 
 def _file_specific_checks(file_name: str, html: str) -> list[dict[str, str]]:
+    if file_name == "index.html" and 'data-workbench-entry="true"' in html:
+        return [
+            _contains_any(file_name, "start_entry", html, ("开始理解论文", "Understand the paper", "学习步骤与资料", "Learning steps and resources")),
+            _contains_any(file_name, "support_exports", html, ("roadmap.json", "roadmap.md")),
+        ]
+    if '"research_context"' in _react_payload_for_text_quality_check(html) or ("workbench-header" in html and 'id="fields-study-flow-data"' in html):
+        markers = {
+            "paper_map.html": ("data-paper-map-canvas", "map-node"),
+            "paper_lens.html": ("paragraph-stream", "context-panel"),
+            "roadmap.html": ("data-resource-library", "learning-section"),
+        }
+        if file_name in markers:
+            return [_contains_any(file_name, "workbench_shell", html, ("workbench-header",)),
+                    *[_contains_any(file_name, marker, html, (marker,)) for marker in markers[file_name]]]
     if file_name == "index.html":
         return [
             _contains_any(file_name, "start_entry", html, ("从这里开始", "Start Here")),

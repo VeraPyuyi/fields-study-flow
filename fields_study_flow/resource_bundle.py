@@ -44,6 +44,7 @@ def bundle_study_resources(
     client: Any | None = None,
     retries: int = 2,
     progress: ProgressCallback | None = None,
+    offline: bool = False,
 ) -> dict[str, Any]:
     """Copy or download the full study resource library into a private bundle.
 
@@ -62,8 +63,8 @@ def bundle_study_resources(
     entries: list[dict[str, Any]] = []
     used_names: set[str] = set()
     close_client = False
-    http_client = client
-    if http_client is None:
+    http_client = None if offline else client
+    if http_client is None and not offline:
         try:
             import httpx
 
@@ -98,6 +99,8 @@ def bundle_study_resources(
                     max(0, retries),
                     progress,
                 )
+                if offline and entry.get("reason") == "http_client_unavailable":
+                    entry.update(status="link-only", reason="offline_network_disabled", retryable=False)
             metadata = _public_resource_metadata(resource.metadata)
             if metadata:
                 entry["metadata"] = metadata
@@ -189,6 +192,9 @@ def attach_study_bundle(roadmap: dict[str, Any], manifest: dict[str, Any], *, re
 
     updated = copy.deepcopy(roadmap)
     updated["study_bundle"] = public_bundle_summary(manifest, report_dir=report_dir)
+    from fields_study_flow.workbench import bind_workbench_links
+
+    updated = bind_workbench_links(updated)
     return updated
 
 

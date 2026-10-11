@@ -1,0 +1,903 @@
+{
+  "date": "2026-10-10",
+  "mode": "file-offline",
+  "results": [
+    {
+      "case": "user",
+      "pages": [
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 779.25,
+          "ready_ms": 789,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(77px, 131px) scale(1);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 20
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 779.25,
+          "ready_ms": 824
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 779.25,
+          "ready_ms": 963
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 679.25,
+          "ready_ms": 742,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(19px, 96.0174px) scale(0.936232);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 18.72464
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 679.25,
+          "ready_ms": 730
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 679.25,
+          "ready_ms": 834
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 723.25,
+          "ready_ms": 750,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(-29.25px, -3.075px) scale(0.65);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 723.25,
+          "ready_ms": 733
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 723.25,
+          "ready_ms": 987
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 903.25,
+          "ready_ms": 749,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(39px, 193px) scale(1);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 903.25,
+          "ready_ms": 725
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 903.25,
+          "ready_ms": 1006
+        }
+      ],
+      "interactions": {
+        "branch_expansion": 14,
+        "drag_and_reload": "pass",
+        "storage_disabled": "pass",
+        "javascript_disabled": "readable",
+        "record_export_import": "pass",
+        "paragraph_to_graph": "pass",
+        "local_files_present": 10,
+        "synthetic_100_branches": {
+          "rendered_nodes": 114,
+          "ready_ms": 1029,
+          "scientific_evidence": false
+        }
+      },
+      "human_learning_effectiveness": "not_measured"
+    },
+    {
+      "case": "transformer",
+      "pages": [
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 704,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(77px, 147px) scale(1);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 20
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 685
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 728
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 715,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(19px, 112.017px) scale(0.936232);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 18.72464
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 669
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 727
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 731,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(-29.25px, -3.075px) scale(0.65);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 654
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 718
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 716,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(39px, 209px) scale(1);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 665
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 700
+        }
+      ],
+      "interactions": {
+        "branch_expansion": 12,
+        "drag_and_reload": "pass",
+        "storage_disabled": "pass",
+        "javascript_disabled": "readable",
+        "record_export_import": "pass",
+        "paragraph_to_graph": "pass",
+        "local_files_present": 6,
+        "synthetic_100_branches": {
+          "rendered_nodes": 112,
+          "ready_ms": 871,
+          "scientific_evidence": false
+        }
+      },
+      "human_learning_effectiveness": "not_measured"
+    },
+    {
+      "case": "planning",
+      "pages": [
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 729,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(77px, 119px) scale(1);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 20
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 672
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 723
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 739,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(19px, 85.8029px) scale(0.936232);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 18.72464
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 669
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 715
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 738,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(-29.25px, -21.275px) scale(0.65);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 680
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 715
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 765,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(39px, 181px) scale(1);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 670
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 713
+        }
+      ],
+      "interactions": {
+        "branch_expansion": 9,
+        "drag_and_reload": "pass",
+        "storage_disabled": "pass",
+        "javascript_disabled": "readable",
+        "record_export_import": "pass",
+        "paragraph_to_graph": "pass",
+        "local_files_present": 2,
+        "synthetic_100_branches": {
+          "rendered_nodes": 109,
+          "ready_ms": 828,
+          "scientific_evidence": false
+        }
+      },
+      "human_learning_effectiveness": "not_measured"
+    },
+    {
+      "case": "diffusion",
+      "pages": [
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 717,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(77px, 133px) scale(1);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 20
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 682
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1440,
+            900
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1440,
+          "scroll": 1440,
+          "height": 900,
+          "header": 89,
+          "center": 811,
+          "ready_ms": 734
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 723,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(19px, 98.9101px) scale(0.936232);",
+          "geometry": {
+            "overlaps": 0,
+            "minimum_label_px": 18.72464
+          }
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 666
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            1280,
+            800
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 1280,
+          "scroll": 1280,
+          "height": 800,
+          "header": 89,
+          "center": 711,
+          "ready_ms": 731
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 719,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(-29.25px, -12.175px) scale(0.65);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 672
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            390,
+            844
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 390,
+          "scroll": 390,
+          "height": 844,
+          "header": 89,
+          "center": 755,
+          "ready_ms": 692
+        },
+        {
+          "file": "paper_map.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 713,
+          "visible_edges": 8,
+          "visible_nodes": 8,
+          "node_overflow": 0,
+          "transform": "transform: translate(39px, 195px) scale(1);"
+        },
+        {
+          "file": "paper_lens.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 668
+        },
+        {
+          "file": "roadmap.html",
+          "viewport": [
+            768,
+            1024
+          ],
+          "errors": [],
+          "external_requests": 0,
+          "width": 768,
+          "scroll": 768,
+          "height": 1024,
+          "header": 89,
+          "center": 935,
+          "ready_ms": 701
+        }
+      ],
+      "interactions": {
+        "branch_expansion": 9,
+        "drag_and_reload": "pass",
+        "storage_disabled": "pass",
+        "javascript_disabled": "readable",
+        "record_export_import": "pass",
+        "paragraph_to_graph": "pass",
+        "local_files_present": 2,
+        "synthetic_100_branches": {
+          "rendered_nodes": 109,
+          "ready_ms": 839,
+          "scientific_evidence": false
+        }
+      },
+      "human_learning_effectiveness": "not_measured"
+    }
+  ],
+  "human_evaluation": "not_measured"
+}

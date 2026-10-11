@@ -1,0 +1,10 @@
+{
+  "demonstration_only": true,
+  "provenance": "Hand-computed expected arithmetic, NOT measured research results",
+  "configuration": "config.json",
+  "symbol": "scalar_attention",
+  "weights": [0.5, 0.5],
+  "output": 3.0,
+  "paper_reproduction": false,
+  "human_evaluation": "not applicable"
+}

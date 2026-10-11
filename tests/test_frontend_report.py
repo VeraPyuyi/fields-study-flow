@@ -23,14 +23,14 @@ def test_checked_in_frontend_dist_has_package_visible_manifest():
 def test_paper_map_mobile_canvas_keeps_readable_space_without_minimap_overlap():
     css = Path("frontend/src/styles.css").read_text(encoding="utf-8")
 
-    assert "@media (max-width: 720px)" in css
-    mobile_section = css.split("@media (max-width: 720px)", 1)[1]
+    assert "@media (max-width: 767px)" in css
+    mobile_section = css.split("@media (max-width: 767px)", 1)[1]
     assert ".flow-shell" in mobile_section
-    assert "min-height: 640px" in mobile_section
-    assert ".whiteboard-minimap" in mobile_section
-    assert "display: none" in mobile_section
-    assert ".density-control" in mobile_section
-    assert "max-width: calc(100vw - 42px)" in mobile_section
+    assert "height: 300px" in mobile_section
+    assert ".mobile-node-list" in mobile_section
+    assert ".rail-drawer" in css
+    assert "max-width: calc(100% - 24px)" in css
+    assert "prefers-reduced-motion" in css
 
 
 def test_checked_in_frontend_dist_references_existing_built_assets():
@@ -45,8 +45,9 @@ def test_checked_in_frontend_dist_references_existing_built_assets():
         css_payloads.append(css_path.read_text(encoding="utf-8"))
 
     normalized_css = "".join(css_payloads).replace(" ", "")
-    assert "@media(max-width:720px)" in normalized_css
-    assert ".whiteboard-minimap{display:none}" in normalized_css
+    assert "@media(max-width:767px)" in normalized_css
+    assert ".mobile-node-list" in normalized_css
+    assert ".workbench-header" in normalized_css
 
 
 def test_frontend_report_shell_copies_assets_and_embeds_payload(tmp_path, monkeypatch):

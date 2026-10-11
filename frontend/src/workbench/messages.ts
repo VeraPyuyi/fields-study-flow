@@ -1,0 +1,51 @@
+export type Language = "zh-CN" | "en" | "bilingual";
+export const messages = {
+  graph: ["逻辑图", "Graph"], reading: ["精读", "Reading"], learning: ["学习", "Learning"],
+  steps: ["学习步骤", "Learning steps"], context: ["当前上下文", "Context"], language: ["界面语言", "Interface language"],
+  openSteps: ["展开学习步骤", "Open learning steps"], closeSteps: ["收起学习步骤", "Collapse learning steps"],
+  openContext: ["展开上下文", "Open context"], closeContext: ["收起上下文", "Collapse context"],
+  close: ["关闭", "Close"], resize: ["调整栏宽", "Resize panel"], original: ["原文", "Sources"],
+  implementation: ["实现", "Implementation"], results: ["实验材料", "Experiment materials"], notes: ["记录", "Notes"],
+  explanation: ["解释", "Explanation"], why: ["为什么重要", "Why it matters"], connection: ["前后关系", "Connections"],
+  method: ["方法", "Method"], talking: ["汇报要点", "Presentation"], empty: ["暂无材料", "No material available"],
+  missing: ["材料待补", "Material missing"], unverified: ["科学含义待核对", "Scientific interpretation unverified"],
+  located: ["来源已定位", "Source located"], unresolved: ["定位待核对", "Locator unresolved"],
+  partial: ["来源部分定位", "Sources partially located"], source_stale: ["来源待重新定位", "Sources need relocation"],
+  candidate: ["候选关系", "Candidate relation"], confirmed: ["已复核关系", "Reviewed relation"],
+  accepted: ["已接受关系", "Accepted relation"], rejected: ["已拒绝关系", "Rejected relation"], unreviewed: ["关系待复核", "Unreviewed relation"],
+  page: ["页", "Page"], lines: ["行", "Lines"], cell: ["单元格", "Cell"], row: ["数据行", "Row"], column: ["列", "Column"],
+  claim: ["论点", "Claim"], evidence: ["来源片段", "Source excerpts"],
+  openLocal: ["打开本地", "Open local"], openSource: ["打开来源", "Open source"], remote: ["原始链接", "Original link"],
+  answer: ["我的回答", "My answer"], note: ["笔记", "Notes"], status: ["记录状态", "Record status"],
+  not_started: ["未开始", "Not started"], in_progress: ["学习中", "In progress"], answered: ["已填写回答", "Answer recorded"],
+  self_checked: ["自我核对", "Self-checked"], reviewed: ["已复核", "Reviewed"], skipped: ["已跳过", "Skipped"],
+  skipReason: ["跳过理由", "Reason for skipping"], stale: ["来源已变化，待重新核对", "Sources changed; review required"],
+  rechecked: ["已重新核对来源", "Sources rechecked"], reviewSource: ["复核人或复核依据", "Reviewer or review evidence"],
+  temporary: ["临时会话", "Temporary session"], import: ["导入学习记录", "Import study records"], export: ["导出学习记录", "Export study records"],
+  importFailed: ["记录格式无效，当前记录未改变", "Invalid study file; current records unchanged"],
+  imported: ["学习记录已导入", "Study records imported"], exportFailed: ["导出失败，记录仍保留", "Export failed; records retained"],
+  expand: ["展开分支", "Expand branches"], collapse: ["收起分支", "Collapse branches"],
+  fit: ["适应窗口", "Fit view"], reset: ["重置布局", "Reset layout"], nodeList: ["节点", "Nodes"],
+  zoomIn: ["放大", "Zoom in"], zoomOut: ["缩小", "Zoom out"],
+  paragraph: ["段落", "Paragraph"], selectParagraph: ["选择段落", "Select paragraph"],
+  recommended: ["本节推荐阅读", "Section reading"], sections: ["章节", "Sections"],
+  pdf: ["精读 PDF", "Reading PDF"], tex: ["TeX 源码", "TeX source"],
+  resources: ["资料库", "Resources"], search: ["搜索资料", "Search resources"], all: ["全部", "All"], local: ["本地", "Local"],
+  typeFilter: ["资料类型", "Resource type"], sourceFilter: ["资料来源", "Resource source"], routeFilter: ["路线状态", "Route status"], statusFilter: ["落地状态", "Material status"],
+  failed: ["下载失败", "Download failed"], linked: ["仅链接", "Link only"], taskOnly: ["当前步骤资料", "Current step resources"],
+  tasks: ["学习任务", "Learning tasks"], acceptance: ["检查要点", "Checkpoints"], prerequisites: ["先修步骤", "Prerequisites"],
+  missingPrerequisites: ["先修步骤缺失", "Prerequisite steps missing"], prerequisiteCycle: ["先修关系存在循环", "Prerequisite cycle"],
+  prerequisiteReview: ["先修关系待核对", "Prerequisites need review"], unboundTasks: ["独立学习任务", "Additional learning tasks"],
+  estimate: ["耗时待估计", "Time not estimated"], minutes: ["分钟", "min"], noSteps: ["暂无学习步骤", "No learning steps"],
+  noParagraphs: ["暂无可读段落", "No paragraphs available"], noNodes: ["暂无图谱节点", "No graph nodes"],
+  noResources: ["暂无可打开资料", "No resources available"], downloads: ["资料包", "Bundle"],
+  manifest: ["资料清单", "Manifest"], readme: ["资料包说明", "Bundle readme"], retry: ["重试清单", "Retry list"],
+  queue: ["下载队列", "Download queue"], paperSet: ["论文集", "Paper set"], phases: ["阶段", "Phases"],
+  coverageLimit: ["部分材料因解析上限未完整纳入", "Some material was excluded by parsing limits"],
+} as const;
+export type MessageKey = keyof typeof messages;
+export function translate(language: Language, key: MessageKey): string { return messages[key][language === "en" ? 1 : 0]; }
+export function resolveLanguage(profile?: string, explicit?: string | null): Language {
+  const value = explicit || profile || "zh-CN";
+  return value === "en" || value.toLowerCase().startsWith("en-") ? "en" : value === "bilingual" ? "bilingual" : "zh-CN";
+}

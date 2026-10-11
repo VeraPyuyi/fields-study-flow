@@ -1,0 +1,10 @@
+{
+  "demonstration_only": true,
+  "cases": [
+    {"id": "planning", "title": "Planning demonstration", "sections": [{"section": "Background", "text": "State transitions require action preconditions."}, {"section": "Problem", "text": "How can invalid symbolic plans be detected?"}, {"section": "Method", "text": "Check preconditions before each state transition."}, {"section": "Limitations", "text": "The toy checker does not support conditional effects."}]},
+    {"id": "transformer", "title": "Transformer demonstration", "sections": [{"section": "Background", "text": "Attention combines weighted values."}, {"section": "Problem", "text": "How can token interactions be represented?"}, {"section": "Method", "text": "Scaled dot product attention uses query and key vectors."}, {"section": "Results", "text": "This fixture supplies no measured benchmark score."}, {"section": "Limitations", "text": "No claim of reproducing a published Transformer."}]},
+    {"id": "diffusion", "title": "Diffusion demonstration", "sections": [{"section": "Problem", "text": "How can a reverse noise process be learned?"}, {"section": "Method", "text": "A denoising objective estimates injected noise."}, {"section": "Experiment", "text": "Compare toy noise schedules under fixed seeds."}, {"section": "Limitations", "text": "Toy schedules are not calibrated image generators."}]},
+    {"id": "experimental-no-code", "title": "Experimental demonstration without code", "sections": [{"section": "Problem", "text": "How does temperature affect a measured reaction?"}, {"section": "Method", "text": "Measure repeated physical samples under controlled temperature."}, {"section": "Results", "text": "Raw measurements were not supplied to this demonstration."}, {"section": "Limitations", "text": "No implementation or raw results are available."}]},
+    {"id": "incomplete", "title": "Incomplete demonstration", "sections": [{"section": "Problem", "text": "Which missing materials block understanding?"}]}
+  ]
+}

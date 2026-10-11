@@ -11,7 +11,7 @@ from typing import Any
 
 FRONTEND_DIST_DIR = Path(__file__).with_name("frontend_dist")
 FRONTEND_ASSET_DIR = "assets/study-flow-app"
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+from fields_study_flow.privacy import PRIVATE_PATH_RE
 
 
 def frontend_assets_available() -> bool:
@@ -24,6 +24,8 @@ def copy_frontend_assets(output_dir: Path) -> str | None:
         return None
     target = output_dir / FRONTEND_ASSET_DIR
     if target.exists():
+        if target.is_symlink() or getattr(target, "is_junction", lambda: False)() or not target.resolve().is_relative_to(output_dir.resolve()):
+            raise ValueError("Frontend asset destination must stay inside the report directory")
         shutil.rmtree(target)
     target.mkdir(parents=True, exist_ok=True)
     shutil.copytree(dist_dir, target, dirs_exist_ok=True)
@@ -42,8 +44,15 @@ def render_frontend_report(report_kind: str, roadmap: dict[str, Any], *, asset_b
         raise FileNotFoundError("frontend manifest does not contain an entry script")
     asset_prefix = (asset_base or FRONTEND_ASSET_DIR).strip("/")
     safe_roadmap = _sanitize_private_values(copy.deepcopy(roadmap))
+    page = safe_roadmap.get(report_kind, {})
+    page_language = page.get("output_language") if isinstance(page, dict) else None
+    if report_kind == "paper_lens" and not page_language and isinstance(page, dict):
+        page_language = page.get("explanation_summary", {}).get("language")
+    if page_language and page_language != "auto":
+        safe_roadmap["page_language"] = page_language
     payload = {
         "reportKind": report_kind,
+        "pageLanguage": safe_roadmap.get("page_language"),
         "roadmap": safe_roadmap,
     }
     json_payload = _script_json(json.dumps(payload, ensure_ascii=False))
@@ -78,6 +87,8 @@ def render_frontend_report(report_kind: str, roadmap: dict[str, Any], *, asset_b
 
 def render_report_index(roadmap: dict[str, Any]) -> str:
     safe_roadmap = _sanitize_private_values(copy.deepcopy(roadmap))
+    if safe_roadmap.get("research_context"):
+        return _workbench_index(safe_roadmap)
     lang = _html_lang(safe_roadmap)
     is_zh = lang != "en"
     title = _display_report_base_title(safe_roadmap)
@@ -4132,6 +4143,7 @@ def _frontend_static_fallback_html(report_kind: str, roadmap: dict[str, Any], la
         f'<a href="{escape(href)}">{escape(label)}</a>'
         for href, label in actions
     )
+    content = _workbench_static_content(report_kind, roadmap, is_zh)
     return f"""<section class="static-report-fallback" data-report-static-fallback="{escape(report_kind)}" aria-label="{escape(report_labels.get(report_kind, 'report'))}">
     <div class="static-report-card">
       <p class="static-report-eyebrow">{escape('离线报告' if is_zh else 'Offline report')}</p>
@@ -4141,6 +4153,7 @@ def _frontend_static_fallback_html(report_kind: str, roadmap: dict[str, Any], la
       <nav class="static-report-actions" aria-label="{escape('备用入口' if is_zh else 'Fallback links')}">
         {links}
       </nav>
+      {content}
     </div>
   </section>"""
 
@@ -4158,8 +4171,30 @@ def _frontend_static_actions(report_kind: str, roadmap: dict[str, Any], is_zh: b
     return actions
 
 
+def _workbench_static_content(kind: str, roadmap: dict[str, Any], zh: bool) -> str:
+    if not roadmap.get("research_context"):
+        return ""
+    if kind == "paper_map":
+        parts = [f'<section><h2>{"论文逻辑" if zh else "Paper logic"}</h2>']
+        for node in roadmap.get("paper_map", {}).get("nodes", []):
+            if node.get("role") == "core":
+                parts.append(f'<article><h3>{escape(str(node.get("label", "")))}</h3><p>{escape(str(node.get("plain_explanation", "")))}</p></article>')
+    elif kind == "paper_lens":
+        explanations = {e.get("segment_id"): e for e in roadmap.get("paper_lens", {}).get("inline_explanations", [])}
+        parts = [f'<section><h2>{"段落精读" if zh else "Paragraph reading"}</h2>']
+        for segment in roadmap.get("paper_lens", {}).get("segments", []):
+            meaning = explanations.get(segment.get("id"), {}).get("plain_meaning", "")
+            parts.append(f'<article id="detail-{escape(str(segment.get("id", "")))}"><h3>{escape(str(segment.get("section_title", "")))}</h3><blockquote>{escape(str(segment.get("original_text", "")))}</blockquote><p>{escape(str(meaning))}</p></article>')
+    else:
+        parts = [f'<section><h2>{"学习步骤" if zh else "Learning steps"}</h2>']
+        for step in roadmap.get("research_context", {}).get("learning_steps", []):
+            parts.append(f'<article><h3>{escape(str(step.get("title", "")))}</h3><p>{escape(str(step.get("reason", "")))}</p></article>')
+    parts.append("</section>")
+    return "\n".join(parts)
+
+
 def _frontend_static_fallback_style() -> str:
-    return """:root{color-scheme:light}.static-report-fallback{min-height:100vh;display:grid;place-items:center;padding:32px;background:#f6f3ed;color:#20201d;font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC","Noto Sans SC","Source Han Sans SC",Arial,sans-serif;line-height:1.65}.static-report-card{width:min(720px,100%);border:1px solid rgba(52,47,40,.14);border-radius:24px;padding:28px;background:rgba(255,255,255,.9);box-shadow:0 20px 60px rgba(47,42,35,.12);overflow-wrap:anywhere}.static-report-eyebrow{margin:0 0 8px;color:#2f6f73;font-size:.82rem;font-weight:800;letter-spacing:.08em}.static-report-card h1{margin:0 0 12px;font-size:clamp(1.55rem,5vw,2.8rem);line-height:1.12;letter-spacing:0}.static-report-card h2{margin:0 0 10px;font-size:1.05rem}.static-report-card p{margin:0 0 18px;color:#625d54}.static-report-actions{display:flex;flex-wrap:wrap;gap:10px}.static-report-actions a{display:inline-flex;align-items:center;min-height:40px;border:1px solid rgba(47,111,115,.28);border-radius:999px;padding:8px 14px;color:#245f63;background:rgba(47,111,115,.08);font-weight:800;text-decoration:none}.static-report-noscript{margin:0;padding:12px 16px;background:#fff8dd;color:#4f3b08;font-family:"Microsoft YaHei UI","Microsoft YaHei",Arial,sans-serif;overflow-wrap:anywhere}"""
+    return '''.static-report-fallback{min-height:100vh;padding:24px;background:#F7F8FA;color:#24272D;font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",Arial,sans-serif;line-height:1.75}.static-report-card{max-width:900px;margin:auto;overflow-wrap:anywhere}.static-report-card h1{font-size:20px;line-height:1.5;letter-spacing:0}.static-report-card h2{font-size:18px}.static-report-card h3{font-size:16px}.static-report-card article{border-top:1px solid #DDE2E7;padding:16px 0}.static-report-card blockquote{margin:0;padding:12px;border-left:3px solid #18796f;background:white}.static-report-actions{display:flex;flex-wrap:wrap;gap:12px}.static-report-actions a{color:#18796f;background:white;border:1px solid #DDE2E7;border-radius:6px;padding:8px 12px;text-decoration:none}.static-report-eyebrow,.static-report-card>p{color:#626971}.static-report-noscript{padding:12px;background:#fff4d9;color:#5e4719}'''
 
 
 def _sanitize_private_values(value: Any) -> Any:
@@ -4180,12 +4215,13 @@ def _sanitize_private_values(value: Any) -> Any:
 
 def _report_title(report_kind: str, roadmap: dict[str, Any]) -> str:
     title = _display_report_base_title(roadmap)
+    zh = _html_lang(roadmap) != "en"
     if report_kind == "paper_map":
-        suffix = "论文逻辑图"
+        suffix = "论文逻辑图" if zh else "Paper Map"
     elif report_kind == "paper_lens":
-        suffix = "论文精读"
+        suffix = "论文精读" if zh else "Paper Lens"
     else:
-        suffix = "学习路线"
+        suffix = "学习路线" if zh else "Roadmap"
     return f"{title} - {suffix}"
 
 
@@ -4248,5 +4284,22 @@ def _truncate(value: str, limit: int) -> str:
 
 def _html_lang(roadmap: dict[str, Any]) -> str:
     profile = roadmap.get("profile", {}) if isinstance(roadmap.get("profile"), dict) else {}
-    language = str(profile.get("output_language") or roadmap.get("output_language") or "zh-CN")
+    language = str(roadmap.get("page_language") or profile.get("output_language") or roadmap.get("output_language") or "zh-CN")
     return "en" if language == "en" else "zh-CN"
+
+
+def _workbench_index(roadmap: dict[str, Any]) -> str:
+    lang = _html_lang(roadmap)
+    zh = lang != "en"
+    title = escape(_display_report_base_title(roadmap))
+    links = []
+    if roadmap.get("paper_map"):
+        links.append(("paper_map.html", "开始理解论文" if zh else "Understand the paper"))
+    if roadmap.get("paper_lens"):
+        links.append(("paper_lens.html", "段落精读" if zh else "Read paragraphs"))
+    links.append(("roadmap.html", "学习步骤与资料" if zh else "Learning steps and resources"))
+    navigation = "".join(f'<a href="{href}">{escape(label)}</a>' for href, label in links)
+    note = "找到来源不等于结论已核实；学习记录由你自行保存。" if zh else "Located sources are not verified conclusions. Learning records remain yours."
+    return f'''<!doctype html><html lang="{lang}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title}</title>
+    <style>body{{margin:0;background:#F7F8FA;color:#24272D;font-family:"Microsoft YaHei UI","Microsoft YaHei","PingFang SC",Arial,sans-serif;line-height:1.75}}main{{max-width:760px;margin:8vh auto;padding:24px}}h1{{font-size:20px;overflow-wrap:anywhere}}nav{{display:grid;gap:12px}}a{{padding:16px;border:1px solid #DDE2E7;border-radius:6px;background:white;color:#18796f;text-decoration:none}}p{{color:#626971}}details{{margin-top:24px}}</style>
+    <main data-workbench-entry="true"><h1>{title}</h1><nav>{navigation}</nav><p>{note}</p><details><summary>{"辅助导出" if zh else "Supporting exports"}</summary><a href="roadmap.json">JSON</a> <a href="roadmap.md">Markdown</a> <a href="roadmap.svg">SVG</a></details></main></html>'''

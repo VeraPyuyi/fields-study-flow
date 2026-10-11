@@ -1,0 +1,3 @@
+provenance,index,expected_weight,expected_value
+hand_computed_demo_not_experiment,0,0.5,2
+hand_computed_demo_not_experiment,1,0.5,4

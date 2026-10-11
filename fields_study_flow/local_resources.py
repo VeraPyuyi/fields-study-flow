@@ -81,6 +81,12 @@ def analyze_local_resources(paths: list[str], goal: str, max_files: int = 30) ->
             break
 
     resources = [_resource_from_path(path, goal) for path in candidates[:max_files]]
+    if resources:
+        resources[0].metadata["analysis_coverage"] = {
+            "files_inspected": len(resources), "max_files": max_files,
+            "limit_reached": len(candidates) >= max_files,
+            "note": "The file limit may leave additional explicit project materials unparsed." if len(candidates) >= max_files else "Explicit inputs only.",
+        }
     return resources
 
 

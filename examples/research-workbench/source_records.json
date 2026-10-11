@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "checked_on": "2026-10-10",
+  "policy": "Original short paraphrases and bibliographic metadata only. No full paper, third-party code, figures, or benchmark output redistributed.",
+  "papers": [
+    {
+      "scenario": "planning-paper",
+      "title": "Reasoning with Language Model is Planning with World Model",
+      "authors": "Shibo Hao et al.",
+      "version": "2305.14992v1",
+      "url": "https://arxiv.org/abs/2305.14992v1",
+      "version_date": "2023-05-24",
+      "source_locator": "Abstract",
+      "note": "sources/planning-note.md",
+      "content_kind": "original_short_paraphrase",
+      "verbatim_quote_words": 0,
+      "learning_outcome": "present",
+      "concepts": ["planning", "world model", "tree search"],
+      "coverage_boundary": "Abstract-level authored note, not full paper reading or a verified implementation. No benchmark values supplied.",
+      "missing_materials": ["full paper", "implementation", "configuration", "raw results"]
+    },
+    {
+      "scenario": "transformer-paper-project",
+      "title": "Attention Is All You Need",
+      "authors": "Ashish Vaswani et al.",
+      "version": "1706.03762v7",
+      "url": "https://arxiv.org/abs/1706.03762v7",
+      "version_date": "2023-08-02",
+      "source_locator": "Abstract",
+      "note": "sources/transformer-note.md",
+      "content_kind": "original_short_paraphrase",
+      "verbatim_quote_words": 0,
+      "learning_outcome": "extend",
+      "concepts": ["transformer", "attention"],
+      "coverage_boundary": "Own scalar-attention demonstration is not the paper implementation or actual paper reproduction. No training, translation benchmark, or measured paper result supplied.",
+      "missing_materials": ["full paper", "paper implementation", "training data", "paper run configuration", "paper raw results"]
+    },
+    {
+      "scenario": "diffusion-missing-materials",
+      "title": "Denoising Diffusion Probabilistic Models",
+      "authors": "Jonathan Ho, Ajay Jain, Pieter Abbeel",
+      "version": "2006.11239v2",
+      "url": "https://arxiv.org/abs/2006.11239v2",
+      "version_date": "2020-12-16",
+      "source_locator": "Abstract",
+      "note": "sources/diffusion-note.md",
+      "content_kind": "original_short_paraphrase",
+      "verbatim_quote_words": 0,
+      "learning_outcome": "extend",
+      "concepts": ["diffusion models", "denoising"],
+      "coverage_boundary": "Only a short authored abstract-level note is supplied, not method sections, code, configuration, or experiments. Missing materials must remain visible.",
+      "missing_materials": ["full method", "implementation", "noise schedule configuration", "dataset", "raw results"]
+    }
+  ],
+  "toy_project": {
+    "directory": "toy-transformer",
+    "version": "own-demo-v1",
+    "license": "MIT (see LICENSE)",
+    "relationship_to_paper": "Original pedagogical scalar-attention example only; not an author implementation, third-party reproduction, or full Transformer.",
+    "result_provenance": "expected_trace.json/csv contain hand-computed equal-weight arithmetic checks, not experimental measurements or human evaluation.",
+    "execution_policy": "Generator statically reads and copies files; it does not execute project code."
+  }
+}

@@ -6,7 +6,7 @@ from typing import Any
 from fields_study_flow.models import LearnerProfile, Resource
 
 
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+from fields_study_flow.privacy import PRIVATE_PATH_RE
 
 STOP_TERMS = {
     "about",

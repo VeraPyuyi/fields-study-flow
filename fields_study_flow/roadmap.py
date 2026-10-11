@@ -36,7 +36,7 @@ OUTPUT_FILES = [
 ]
 PAPER_LENS_FILE = "paper_lens.html"
 
-PRIVATE_PATH_RE = re.compile(r"(?:file://[^\s)\]}\"'<]+|(?<![A-Za-z0-9])[A-Za-z]:[\\/][^)\]}\"'<\r\n]+|/(?:Users|home)/[^)\]}\"'<\r\n]+)")
+from fields_study_flow.privacy import PRIVATE_PATH_RE
 
 
 def sanitize_roadmap_for_export(roadmap: dict[str, Any]) -> dict[str, Any]:
@@ -675,6 +675,14 @@ def build_roadmap(
     resources: list[Resource],
     live_search: dict[str, Any] | None = None,
     rag_evidence: dict[str, Any] | None = None,
+    *,
+    paper_lens_options: dict[str, Any] | None = None,
+    paper_map_options: dict[str, Any] | None = None,
+    paper_lens_disabled: bool = False,
+    paper_map_disabled: bool = False,
+    explanation_provider: str = "auto",
+    offline: bool = False,
+    research_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     target_kind = _infer_target_kind(profile, resources)
     final_artifact = _final_artifact(profile, target_kind)
@@ -764,10 +772,26 @@ def build_roadmap(
         "checkpoints": _checkpoints(profile),
         "safety_policy": _safety_policy(profile),
     }
+    if profile.planner_preset:
+        roadmap["path_strategy"]["planner_preset"] = profile.planner_preset
     if paper_set:
         roadmap["paper_set"] = paper_set
+    if rag_evidence:
+        roadmap["rag_evidence"] = rag_evidence
+    if paper_lens_options is not None:
+        roadmap["paper_lens_options"] = paper_lens_options
+    if paper_map_options is not None:
+        roadmap["paper_map_options"] = paper_map_options
+    if paper_lens_disabled:
+        roadmap["paper_lens_disabled"] = True
+    if paper_map_disabled:
+        roadmap["paper_map_disabled"] = True
     roadmap = _ensure_paper_lens(roadmap)
     roadmap = _ensure_paper_map(roadmap)
+    if has_target_paper(roadmap):
+        from fields_study_flow.workbench import prepare_workbench
+
+        roadmap = prepare_workbench(roadmap, resources, provider_mode=explanation_provider, offline=offline, previous_context=research_context)
     return sanitize_roadmap_for_export(roadmap)
 
 
@@ -778,74 +802,15 @@ def write_outputs(
     roadmap: dict[str, Any],
     source_registry_snapshot: dict[str, Any],
 ) -> None:
-    output_dir.mkdir(parents=True, exist_ok=True)
-    _remove_obsolete_html_reports(output_dir)
-    public_roadmap = sanitize_roadmap_for_export(roadmap)
-    outputs = list(public_roadmap.get("outputs", []))
-    if "index.html" not in outputs:
-        outputs.insert(0, "index.html")
-    if "report_audit.json" not in outputs:
-        insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
-        outputs.insert(insert_at, "report_audit.json")
-    if "roadmap.html" not in outputs:
-        outputs.append("roadmap.html")
-    if "study_cards.md" not in outputs:
-        outputs.append("study_cards.md")
-    if "study_quiz.md" not in outputs:
-        outputs.append("study_quiz.md")
-    if "mastery_worksheet.md" not in outputs:
-        outputs.append("mastery_worksheet.md")
-    if "quick_brief.md" not in outputs:
-        outputs.append("quick_brief.md")
-    if "evidence_coverage.md" not in outputs:
-        outputs.append("evidence_coverage.md")
-    if "evidence_coverage.html" not in outputs:
-        outputs.append("evidence_coverage.html")
-    public_roadmap["outputs"] = outputs
-    if not public_roadmap.get("paper_lens"):
-        public_roadmap = _ensure_paper_lens(public_roadmap)
-    if not public_roadmap.get("paper_map"):
-        public_roadmap = _ensure_paper_map(public_roadmap)
-    if public_roadmap.get("paper_lens"):
-        public_roadmap = _write_paper_lens_latex_export(output_dir, public_roadmap)
-    public_roadmap = _remove_stale_paper_reports(output_dir, public_roadmap)
-    frontend_asset_base = copy_frontend_assets(output_dir)
-    (output_dir / "learner_profile.json").write_text(json.dumps(profile.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-    (output_dir / "resource_index.json").write_text(
-        json.dumps([resource.to_dict() for resource in ranked_resources], ensure_ascii=False, indent=2),
-        encoding="utf-8",
+    from fields_study_flow.report_export import export_report
+
+    export_report(
+        output_dir,
+        roadmap,
+        profile=profile,
+        ranked_resources=ranked_resources,
+        source_registry_snapshot=source_registry_snapshot,
     )
-    (output_dir / "local_resource_analysis.json").write_text(
-        json.dumps([resource.to_dict() for resource in ranked_resources if resource.source == "local-library" or resource.local_path], ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-    (output_dir / "source_registry_snapshot.json").write_text(json.dumps(source_registry_snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
-    (output_dir / "roadmap.json").write_text(json.dumps(public_roadmap, ensure_ascii=False, indent=2), encoding="utf-8")
-    (output_dir / "roadmap.md").write_text(render_markdown(public_roadmap), encoding="utf-8")
-    (output_dir / "study_cards.md").write_text(render_study_cards_markdown(public_roadmap), encoding="utf-8")
-    (output_dir / "study_quiz.md").write_text(render_study_quiz_markdown(public_roadmap), encoding="utf-8")
-    (output_dir / "mastery_worksheet.md").write_text(render_mastery_worksheet_markdown(public_roadmap), encoding="utf-8")
-    (output_dir / "quick_brief.md").write_text(render_quick_brief_markdown(public_roadmap), encoding="utf-8")
-    (output_dir / "evidence_coverage.md").write_text(render_evidence_coverage_markdown(public_roadmap), encoding="utf-8")
-    (output_dir / "evidence_coverage.html").write_text(render_evidence_coverage_html(public_roadmap), encoding="utf-8")
-    (output_dir / "roadmap.svg").write_text(render_svg(public_roadmap), encoding="utf-8")
-    (output_dir / "index.html").write_text(render_report_index(public_roadmap), encoding="utf-8")
-    (output_dir / "roadmap.html").write_text(
-        render_frontend_report("roadmap", public_roadmap, asset_base=frontend_asset_base) if frontend_asset_base else render_html(public_roadmap),
-        encoding="utf-8",
-    )
-    if public_roadmap.get("paper_map"):
-        (output_dir / PAPER_MAP_FILE).write_text(
-            render_frontend_report("paper_map", public_roadmap, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_map_html(public_roadmap),
-            encoding="utf-8",
-        )
-    if public_roadmap.get("paper_lens"):
-        (output_dir / PAPER_LENS_FILE).write_text(
-            render_frontend_report("paper_lens", public_roadmap, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_lens_html(public_roadmap),
-            encoding="utf-8",
-        )
-    write_artifact_template(output_dir, public_roadmap)
-    write_report_audit(output_dir, public_roadmap)
 
 
 def _write_paper_lens_latex_export(output_dir: Path, roadmap: dict[str, Any]) -> dict[str, Any]:

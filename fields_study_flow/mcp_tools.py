@@ -185,6 +185,11 @@ def buildRoadmap(
     paperMapDepth: str = "standard",
     paperMapLayout: str = "xmind-flow",
     paperMapProvider: str = "auto",
+    plannerPreset: str | None = None,
+    learningOutcome: str | None = None,
+    explanationProvider: str | None = None,
+    researchContext: dict[str, Any] | None = None,
+    offline: bool = False,
 ) -> dict[str, Any]:
     learner = _profile_from_dict(
         {
@@ -194,30 +199,21 @@ def buildRoadmap(
             "route_depth": routeDepth,
             "learning_style": learningStyle,
             "target_kind": targetKind,
+            "planner_preset": plannerPreset or profile.get("planner_preset") or profile.get("plannerPreset"),
+            "learning_outcome": learningOutcome or profile.get("learning_outcome") or profile.get("learningOutcome") or ("present" if plannerPreset == "fast-presentation" else "understand"),
         }
     )
     resources = [_resource_from_dict(resource) for resource in rankedResources]
-    resources, rag_index = apply_rag_to_resources(learner, resources, mode=ragMode)
+    resources, rag_index = apply_rag_to_resources(learner, resources, mode="light" if offline and ragMode != "off" else ragMode)
     rag_evidence = public_rag_evidence(rag_index, goal)
-    plan = build_roadmap(learner, resources, live_search=liveSearch, rag_evidence=rag_evidence)
+    plan = build_roadmap(
+        learner, resources, live_search=liveSearch, rag_evidence=rag_evidence,
+        paper_lens_options={"language": paperLensLanguage, "density": paperLensDensity, "granularity": paperLensGranularity},
+        paper_map_options={"language": paperMapLanguage, "depth": paperMapDepth, "layout": paperMapLayout, "provider": paperMapProvider},
+        explanation_provider=explanationProvider or paperMapProvider, offline=offline, research_context=researchContext,
+    )
     if rag_evidence:
         plan["rag_evidence"] = rag_evidence
-    plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity, "granularity": paperLensGranularity}
-    plan["paper_map_options"] = {"language": paperMapLanguage, "depth": paperMapDepth, "layout": paperMapLayout, "provider": paperMapProvider}
-    if has_target_paper(plan):
-        plan["paper_lens"] = build_paper_lens(
-            plan,
-            paper_lens_language=paperLensLanguage,
-            paper_lens_density=paperLensDensity,
-            paper_lens_granularity=paperLensGranularity,
-        )
-        plan["paper_map"] = build_paper_map(
-            plan,
-            paper_map_language=paperMapLanguage,
-            paper_map_depth=paperMapDepth,
-            paper_map_layout=paperMapLayout,
-            paper_map_provider=paperMapProvider,
-        )
     return sanitize_roadmap_for_export(plan)
 
 
@@ -273,147 +269,22 @@ def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
 def exportPlan(
     plan: dict[str, Any],
     outputDir: str,
-    paperLensLanguage: str = "auto",
-    paperLensDensity: str = "dense",
-    paperLensGranularity: str = "paragraph",
-    paperMapLanguage: str = "auto",
-    paperMapDepth: str = "standard",
-    paperMapLayout: str = "xmind-flow",
-    paperMapProvider: str = "auto",
+    paperLensLanguage: str | None = None,
+    paperLensDensity: str | None = None,
+    paperLensGranularity: str | None = None,
+    paperMapLanguage: str | None = None,
+    paperMapDepth: str | None = None,
+    paperMapLayout: str | None = None,
+    paperMapProvider: str | None = None,
 ) -> dict[str, str]:
-    output = Path(outputDir)
-    output.mkdir(parents=True, exist_ok=True)
-    import json
+    from fields_study_flow.report_export import export_report
 
-    working_plan = dict(plan)
-    if has_target_paper(working_plan):
-        working_plan["paper_lens_options"] = {"language": paperLensLanguage, "density": paperLensDensity, "granularity": paperLensGranularity}
-        working_plan["paper_map_options"] = {"language": paperMapLanguage, "depth": paperMapDepth, "layout": paperMapLayout, "provider": paperMapProvider}
-        working_plan["paper_lens"] = build_paper_lens(
-            working_plan,
-            paper_lens_language=paperLensLanguage,
-            paper_lens_density=paperLensDensity,
-            paper_lens_granularity=paperLensGranularity,
-        )
-        working_plan["paper_map"] = build_paper_map(
-            working_plan,
-            paper_map_language=paperMapLanguage,
-            paper_map_depth=paperMapDepth,
-            paper_map_layout=paperMapLayout,
-            paper_map_provider=paperMapProvider,
-        )
-    public_plan = sanitize_roadmap_for_export(working_plan)
-    outputs = list(public_plan.get("outputs", []))
-    if "index.html" not in outputs:
-        outputs.insert(0, "index.html")
-    if "report_audit.json" not in outputs:
-        insert_at = outputs.index("index.html") + 1 if "index.html" in outputs else 0
-        outputs.insert(insert_at, "report_audit.json")
-    if "roadmap.html" not in outputs:
-        outputs.append("roadmap.html")
-    if "study_cards.md" not in outputs:
-        outputs.append("study_cards.md")
-    if "study_quiz.md" not in outputs:
-        outputs.append("study_quiz.md")
-    if "mastery_worksheet.md" not in outputs:
-        outputs.append("mastery_worksheet.md")
-    if "quick_brief.md" not in outputs:
-        outputs.append("quick_brief.md")
-    if "evidence_coverage.md" not in outputs:
-        outputs.append("evidence_coverage.md")
-    if "evidence_coverage.html" not in outputs:
-        outputs.append("evidence_coverage.html")
-    public_plan["outputs"] = outputs
-    if has_target_paper(public_plan):
-        if "paper_map.html" not in outputs:
-            outputs.append("paper_map.html")
-        if "paper_lens.html" not in outputs:
-            outputs.append("paper_lens.html")
-        public_plan["outputs"] = outputs
-    json_target = output / "roadmap.json"
-    md_target = output / "roadmap.md"
-    cards_target = output / "study_cards.md"
-    quiz_target = output / "study_quiz.md"
-    mastery_target = output / "mastery_worksheet.md"
-    brief_target = output / "quick_brief.md"
-    coverage_target = output / "evidence_coverage.md"
-    coverage_html_target = output / "evidence_coverage.html"
-    svg_target = output / "roadmap.svg"
-    index_target = output / "index.html"
-    audit_target = output / "report_audit.json"
-    html_target = output / "roadmap.html"
-    map_target = output / "paper_map.html"
-    lens_target = output / "paper_lens.html"
-    if not public_plan.get("paper_map"):
-        _remove_stale_export_file(map_target)
-        public_plan["outputs"] = [item for item in public_plan.get("outputs", []) if item != "paper_map.html"]
-    if not public_plan.get("paper_lens"):
-        for stale_name in ("paper_lens.html", "paper_lens.tex", "paper_lens.pdf"):
-            _remove_stale_export_file(output / stale_name)
-        public_plan["outputs"] = [item for item in public_plan.get("outputs", []) if item not in {"paper_lens.html", "paper_lens.tex", "paper_lens.pdf"}]
-    if public_plan.get("paper_lens"):
-        latex_export = write_paper_lens_latex(output, public_plan)
-        if latex_export:
-            lens = public_plan.get("paper_lens", {}) if isinstance(public_plan.get("paper_lens"), dict) else {}
-            lens["latex_export"] = latex_export
-            public_plan["paper_lens"] = lens
-            for file_key in ("tex_file", "pdf_file"):
-                file_name = latex_export.get(file_key)
-                if file_name and file_name not in public_plan.get("outputs", []):
-                    public_plan.setdefault("outputs", []).append(str(file_name))
-    frontend_asset_base = copy_frontend_assets(output)
-    json_target.write_text(json.dumps(public_plan, ensure_ascii=False, indent=2), encoding="utf-8")
-    md_target.write_text(render_markdown(public_plan), encoding="utf-8")
-    cards_target.write_text(render_study_cards_markdown(public_plan), encoding="utf-8")
-    quiz_target.write_text(render_study_quiz_markdown(public_plan), encoding="utf-8")
-    mastery_target.write_text(render_mastery_worksheet_markdown(public_plan), encoding="utf-8")
-    brief_target.write_text(render_quick_brief_markdown(public_plan), encoding="utf-8")
-    coverage_target.write_text(render_evidence_coverage_markdown(public_plan), encoding="utf-8")
-    coverage_html_target.write_text(render_evidence_coverage_html(public_plan), encoding="utf-8")
-    svg_target.write_text(render_svg(public_plan), encoding="utf-8")
-    index_target.write_text(render_report_index(public_plan), encoding="utf-8")
-    html_target.write_text(
-        render_frontend_report("roadmap", public_plan, asset_base=frontend_asset_base) if frontend_asset_base else render_html(public_plan),
-        encoding="utf-8",
+    return export_report(
+        outputDir,
+        plan,
+        paper_lens_options={"language": paperLensLanguage, "density": paperLensDensity, "granularity": paperLensGranularity},
+        paper_map_options={"language": paperMapLanguage, "depth": paperMapDepth, "layout": paperMapLayout, "provider": paperMapProvider},
     )
-    if public_plan.get("paper_map"):
-        map_target.write_text(
-            render_frontend_report("paper_map", public_plan, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_map_html(public_plan),
-            encoding="utf-8",
-        )
-    if public_plan.get("paper_lens"):
-        lens_target.write_text(
-            render_frontend_report("paper_lens", public_plan, asset_base=frontend_asset_base) if frontend_asset_base else render_paper_lens_html(public_plan),
-            encoding="utf-8",
-        )
-    write_artifact_template(output, public_plan)
-    write_report_audit(output, public_plan)
-    result = {
-        "index_html": str(index_target),
-        "report_audit_json": str(audit_target),
-        "roadmap_json": str(json_target),
-        "roadmap_md": str(md_target),
-        "study_cards_md": str(cards_target),
-        "study_quiz_md": str(quiz_target),
-        "mastery_worksheet_md": str(mastery_target),
-        "quick_brief_md": str(brief_target),
-        "evidence_coverage_md": str(coverage_target),
-        "evidence_coverage_html": str(coverage_html_target),
-        "roadmap_svg": str(svg_target),
-        "roadmap_html": str(html_target),
-    }
-    if public_plan.get("paper_map"):
-        result["paper_map_html"] = str(map_target)
-    if public_plan.get("paper_lens"):
-        result["paper_lens_html"] = str(lens_target)
-        latex_export = public_plan.get("paper_lens", {}).get("latex_export", {}) if isinstance(public_plan.get("paper_lens"), dict) else {}
-        if latex_export.get("tex_file"):
-            result["paper_lens_tex"] = str(output / str(latex_export["tex_file"]))
-        if latex_export.get("pdf_file"):
-            result["paper_lens_pdf"] = str(output / str(latex_export["pdf_file"]))
-    if public_plan.get("generated_artifacts"):
-        result["artifact_template"] = str(output / "artifact_template")
-    return result
 
 
 def _remove_stale_export_file(target: Path) -> None:
@@ -436,6 +307,8 @@ def _profile_from_dict(data: dict[str, Any]) -> LearnerProfile:
         target_kind=data.get("target_kind") or data.get("targetKind") or "auto",
         route_depth=data.get("route_depth") or data.get("routeDepth") or "balanced",
         learning_style=data.get("learning_style") or data.get("learningStyle") or "practical",
+        planner_preset=data.get("planner_preset") or data.get("plannerPreset"),
+        learning_outcome=data.get("learning_outcome") or data.get("learningOutcome") or "understand",
     )
 
 

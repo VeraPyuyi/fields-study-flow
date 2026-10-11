@@ -211,13 +211,13 @@ def test_write_outputs_writes_paper_lens_for_target_paper(tmp_path):
     assert report_audit["recommended_first_action"]["href"] == "paper_map.html"
     assert "paper_lens.html" in report_audit["surfaces"]
     index_html = (tmp_path / "index.html").read_text(encoding="utf-8")
-    assert "从这里开始" in index_html
+    assert "开始理解论文" in index_html
     assert "paper_map.html" in index_html
     assert "paper_lens.html" in index_html
     assert "roadmap.html" in index_html
     assert "C:/" not in index_html
     assert "D:/" not in index_html
-    assert "目标论文增强阅读器" in (tmp_path / "paper_lens.html").read_text(encoding="utf-8")
+    assert "paragraph-stream" in (tmp_path / "paper_lens.html").read_text(encoding="utf-8")
     assert "paper_lens.html" in (tmp_path / "roadmap.html").read_text(encoding="utf-8")
 
 

@@ -42,6 +42,9 @@ PLANNER_PRESETS: dict[str, dict[str, str]] = {
     "fastest": {"route_depth": "fastest", "learning_style": "practical"},
     "balanced": {"route_depth": "balanced", "learning_style": "practical"},
     "complete": {"route_depth": "complete", "learning_style": "theory"},
+    "fast-presentation": {"target_kind": "paper", "route_depth": "fastest", "learning_style": "practical"},
+    "deep-reproduction": {"target_kind": "paper", "route_depth": "complete", "learning_style": "practical"},
+    "field-survey": {"target_kind": "field", "route_depth": "complete", "learning_style": "theory"},
     "paper-fastest": {"target_kind": "paper", "route_depth": "fastest", "learning_style": "practical"},
     "paper-deep": {"target_kind": "paper", "route_depth": "complete", "learning_style": "theory"},
     "field-project": {"target_kind": "field", "route_depth": "balanced", "learning_style": "practical"},
@@ -124,6 +127,9 @@ def build_parser() -> argparse.ArgumentParser:
     paper.add_argument("--with-videos", action="store_true")
     paper.add_argument("--output-language", default="zh-CN")
     paper.add_argument("--resource-language", default="balanced")
+    paper.add_argument("--known-topic", action="append", default=[])
+    paper.add_argument("--level", action="append", default=[], help="Domain level as domain=beginner|familiar|advanced")
+    paper.add_argument("--offline", action="store_true", help="Disable all network access during generation, including model explanations and downloads.")
     _add_unified_planner_args(paper, default_target_kind="paper")
     paper.add_argument("--local-resource", action="append", default=[], help="Explicit local file or folder to analyze as a shortcut candidate.")
     paper.add_argument("--no-live-search", action="store_true", help="Disable default live resource discovery.")
@@ -206,10 +212,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _add_unified_planner_args(parser: argparse.ArgumentParser, default_target_kind: str = "auto") -> None:
     parser.set_defaults(default_target_kind=default_target_kind)
-    parser.add_argument("--preset", choices=sorted(PLANNER_PRESETS), help="Common planner preset such as paper-fastest, field-project, or course-complete.")
+    parser.add_argument(
+        "--preset",
+        choices=sorted(PLANNER_PRESETS),
+        help="Common planner preset such as fast-presentation, deep-reproduction, or field-survey.",
+    )
     parser.add_argument("--route-depth", choices=["fastest", "balanced", "complete"])
     parser.add_argument("--learning-style", choices=["practical", "theory", "video", "auto"])
     parser.add_argument("--target-kind", choices=["paper", "field", "course", "auto"])
+    parser.add_argument("--learning-outcome", choices=["understand", "present", "extend"], help="Understand the work, present it, or take over its implementation.")
+    parser.add_argument("--explanation-provider", choices=["local", "auto", "llm"], help="Optional explicitly enabled model explanations; otherwise use local evidence.")
 
 
 def _planner_options(args: argparse.Namespace) -> dict[str, str]:
@@ -217,17 +229,36 @@ def _planner_options(args: argparse.Namespace) -> dict[str, str]:
         "route_depth": "balanced",
         "learning_style": "practical",
         "target_kind": getattr(args, "default_target_kind", "auto"),
+        "learning_outcome": "understand",
     }
     preset = getattr(args, "preset", None)
     if preset:
         options.update(PLANNER_PRESETS[preset])
+        options["planner_preset"] = preset
+        if preset == "fast-presentation":
+            options["learning_outcome"] = "present"
+        elif preset == "deep-reproduction":
+            options["learning_outcome"] = "extend"
     if args.route_depth:
         options["route_depth"] = args.route_depth
     if args.learning_style:
         options["learning_style"] = args.learning_style
     if args.target_kind:
         options["target_kind"] = args.target_kind
+    if getattr(args, "learning_outcome", None):
+        options["learning_outcome"] = args.learning_outcome
     return options
+
+
+def _workbench_options(args: argparse.Namespace) -> dict[str, object]:
+    return {
+        "paper_lens_options": {"language": args.paper_lens_language, "density": args.paper_lens_density, "granularity": args.paper_lens_granularity},
+        "paper_map_options": {"language": args.paper_map_language, "depth": args.paper_map_depth, "layout": args.paper_map_layout, "provider": args.paper_map_provider},
+        "paper_lens_disabled": args.no_paper_lens,
+        "paper_map_disabled": args.no_paper_map,
+        "explanation_provider": args.explanation_provider or args.paper_map_provider,
+        "offline": args.offline,
+    }
 
 
 def _roadmap(args: argparse.Namespace) -> int:
@@ -248,6 +279,8 @@ def _roadmap(args: argparse.Namespace) -> int:
         target_kind=planner["target_kind"],
         route_depth=planner["route_depth"],
         learning_style=planner["learning_style"],
+        planner_preset=planner.get("planner_preset"),
+        learning_outcome=planner["learning_outcome"],
     )
     registry = SourceRegistry.default()
     live_diagnostics = {"enabled": False, "status": "not_requested"}
@@ -261,9 +294,9 @@ def _roadmap(args: argparse.Namespace) -> int:
     if args.local_resource:
         resources.extend(analyze_local_resources(args.local_resource, args.goal))
     ranked = rank_resources(resources, profile)
-    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode=args.rag)
+    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode="light" if args.offline and args.rag != "off" else args.rag)
     rag_evidence = public_rag_evidence(rag_index, profile.goal)
-    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics, rag_evidence=rag_evidence)
+    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics, rag_evidence=rag_evidence, **_workbench_options(args))
     if rag_evidence:
         roadmap["rag_evidence"] = rag_evidence
     manifest = None
@@ -275,12 +308,11 @@ def _roadmap(args: argparse.Namespace) -> int:
             bundle_scope=args.bundle_scope,
             retries=max(0, args.download_retries),
             progress=None if args.quiet_downloads else _print_bundle_progress,
+            offline=args.offline,
         )
         if args.rag != "off":
-            write_bundle_rag_index(Path(args.resource_dir), manifest, query=profile.goal, mode=args.rag)
+            write_bundle_rag_index(Path(args.resource_dir), manifest, query=profile.goal, mode="light" if args.offline else args.rag)
         roadmap = attach_study_bundle(roadmap, manifest, report_dir=Path(args.output_dir))
-    roadmap = _apply_paper_lens_option(args, roadmap)
-    roadmap = _apply_paper_map_option(args, roadmap)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
     if manifest is not None:
         print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
@@ -295,23 +327,26 @@ def _paper(args: argparse.Namespace) -> int:
     if not args.url:
         print("error: --url is required unless --interactive supplies one", file=sys.stderr)
         return 2
-    target_resource = _paper_resource_from_url(args.url, live=not args.no_live_search)
+    target_resource = _paper_resource_from_url(args.url, live=not args.no_live_search and not args.offline)
     planner = _planner_options(args)
     profile = LearnerProfile(
         goal=_paper_profile_goal(args.goal, target_resource, args.url),
         output_language=normalize_output_language(args.output_language),
         resource_language_preference=normalize_resource_language_preference(args.resource_language),
-        levels={"paper_reading": "beginner"},
+        known_topics=args.known_topic,
+        levels={"paper_reading": "beginner", **_parse_levels(args.level)},
         target_kind=planner["target_kind"],
         route_depth=planner["route_depth"],
         learning_style=planner["learning_style"],
+        planner_preset=planner.get("planner_preset"),
+        learning_outcome=planner["learning_outcome"],
     )
     registry = SourceRegistry.default()
     live_diagnostics = {"enabled": False, "status": "not_requested"}
     resources = [target_resource]
     query = _paper_support_query(args.goal, target_resource, args.url)
     resources.extend(offline_resources_for_goal(query))
-    if not args.no_live_search:
+    if not args.no_live_search and not args.offline:
         live_resources, live_diagnostics = _safe_live_search(_paper_live_search_query(args.goal, args.url), None, args.resource_language)
         resources.extend(live_resources)
     if args.local_resource:
@@ -319,9 +354,9 @@ def _paper(args: argparse.Namespace) -> int:
     if not args.with_videos:
         resources = [resource for resource in resources if resource.type != "video"]
     ranked = rank_resources(resources, profile)
-    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode=args.rag)
+    ranked, rag_index = apply_rag_to_resources(profile, ranked, mode="light" if args.offline and args.rag != "off" else args.rag)
     rag_evidence = public_rag_evidence(rag_index, profile.goal)
-    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics, rag_evidence=rag_evidence)
+    roadmap = build_roadmap(profile, ranked, live_search=live_diagnostics, rag_evidence=rag_evidence, **_workbench_options(args))
     if rag_evidence:
         roadmap["rag_evidence"] = rag_evidence
     manifest = None
@@ -333,12 +368,11 @@ def _paper(args: argparse.Namespace) -> int:
             bundle_scope=args.bundle_scope,
             retries=max(0, args.download_retries),
             progress=None if args.quiet_downloads else _print_bundle_progress,
+            offline=args.offline,
         )
         if args.rag != "off":
-            write_bundle_rag_index(Path(args.resource_dir), manifest, query=profile.goal, mode=args.rag)
+            write_bundle_rag_index(Path(args.resource_dir), manifest, query=profile.goal, mode="light" if args.offline else args.rag)
         roadmap = attach_study_bundle(roadmap, manifest, report_dir=Path(args.output_dir))
-    roadmap = _apply_paper_lens_option(args, roadmap)
-    roadmap = _apply_paper_map_option(args, roadmap)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
     if manifest is not None:
         print((Path(args.resource_dir) / "study_bundle_manifest.json").resolve())
@@ -358,11 +392,17 @@ def _interactive_update_args(args: argparse.Namespace, mode: str) -> None:
         args.goal = _prompt_text("Learning goal / 学习目标", args.goal)
     args.output_language = _prompt_choice("Output language / 输出语言", args.output_language, ["zh-CN", "en", "bilingual"])
     args.resource_language = _prompt_choice("Resource language preference / 资料语言偏好", args.resource_language, ["zh-first", "en-first", "balanced", "zh-only", "en-only"])
-    args.route_depth = _prompt_choice("Route depth / 路线深度", args.route_depth or "balanced", ["fastest", "balanced", "complete"])
-    args.learning_style = _prompt_choice("Learning style / 学习风格", args.learning_style or "practical", ["practical", "theory", "video", "auto"])
+    preset_choice, route_depth_from_preset_prompt = _prompt_planner_preset(
+        "Planning preset / 学习意图模板",
+        getattr(args, "preset", None) or "custom",
+    )
+    args.preset = None if preset_choice == "custom" else preset_choice
+    preset_defaults = PLANNER_PRESETS.get(args.preset or "", {})
+    args.route_depth = route_depth_from_preset_prompt or _prompt_choice("Route depth / 路线深度", args.route_depth or preset_defaults.get("route_depth") or "balanced", ["fastest", "balanced", "complete"])
+    args.learning_style = _prompt_choice("Learning style / 学习风格", args.learning_style or preset_defaults.get("learning_style") or "practical", ["practical", "theory", "video", "auto"])
     args.target_kind = _prompt_choice(
         "Target kind / 目标类型",
-        args.target_kind or getattr(args, "default_target_kind", "auto"),
+        args.target_kind or preset_defaults.get("target_kind") or getattr(args, "default_target_kind", "auto"),
         ["paper", "field", "course", "auto"],
     )
     local_paths = _prompt_text("Local resource path(s), separated by ; / 本地资料路径，多个用 ; 分隔", ";".join(args.local_resource or []), required=False)
@@ -440,6 +480,33 @@ def _prompt_choice(label: str, current: str | None, choices: list[str]) -> str:
         output = value or current
         if output in choices:
             return output
+        print(f"Choose one of: {options}")
+
+
+def _prompt_planner_preset(label: str, current: str | None) -> tuple[str, str | None]:
+    choices = [
+        "custom",
+        "fast-presentation",
+        "deep-reproduction",
+        "field-survey",
+        "paper-fastest",
+        "paper-deep",
+        "field-project",
+        "course-complete",
+        "fastest",
+        "balanced",
+        "complete",
+    ]
+    route_depth_choices = {"fastest", "balanced", "complete"}
+    current = current if current in choices else "custom"
+    options = "/".join(choices)
+    while True:
+        value = input(f"{label} ({options}) [{current}]: ").strip()
+        if value in route_depth_choices:
+            return "custom", value
+        output = value or current
+        if output in choices:
+            return output, None
         print(f"Choose one of: {options}")
 
 
@@ -1347,6 +1414,13 @@ def _export(args: argparse.Namespace) -> int:
 
     data = sanitize_roadmap_for_export(data)
     targets: list[Path] = []
+    if args.format == "all":
+        from fields_study_flow.report_export import export_report
+
+        result = export_report(output_dir, data)
+        for target in result.values():
+            print(target)
+        return 0
     if args.format == "json":
         target = output_dir / "roadmap.json"
         target.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")

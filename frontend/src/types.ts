@@ -1,6 +1,9 @@
 export type ReportKind = "roadmap" | "paper_map" | "paper_lens";
 
 export type ResourceLink = {
+  id?: string;
+  selected?: boolean;
+  route_status?: string;
   title?: string;
   label?: string;
   url?: string;
@@ -36,6 +39,9 @@ export type Evidence = {
 
 export type PaperMapNode = {
   id: string;
+  claim_id?: string;
+  claim_ids?: string[];
+  anchor_ids?: string[];
   kind?: string;
   role?: string;
   label?: string;
@@ -45,6 +51,7 @@ export type PaperMapNode = {
   connection?: string;
   talking_point?: string;
   confidence?: number | string;
+  evidence_status?: string;
   evidence?: Evidence[];
   related_resources?: ResourceLink[];
   layout?: {
@@ -65,6 +72,9 @@ export type PaperMapEdge = {
 
 export type PaperLensSegment = {
   id: string;
+  claim_id?: string;
+  claim_ids?: string[];
+  anchor_ids?: string[];
   section_kind?: string;
   section_title?: string;
   original_text?: string;
@@ -88,6 +98,8 @@ export type PaperLensExplanation = {
 
 export type StudyTask = {
   id?: string;
+  anchor_ids?: string[];
+  claim_ids?: string[];
   type?: string;
   title?: string;
   estimated_minutes?: number;
@@ -138,11 +150,16 @@ export type PaperSet = {
 
 export type Roadmap = {
   title?: string;
+  paper_map_disabled?: boolean;
+  paper_lens_disabled?: boolean;
+  page_language?: string;
+  research_context?: ResearchContext;
   profile?: {
     goal?: string;
     output_language?: string;
     route_depth?: string;
     learning_style?: string;
+    learning_outcome?: string;
   };
   path_strategy?: {
     mode?: string;
@@ -202,5 +219,40 @@ export type Roadmap = {
 
 export type ReportPayload = {
   reportKind?: ReportKind;
+  pageLanguage?: string;
   roadmap?: Roadmap;
+};
+
+export type ResearchSource = {
+  id: string; kind: string; title: string; fingerprint: string;
+  relative_path?: string; local_href?: string; url?: string;
+};
+export type SourceAnchor = {
+  id: string; source_id: string;
+  locator: { page?: number; section?: string; symbol?: string; line_start?: number; line_end?: number;
+    cell_id?: string; json_pointer?: string; row?: number; column?: string | number };
+  snippet: string; locator_status: string;
+};
+export type ResearchClaim = {
+  id: string; kind: string; statement: string; anchor_ids: string[]; evidence_status: string;
+};
+export type ResearchRelation = {
+  id: string; from: string; to: string; kind: string; anchor_ids: string[]; origin: string; review_status: string;
+};
+export type LearningStep = {
+  id: string; title: string; claim_ids: string[]; prerequisite_ids: string[]; anchor_ids: string[];
+  task_ids: string[]; estimated_minutes?: number | null; reason: string; status: string;
+  questions?: string[]; answer_questions?: string[]; check_points?: string[];
+  activity?: string;
+  missing_prerequisite_ids?: string[];
+  prerequisite_cycle?: boolean;
+  prerequisite_review_required?: boolean;
+  blocked_by_cycle?: boolean;
+};
+export type ResearchContext = {
+  schema_version: 1; bundle_id: string; snapshot_id: string;
+  sources: ResearchSource[]; anchors: SourceAnchor[]; claims: ResearchClaim[];
+  relations: ResearchRelation[]; learning_steps: LearningStep[];
+  coverage?: { truncated?: boolean | unknown[]; skipped?: Array<{ reason?: string; [key: string]: unknown }>;
+    limits?: Record<string, unknown>; input_analysis?: Array<{ files_inspected?: number; max_files?: number; limit_reached?: boolean; note?: string }> };
 };

@@ -1,0 +1,4 @@
+demonstration_only: true
+experiment:
+  seed: 7
+  conditional_effects: false
