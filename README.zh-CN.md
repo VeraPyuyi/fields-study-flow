@@ -27,10 +27,10 @@ fields-study-flow 可以把“读懂这篇论文”、“学习 Transformer”�
 | 能力 | 说明 |
 | --- | --- |
 | 个性化访谈 | 收集目标类型、已知知识、各领域水平、时间预算、路线语言和资料语言偏好。 |
-| AI/CS 技能树 | 内置数学、编程、ML/DL、LLM、RL、系统、论文阅读等前置知识结构。 |
+| 人工维护的先修图 | 覆盖数学、Python、ML/DL、Transformer、diffusion、LLM；YOLO/CNN 映射到 DL。尚未实现 RL、系统和通用论文阅读的先修图。 |
 | 多源资源发现 | 覆盖 GitHub、arXiv、OpenAlex、Semantic Scholar、Unpaywall、Papers with Code、YouTube、Bilibili、知乎、Hugging Face、Kaggle、MIT OCW、fast.ai、Google MLCC 等。 |
 | 语言感知排序 | 支持 `zh-first`、`en-first`、`balanced`、`zh-only`、`en-only`。 |
-| 论文深读路线 | 把目标论文作为第一资源，再补充前置知识、直觉视频、代码实现和复现检查点。 |
+| 论文深读路线 | 把目标论文放入依赖之后的核心阶段，使用已有概念标签补充先修，并提供复现检查点。 |
 | 安全边界 | 拒绝盗版来源、绕登录、下载视频、长篇复制版权内容等不合规路径。 |
 | Agent 友好输出 | 生成 Markdown 与 JSON，方便后续 agent 继续执行、复盘或扩展。 |
 
@@ -180,7 +180,7 @@ fields_study_flow/
   ranking.py          # 评分、目标论文 boost、URL 规范化去重
   roadmap.py          # roadmap schema 与 Markdown 渲染
   mcp_tools.py        # agent 可调用工具函数
-  mcp_server.py       # JSON-lines 工具服务器
+  mcp_server.py       # SDK MCP stdio（--mcp）与旧 JSONL
   cli.py              # 命令行入口
 ```
 
@@ -203,16 +203,35 @@ python -m pip install -e .
 pytest -q
 ```
 
-当前测试覆盖语言偏好解析、双语 query 生成、registry policy、GitHub 风格排序信号、URL 去重、MCP 工具边界、安全校验、roadmap schema 和 CLI smoke tests。
+Windows CPython 3.14.7 的可复现环境见[固定版本 constraints 与构建/安装说明](docs/REPRODUCIBILITY.md)。约束包含运行、测试和构建的传递依赖；无约束安装可能解析到其他版本。
+
+当前测试覆盖语言偏好解析、双语 query 生成、registry policy、GitHub 风格排序信号、URL 去重、MCP 工具边界、安全校验、并发限流与原子缓存写入、依赖顺序与未知排期、roadmap schema 和 CLI smoke tests。
 
 ## 路线图
 
-- 接入 GitHub、YouTube、OpenAlex、Semantic Scholar、Hugging Face、Papers with Code 的官方 API adapter；
+- 继续接入 YouTube、OpenAlex、Semantic Scholar、Hugging Face、Papers with Code adapter；
 - 扩展 AI/CS 前置知识图谱；
 - 增加进度追踪和间隔复习导出；
 - 增加浏览器版路线预览；
-- 打包正式 MCP SDK server。
+- 补充编辑器 GUI 的 MCP 连接验证。
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## 当前能力与限制
+
+CLI `roadmap` 默认离线；`--live --sources arxiv,github` 显式调用公开元数据 API。MCP `searchResources` 传 `filters={"offline": false}` 启用实时检索，`type`、`language`、`difficulty` 会真正过滤资源。其他 registry 平台目前只有链接/目录能力。返回 `offline/live/cache/mixed/degraded` 和降级原因；失败不会伪造查询结果。默认超时 5 秒、同一进程内各服务实例按 API 主机共享至少 3 秒的请求间隔、磁盘缓存 1 小时并原子替换，缓存目录可由 `FIELDS_STUDY_FLOW_CACHE` 设置。不使用付费 API 或认证内容。
+
+`ingestUrl` 默认只录入 URL；`fetchMetadata=true` 从公开 GitHub/arXiv API 获取元数据，拒绝凭据和重定向，其他来源明确降级。GitHub 的 `language=en` 表示元数据界面语言；编程语言另存 metadata，不保证仓库正文语言分类。
+
+标准 MCP 启动命令为 `python -m fields_study_flow.mcp_server --mcp`，两份编辑器配置已同步。无参数启动和 `--legacy-jsonl` 保留旧 JSONL，`git4study` 入口兼容。协议版本由官方 SDK 2.x 协商，详见 [MCP 文档](docs/MCP.md)。本地 SDK 测试涵盖握手、8 工具 schema、调用和错误；编辑器 GUI 实际连接仍需外部验收。
+
+排序输出相关性、可信度、结构、难度、成果偏好、语言等分项及缺失词项。小型中英别名表和领域等级避免全局降级；仍是词汇匹配，不是语义模型。30 条固定样例位于 `tests/fixtures/ranking_cases.json`。低相关性标为补充资料，不声称匹配。先修图使用上文的小型人工图，由目标和已提供的资源概念（包括 README 的已知 Transformer 论文）触发，并跳过明确已知主题；任意论文 URL 不代表已提取论文概念。阶段和串行周计划共用资源依赖顺序，环和未知先修引用会明确报错。目标论文在依赖之后进入核心阶段。未知时长使该项及后续周次未定，`known_estimated_hours` 保留已知小计，总工时与总周数保持 unknown。先修与资源学习工时可能重叠，人工估算不保证实际完成时间。学习等级接受 `beginner/familiar/advanced` 和已有中文别名 `初学/熟悉/老手`，错误等级会提示允许值。
+
+合规校验使用解析后的 URL 主机/协议。存在 `metadata.access_policy` 时，以结构化 policy 为访问动作的权威：允许 `metadata/link/summarize`，拒绝其他动作、绕登录、镜像或 `authorized: false`；此时不再对旧文案做动作交叉检查。URL 与访问说明缺失检查仍独立执行。
+
+没有结构化 policy 时，英文自由文案仅使用**有限兼容规则**，不支持任意英文语义解析。规则识别既定的视频下载、绕登录、全文/长篇版权复制、受限页面抓取动作及下载工具名，覆盖词形、限定词和有限被动助动表达（`must`、`need(s) to`、`has/have to`、`is/are required to`）。局部明确禁止包括 `do not`、`never`、尾部 `is/are prohibited` 或 `not/never allowed/permitted`；并列动作列表可以共享禁止范围。标点、`but/however/then/instead`、显式新主语及识别到的限定谓语/祈使标记终止继承的否定，标记与敏感动作之间插入普通动作也如此。因此 `Videos need to be downloaded` 和 `Do not copy full text and instead watch and download video content` 被拒绝，`Downloading videos is never permitted` 被允许。
+
+这些词法规则不解析任意同义词、间接请求、引语、条件句、代词、嵌套从句、所有双重否定或其他语言。未列出的英文句式仍可能漏判或误判；legacy 返回 `valid` 不代表任意文案安全。机器生成的访问决策应提供明确的结构化 policy。校验器不会抓取、下载或执行文案中的指令。

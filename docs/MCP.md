@@ -1,17 +1,9 @@
-# MCP Integration
+# MCP transport
 
-`fields_study_flow.mcp_tools` contains pure Python functions that can be wrapped by an MCP host.
+Install the package, then configure your host to run `python -m fields_study_flow.mcp_server --mcp`. The Cursor and VS Code examples select this mode explicitly. Use the Python interpreter from the environment where the package and its MCP SDK dependency are installed.
 
-For local experiments, `python -m fields_study_flow.mcp_server` runs a JSON-lines tool process. Each line should be:
+The server uses the official MCP Python SDK 2.x `MCPServer` stdio transport. Protocol versions and capabilities are negotiated by that SDK; this project does not implement additional protocol versions. Eight tools expose schemas derived from their existing typed signatures: assessKnowledge, discoverSources, searchResources, ingestUrl, rankResources, buildRoadmap, validateSources, exportPlan. Unknown tools and invalid arguments return SDK tool errors. Logs use stderr; stdout is reserved for protocol messages.
 
-```json
-{"tool":"searchResources","arguments":{"query":"Transformer derivation","languagePreference":"en-first"}}
-```
+For compatibility, `python -m fields_study_flow.mcp_server --legacy-jsonl` accepts one `{"tool":"assessKnowledge","arguments":{"goal":"python"}}` per line and returns `{"ok":true,"result":...}`. Running without a flag retains this legacy behavior, including `python -m git4study.mcp_server`. JSONL is not MCP. Use `--mcp` for standard hosts.
 
-The process returns:
-
-```json
-{"ok":true,"result":{}}
-```
-
-The JSON-lines server is intentionally small and deterministic. Production MCP packaging can map the same functions onto a full MCP SDK server without changing the tool behavior.
+Run `python -m pytest tests/test_mcp_protocol.py -q` for an actual SDK stdio initialization, tools/list, buildRoadmap call, error cases, legacy subprocess checks and configuration checks. Editor GUI attachment is a separate external check.

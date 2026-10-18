@@ -19,7 +19,42 @@ TOOLS: dict[str, Callable[..., Any]] = {
 }
 
 
+def _mcp_tool(tool: Callable[..., Any]) -> Callable[..., Any]:
+    from functools import wraps
+    from mcp.server.mcpserver.exceptions import ToolError
+
+    @wraps(tool)
+    def run(*args, **kwargs):
+        try:
+            return tool(*args, **kwargs)
+        except ValueError as exc:
+            # Expected input/dependency errors must reach the client; the SDK
+            # intentionally hides unexpected exception messages by default.
+            raise ToolError(str(exc)) from exc
+
+    return run
+
+
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MCP stdio or legacy JSONL tools")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--mcp", action="store_true", help="Standard MCP SDK stdio transport")
+    mode.add_argument("--legacy-jsonl", action="store_true", help="Legacy JSONL (also the compatibility default)")
+    args = parser.parse_args()
+    if args.mcp:
+        from mcp.server.mcpserver import MCPServer
+
+        server = MCPServer("fields-study-flow", version="0.1.0", subscriptions=False)
+        for name, tool in TOOLS.items():
+            server.add_tool(_mcp_tool(tool), name=name)
+        server.run(transport="stdio")
+        return 0
+    return legacy_main()
+
+
+def legacy_main() -> int:
     """Small JSON-lines tool server for local agent integration examples.
 
     Full MCP hosts can wrap these same tool functions. This process accepts one

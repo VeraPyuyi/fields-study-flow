@@ -17,10 +17,11 @@ from fields_study_flow.sources import SourceRegistry
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "roadmap":
-        return _roadmap(args)
-    if args.command == "paper":
-        return _paper(args)
+    if args.command in {"roadmap", "paper"}:
+        try:
+            return _roadmap(args) if args.command == "roadmap" else _paper(args)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.command == "ingest-url":
         return _ingest_url(args)
     if args.command == "discover-sources":
@@ -45,7 +46,9 @@ def build_parser() -> argparse.ArgumentParser:
     roadmap.add_argument("--weekly-hours", type=int)
     roadmap.add_argument("--target-date")
     roadmap.add_argument("--output-dir", default="fields-study-flow-output")
-    roadmap.add_argument("--offline", action="store_true", help="Use the bundled deterministic resource catalog. This is the MVP default.")
+    retrieval = roadmap.add_mutually_exclusive_group()
+    retrieval.add_argument("--offline", action="store_true", help="Use the bundled deterministic resource catalog (default).")
+    retrieval.add_argument("--live", action="store_true", help="Search public arXiv and GitHub metadata.")
 
     paper = subparsers.add_parser("paper", help="Generate a paper deep-reading roadmap.")
     paper.add_argument("--url", required=True)
@@ -58,6 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     ingest = subparsers.add_parser("ingest-url", help="Parse a user-provided resource URL at metadata level.")
     ingest.add_argument("url")
     ingest.add_argument("--source-hint")
+    ingest.add_argument("--fetch-metadata", action="store_true")
 
     discover = subparsers.add_parser("discover-sources", help="List source adapters for a goal and language policy.")
     discover.add_argument("--goal", required=True)
@@ -83,14 +87,14 @@ def _roadmap(args: argparse.Namespace) -> int:
         target_date=args.target_date,
     )
     registry = SourceRegistry.default()
-    if not args.offline:
-        print("Live API connectors are not enabled in this MVP; using the bundled deterministic catalog.", file=sys.stderr)
-    resources = offline_resources_for_goal(args.goal)
-    selected_sources = _parse_sources(args.sources)
-    if selected_sources:
-        resources = _filter_resources_by_sources(resources, selected_sources, registry)
+    from fields_study_flow.sources_adapters import SearchService
+    selected_sources = sorted(_parse_sources(args.sources)) or None
+    retrieval = SearchService().search(args.goal, selected_sources, offline=not args.live)
+    resources = [Resource(**r) for r in retrieval['resources']]
     ranked = rank_resources(resources, profile)
     roadmap = build_roadmap(profile, ranked)
+    roadmap['retrieval'] = {k: v for k, v in retrieval.items() if k != 'resources'}
+    print(f"Retrieval: {retrieval['mode']}; {retrieval['degraded']}", file=sys.stderr)
     write_outputs(Path(args.output_dir), profile, ranked, roadmap, registry.snapshot())
     print(Path(args.output_dir).resolve())
     return 0
@@ -116,7 +120,7 @@ def _paper(args: argparse.Namespace) -> int:
 
 
 def _ingest_url(args: argparse.Namespace) -> int:
-    print(json.dumps(ingestUrl(args.url, args.source_hint), ensure_ascii=False, indent=2))
+    print(json.dumps(ingestUrl(args.url, args.source_hint, fetchMetadata=args.fetch_metadata), ensure_ascii=False, indent=2))
     return 0
 
 
@@ -173,9 +177,10 @@ def _parse_sources(value: str) -> set[str]:
 def _parse_levels(values: list[str]) -> dict[str, str]:
     levels: dict[str, str] = {}
     for value in values:
-        if "=" in value:
-            key, level = value.split("=", 1)
-            levels[key.strip()] = level.strip()
+        if "=" not in value or not value.split("=", 1)[0].strip():
+            raise ValueError('--level must be domain=beginner|familiar|advanced')
+        key, level = value.split("=", 1)
+        levels[key.strip()] = level.strip()
     return levels
 
 

@@ -27,7 +27,7 @@ Most learning-path tools stop at a plausible list of links. fields-study-flow ke
 | Area | What it does |
 | --- | --- |
 | Personalized interview | Captures goal type, known topics, skill levels, time budget, output language, and resource language preference. |
-| AI/CS taxonomy | Seeds routes with math, programming, ML/DL, LLM, RL, systems, and paper-reading prerequisites. |
+| Curated prerequisites | Covers math, Python, ML/DL, Transformer, diffusion, and LLM; YOLO/CNN map to DL. RL, systems, and general paper-reading prerequisite graphs are not implemented. |
 | Multi-source discovery | Models GitHub, arXiv, OpenAlex, Semantic Scholar, Unpaywall, Papers with Code, YouTube, Bilibili, Zhihu, Hugging Face, Kaggle, MIT OCW, fast.ai, Google MLCC, and more. |
 | Language-aware ranking | Supports `zh-first`, `en-first`, `balanced`, `zh-only`, and `en-only`. |
 | Paper deep reading | Makes the target paper first-class, then adds prerequisites, intuition resources, and reproduction checkpoints. |
@@ -177,7 +177,7 @@ fields_study_flow/
   ranking.py          # scoring, target-paper boost, canonical URL de-duplication
   roadmap.py          # roadmap schema and Markdown rendering
   mcp_tools.py        # tool functions for agents
-  mcp_server.py       # simple JSON-lines tool server
+  mcp_server.py       # SDK MCP stdio (--mcp), legacy JSONL default
   cli.py              # command-line interface
 ```
 
@@ -200,16 +200,35 @@ python -m pip install -e .
 pytest -q
 ```
 
-Current test coverage includes language preference parsing, bilingual query generation, registry policy filtering, GitHub-style ranking signals, URL de-duplication, MCP tool boundaries, safety validation, roadmap schema, and CLI smoke tests.
+For a reproducible Windows CPython 3.14.7 environment, use [the pinned constraints and build/install steps](docs/REPRODUCIBILITY.md). The constraints include transitive runtime, test, and build dependencies; unconstrained installs can resolve different versions.
+
+Current test coverage includes language preference parsing, bilingual query generation, registry policy filtering, GitHub-style ranking signals, URL de-duplication, MCP tool boundaries, safety validation, concurrent rate limiting and atomic cache writes, dependency ordering and unknown schedules, roadmap schema, and CLI smoke tests.
 
 ## Roadmap
 
-- Live official API adapters for GitHub, YouTube, OpenAlex, Semantic Scholar, Hugging Face, and Papers with Code.
+- Additional live API adapters for YouTube, OpenAlex, Semantic Scholar, Hugging Face, and Papers with Code.
 - A richer AI/CS prerequisite graph with versioned topic nodes.
 - Progress tracking and spaced-review exports.
 - Browser-friendly roadmap preview.
-- Full MCP SDK packaging.
+- Wider MCP host GUI compatibility checks.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## Current capabilities and limits
+
+`roadmap` remains offline by default. Add `--live --sources arxiv,github` to query public metadata APIs. MCP `searchResources` uses `filters={"offline": false}` for live queries; `type`, `language`, and `difficulty` filters apply to actual results. Offline catalog entries are suggestions, not live search matches. Other registered platforms are link/catalog only. Retrieval reports `offline`, `live`, `cache`, `mixed`, or `degraded` with reasons; network errors return no invented matches. API calls use a 5-second timeout, a 3-second minimum interval shared across service instances per API host in one process, and a one-hour disk cache with atomic replacement (`FIELDS_STUDY_FLOW_CACHE` overrides its directory). There are no paid APIs or authenticated fetches.
+
+`ingestUrl` is URL-only by default. `fetchMetadata=true` requests public GitHub repository or arXiv metadata through the same service, refusing credentials and redirects. Unsupported hosts remain URL-only with an explicit degraded reason. GitHub resource language is the interface/metadata language (English); programming language is recorded separately and is not a natural-language classifier.
+
+Standard MCP hosts must run `python -m fields_study_flow.mcp_server --mcp`. Both editor configurations use this command. The no-flag invocation and `--legacy-jsonl` retain the previous JSONL protocol, including the `git4study` alias. See [MCP transport](docs/MCP.md). The official SDK 2.x negotiates its supported protocol versions; local tests exercise initialize, eight tool schemas, calls, and errors. Editor GUI attachment remains an external check.
+
+Ranking exposes relevance, trust, structure, difficulty, outcome and language components plus unmatched goal terms. A small bilingual alias map and domain levels improve explanations; this is lexical ranking, not semantic search. Thirty fixed review cases live in `tests/fixtures/ranking_cases.json`. Low lexical relevance is labeled supplemental. Prerequisites use the small curated graph described above, seeded by the goal and supplied resource concepts (including the README's known Transformer paper), and skip explicitly known topics. Arbitrary paper URLs do not imply extracted paper concepts. Phases and sequential schedules share one resource dependency order; cycles and unknown prerequisite references raise explicit errors. Target papers start core study after their dependencies. Unknown durations leave that item and all later weeks undetermined; `known_estimated_hours` retains the known subtotal while total hours/weeks remain unknown. These curated estimates may overlap between prerequisites and resource study and are planning aids, not completion guarantees. Learner levels accept `beginner`, `familiar`, `advanced` and the existing Chinese aliases `初学`, `熟悉`, `老手`; invalid levels report allowed values.
+
+Safety checks use parsed URL hosts/schemes. When present, structured `metadata.access_policy` is authoritative for access actions: `metadata`, `link`, and `summarize` are allowed, while unsupported actions, login bypass, mirroring, or `authorized: false` are rejected. Legacy prose is not cross-checked against a present structured policy; URL and missing-note checks still apply independently.
+
+Without structured policy, English access notes receive **finite compatibility rules**, not arbitrary English semantic parsing. The rules recognize the listed download-video, bypass-login, copy-full-text/copyrighted-content, restricted-scraping actions and downloader tool names, including inflections, determiners, and limited passive auxiliaries (`must`, `need(s) to`, `has/have to`, `is/are required to`). Local prohibitions include `do not`, `never`, and trailing `is/are prohibited` or `not/never allowed/permitted`; coordinated action lists can share prohibition scope. Punctuation, `but/however/then/instead`, explicit new subjects, and recognized finite/imperative markers reset inherited scope, including markers before intervening ordinary actions. Thus `Videos need to be downloaded` and `Do not copy full text and instead watch and download video content` are rejected, while `Downloading videos is never permitted` is accepted.
+
+These lexical rules do not resolve arbitrary synonyms, indirect requests, quotation, conditionals, pronouns, nested clauses, all double negations, or other languages. Even some unlisted English constructions can be missed or misclassified; a legacy `valid` result is not proof that arbitrary prose is safe. Supply explicit structured policy for machine-generated access decisions. The implementation does not fetch, download, or execute instructions from these notes.

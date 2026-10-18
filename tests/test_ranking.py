@@ -1,6 +1,56 @@
 from fields_study_flow.language import ResourceLanguagePreference
 from fields_study_flow.models import LearnerProfile, Resource
-from fields_study_flow.ranking import rank_resources
+from fields_study_flow.ranking import rank_resources, _canonical_url_key
+
+
+def test_platform_identity_fixture():
+    urls = [
+        'https://youtube.com/watch?v=ONE',
+        'https://youtube.com/watch?v=TWO',
+        'https://youtube.com/watch?v=ONE&si=track&utm_source=x',
+        'https://youtu.be/ONE?si=track',
+        'https://youtube.com/playlist?list=A',
+        'https://youtube.com/playlist?list=B',
+        'https://bilibili.com/video/BVAbC?utm_source=x',
+        'https://bilibili.com/video/BVAbD',
+        'https://example.org/Path?id=1',
+        'https://example.org/Path?id=2',
+        'https://example.org/path?id=1',
+    ]
+    keys = [_canonical_url_key(u) for u in urls]
+    assert keys[0] == keys[2] == keys[3]
+    assert len(set(keys)) == 9
+    assert _canonical_url_key('https://github.com/Owner/Repo.git') == _canonical_url_key('https://github.com/owner/repo')
+
+
+def test_relevance_domain_aliases_and_outcome():
+    from fields_study_flow.ranking import _difficulty_fit
+    unrelated = Resource(title='Web CSS', url='https://example.org/web', source='course', type='article', concepts=['css'])
+    ranked = rank_resources([unrelated], LearnerProfile(goal='数据库事务'))
+    assert 'matches your goal' not in ranked[0].why_recommended
+    assert ranked[0].score_components['relevance'] == 0
+    assert ranked[0].missing_concepts
+    resource = Resource(title='Transformer', url='https://example.org/t', source='course', type='article', concepts=['transformer'], difficulty='advanced')
+    a = LearnerProfile(goal='transformer', levels={'ml_dl': 'advanced', 'programming': 'beginner'})
+    b = LearnerProfile(goal='transformer', levels={'ml_dl': 'advanced'})
+    assert _difficulty_fit(resource, a) == _difficulty_fit(resource, b) == 1
+    assert rank_resources([resource], LearnerProfile(goal='变换器'))[0].score == rank_resources([resource], LearnerProfile(goal='transformer'))[0].score
+    paper = Resource(title='Transformer', url='https://example.org/p', source='arxiv', type='paper', concepts=['transformer'])
+    code = Resource(title='Transformer', url='https://example.org/c', source='github', type='repository', concepts=['transformer'])
+    assert rank_resources([paper, code], b, target_outcome='reproduce')[0].type == 'repository'
+    assert rank_resources([code, paper], b, target_outcome='derive')[0].type == 'paper'
+
+
+def test_fixed_thirty_examples_are_reviewable():
+    import json
+    from pathlib import Path
+    cases = json.loads((Path(__file__).parent / 'fixtures' / 'ranking_cases.json').read_text(encoding='utf-8'))
+    assert len(cases) == 30
+    for case in cases:
+        resources = [Resource(**r) for r in case['resources']]
+        ranked = rank_resources(resources, LearnerProfile(goal=case['goal']))
+        assert [r.title for r in ranked] == case['expected_titles']
+        assert all('relevance' in r.score_components for r in ranked)
 
 
 def test_rank_resources_values_teaching_structure_over_stars_only():

@@ -17,8 +17,13 @@ OUTPUT_FILES = [
 
 
 def build_roadmap(profile: LearnerProfile, resources: list[Resource]) -> dict[str, Any]:
-    phases = _build_phases(profile, resources)
+    from fields_study_flow.prerequisites import order_resources, prerequisite_nodes, schedule
+    nodes = prerequisite_nodes(profile, resources)
+    ordered = order_resources(profile, nodes, resources)
+    phases = _build_phases(profile, ordered)
     return {
+        'prerequisites': nodes,
+        'schedule': schedule(profile, nodes, ordered),
         "title": _title(profile),
         "profile": profile.to_dict(),
         "outputs": OUTPUT_FILES.copy(),
@@ -89,7 +94,16 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
                 ]
             )
         lines.append("")
-    lines.extend(["## Checkpoints", ""])
+    lines.extend(['## Prerequisites', ''])
+    for node in roadmap.get('prerequisites', []):
+        lines.append(f"- {node['id']}: {node['status']} ({node['reason']}); {node['estimated_hours']}h")
+    lines.extend(['', '## Schedule', ''])
+    schedule = roadmap.get('schedule', {})
+    lines.append(f"- Estimated weeks: {schedule.get('total_weeks', 'unknown')}; target date: {schedule.get('target_date') or 'not set'}")
+    lines.append(f"- Deadline feasible: {schedule.get('deadline_feasible')}; unknown durations: {len(schedule.get('unknown_estimates', []))}")
+    for item in schedule.get('items', []):
+        lines.append(f"- {item['id']}: {item['hours'] if item['hours'] is not None else 'unknown'}h; weeks {item['start_week']}–{item['end_week']}")
+    lines.extend(['', "## Checkpoints", ""])
     for checkpoint in roadmap["checkpoints"]:
         lines.append(f"- {checkpoint}")
     lines.extend(["", "## Safety Policy", ""])
@@ -114,9 +128,17 @@ def _build_phases(profile: LearnerProfile, resources: list[Resource]) -> list[di
         ("Practice and Reproduction", "实践复现", "Turn understanding into code, notes, or proof steps.", "把理解转成代码、笔记或推导步骤。"),
     ]
     phases: list[dict[str, Any]] = []
-    chunk_size = max(1, (len(resources) + len(buckets) - 1) // len(buckets))
+    target_index = next((i for i, resource in enumerate(resources) if resource.metadata.get('target_paper')), None)
+    if target_index is None:
+        chunk_size = max(1, (len(resources) + len(buckets) - 1) // len(buckets))
+        chunks = [resources[i * chunk_size:(i + 1) * chunk_size] for i in range(len(buckets))]
+    else:
+        # Change phase boundaries, never the dependency order. A target paper
+        # follows every foundation resource and precedes its dependent practice.
+        core_end = max(i for i, resource in enumerate(resources) if resource.metadata.get('target_paper')) + 1
+        chunks = [resources[:target_index], resources[target_index:core_end], resources[core_end:]]
     for index, (en_name, zh_name, en_obj, zh_obj) in enumerate(buckets):
-        chunk = resources[index * chunk_size : (index + 1) * chunk_size]
+        chunk = chunks[index]
         if not chunk and index > 0:
             continue
         phases.append(
