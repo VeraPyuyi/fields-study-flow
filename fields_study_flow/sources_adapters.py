@@ -5,6 +5,8 @@ import hashlib
 import json
 import os
 import time
+import tempfile
+from threading import Lock
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -38,26 +40,46 @@ def public_get(url, timeout):
         return Response(exc.code, b'', url)
 
 
+# Shared by every service instance in this process, independently per API host.
+_SOURCE_LOCKS = {'api.github.com': Lock(), 'export.arxiv.org': Lock()}
+_LAST_REQUEST: dict[str, float] = {}
+
+
 class SearchService:
     def __init__(self, cache_dir=None, transport=public_get, timeout=5, ttl=3600, min_interval=3):
         self.cache_dir = Path(cache_dir or os.environ.get('FIELDS_STUDY_FLOW_CACHE', Path.home() / '.cache' / 'fields-study-flow'))
         self.transport, self.timeout, self.ttl, self.min_interval = transport, timeout, ttl, min_interval
-        self.last_request = 0.0
 
     def _fetch(self, url):
         key = hashlib.sha256(url.encode()).hexdigest()
         path = self.cache_dir / (key + '.json')
         try:
             data = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(data, dict) or not isinstance(data.get('timestamp'), (int, float)):
+                raise ValueError('invalid cache envelope')
+            cached = data.get('resources')
+            if not isinstance(cached, list):
+                raise ValueError('invalid cached resources')
+            for item in cached:
+                if not isinstance(item, dict):
+                    raise ValueError('cached resource must be an object')
+                resource = Resource(**item)
+                if (not all(isinstance(getattr(resource, field), str) for field in ('title', 'url', 'source', 'type', 'language', 'difficulty'))
+                        or not isinstance(resource.concepts, list)
+                        or not all(isinstance(c, str) for c in resource.concepts)
+                        or not isinstance(resource.metadata, dict)):
+                    raise ValueError('invalid cached resource structure')
             if time.time() - data['timestamp'] < self.ttl:
-                return data['resources'], 'cache'
-        except (OSError, ValueError, KeyError):
+                return cached, 'cache'
+        except (OSError, ValueError, KeyError, TypeError):
             pass
-        delay = self.min_interval - (time.monotonic() - self.last_request)
-        if delay > 0:
-            time.sleep(delay)
-        self.last_request = time.monotonic()
-        response = self.transport(url, self.timeout)
+        host = urlsplit(url).hostname
+        with _SOURCE_LOCKS[host]:
+            delay = self.min_interval - (time.monotonic() - _LAST_REQUEST.get(host, float('-inf')))
+            if delay > 0:
+                time.sleep(delay)
+            _LAST_REQUEST[host] = time.monotonic()
+            response = self.transport(url, self.timeout)
         if response.url != url:
             raise ValueError('redirect rejected')
         if response.status != 200:
@@ -65,29 +87,66 @@ class SearchService:
         if len(response.body) > 2_000_000:
             raise ValueError('metadata response too large')
         resources = self._normalize(response.body, 'github' if 'api.github.com' in url else 'arxiv')
+        temporary = None
         try:
             self.cache_dir.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps({'timestamp': time.time(), 'resources': resources}), encoding='utf-8')
+            with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=self.cache_dir, suffix='.tmp', delete=False) as handle:
+                temporary = Path(handle.name)
+                json.dump({'timestamp': time.time(), 'resources': resources}, handle)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
         except OSError:
             pass
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         return resources, 'live'
 
     def _normalize(self, body, source):
+        try:
+            return self._parse_metadata(body, source)
+        except (ValueError, TypeError, KeyError, AttributeError, ET.ParseError) as exc:
+            kind = 'JSON' if source == 'github' else 'XML'
+            raise ValueError(f'{source} {kind} metadata: {exc}') from exc
+
+    def _parse_metadata(self, body, source):
         now = datetime.now(timezone.utc).isoformat()
         output = []
         if source == 'github':
             payload = json.loads(body)
+            if not isinstance(payload, dict):
+                raise ValueError('response must be an object')
             items = payload.get('items', [payload])
+            if not isinstance(items, list):
+                raise ValueError('items must be an array')
             for item in items:
-                name = item['full_name']
+                if not isinstance(item, dict):
+                    raise ValueError('repository must be an object')
+                name = item.get('full_name')
                 # Always construct canonical public URLs rather than trusting response links.
-                if len(name.split('/')) != 2 or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/' for c in name):
-                    raise ValueError('invalid repository name')
+                if (not isinstance(name, str) or len(name.split('/')) != 2 or not all(name.split('/'))
+                        or any(c not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._/' for c in name)):
+                    raise ValueError('invalid repository full_name')
+                if type(item.get('id')) is not int or item['id'] <= 0:
+                    raise ValueError('repository id must be a positive integer')
+                topics = item.get('topics', [])
+                if not isinstance(topics, list) or not all(isinstance(topic, str) for topic in topics):
+                    raise ValueError('topics must be an array of strings')
+                if type(item.get('stargazers_count', 0)) is not int or item.get('stargazers_count', 0) < 0:
+                    raise ValueError('stargazers_count must be a nonnegative integer')
+                for field in ('description', 'language'):
+                    if item.get(field) is not None and not isinstance(item[field], str):
+                        raise ValueError(f'{field} must be text or null')
                 output.append(Resource(title=name, url='https://github.com/' + name, source='github', type='repository', language='en', concepts=item.get('topics', []), trust_score=0.7, metadata={'id': f"github:{item['id']}", 'retrieved_at': now, 'source': source, 'description': item.get('description'), 'code_language': item.get('language'), 'stars': item.get('stargazers_count', 0)}).to_dict())
         else:
             ns = {'a': 'http://www.w3.org/2005/Atom'}
             root = ET.fromstring(body)
+            if root.tag != '{http://www.w3.org/2005/Atom}feed':
+                raise ValueError('expected an Atom feed')
             for entry in root.findall('a:entry', ns):
+                if not entry.findtext('a:title', '', ns).strip():
+                    raise ValueError('entry title is required')
                 identifier = entry.findtext('a:id', '', ns).rsplit('/abs/', 1)[-1]
                 import re
                 if not re.fullmatch(r'(?:\d{4}\.\d{4,5}|[a-z-]+/\d{7})(?:v\d+)?', identifier):

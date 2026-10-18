@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 from typing import Any
 
 from fields_study_flow.language import (
@@ -144,6 +145,26 @@ def buildRoadmap(
     return build_roadmap(learner, resources)
 
 
+def _affirmative_access_actions(note: str) -> list[str]:
+    actions = []
+    action_pattern = r'\b(?:' + '|'.join(re.escape(term) for term in DISALLOWED_ACCESS_NOTE_TERMS) + r')\b'
+    # Only immediate prohibitions and coordinated actions share negation.
+    # Punctuation, adversatives, or a new subject start a new instruction.
+    clauses = re.split(r'[.,;:!?\n]|\b(?:but|however|then)\b|\b(?:and|or)\s+(?=(?:you|we|they|one)\b)', note.lower())
+    for clause in clauses:
+        negated, previous_end = False, 0
+        for match in re.finditer(action_pattern, clause):
+            before, after = clause[previous_end:match.start()], clause[match.end():]
+            direct = re.search(r"\b(?:do not|don't|never|must not|cannot|no)\s+(?:(?:ever|use|run)\s+)*$", before)
+            coordinated = re.fullmatch(r'\s*(?:and|or)\s+(?:(?:use|run)\s+)?', before)
+            negated = bool(direct or (negated and coordinated))
+            prohibited = re.match(r'\s+(?:is|are)\s+(?:prohibited|forbidden|banned|not allowed)\b', after)
+            if not negated and not prohibited:
+                actions.append(match.group())
+            previous_end = match.end()
+    return actions
+
+
 def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
     issues: list[str] = []
     for phase in plan.get("phases", []):
@@ -151,13 +172,12 @@ def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
             url = resource.get("url", "")
             access_note = resource.get("license_or_access_note", "")
             from urllib.parse import urlsplit
-            import re
 
             parsed = urlsplit(url)
-            host = (parsed.hostname or '').lower()
+            host = (parsed.hostname or '').lower().rstrip('.')
             if parsed.scheme.lower() not in {'http', 'https'} or not host or parsed.username or parsed.password:
                 issues.append(f"Resource has unsafe URL: {resource.get('title')}")
-            if any(term in host for term in DISALLOWED_URL_TERMS):
+            if set(host.split('.')) & set(DISALLOWED_URL_TERMS):
                 issues.append(f"Disallowed source detected: {url}")
             policy = resource.get('metadata', {}).get('access_policy')
             if policy is not None:
@@ -165,14 +185,8 @@ def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
                         or policy.get('bypass_login') or policy.get('mirror') or policy.get('authorized') is False):
                     issues.append(f"Disallowed access policy: {resource.get('title')}")
             else:
-                # Legacy records encoded operations in notes. Ignore explicitly negated clauses;
-                # structured records never infer operations from explanatory prose.
-                for clause in re.split(r'[.;]', access_note.lower()):
-                    if re.search(r'\b(do not|don.t|never|must not)\b', clause):
-                        continue
-                    for term in DISALLOWED_ACCESS_NOTE_TERMS:
-                        if term in clause:
-                            issues.append(f"Disallowed access instruction ({term}): {resource.get('title')}")
+                for term in _affirmative_access_actions(access_note):
+                    issues.append(f"Disallowed access instruction ({term}): {resource.get('title')}")
             if not access_note:
                 issues.append(f"Missing access note: {resource.get('title')}")
     return {"valid": not issues, "issues": issues}

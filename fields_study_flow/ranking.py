@@ -4,6 +4,7 @@ import math
 import re
 from urllib.parse import urlparse
 
+from fields_study_flow.concepts import dominant_domain, tokenize as _tokenize
 from fields_study_flow.language import language_weight
 from fields_study_flow.models import LearnerProfile, Resource
 
@@ -15,22 +16,6 @@ DIFFICULTY_ORDER = {
     "advanced": 2,
     "expert": 3,
 }
-
-
-ALIASES = {
-    'transformer': ('变换器', 'transformer'),
-    'diffusion': ('扩散', 'diffusion'),
-    'linear algebra': ('线性代数', '线代', 'linear algebra'),
-    'probability': ('概率', 'probability'),
-    'machine learning': ('机器学习', 'machine learning'),
-    'deep learning': ('深度学习', 'deep learning'),
-    'python': ('编程', 'python'),
-    'database': ('数据库', 'database'),
-    'transaction': ('事务', 'transaction'),
-    'attention': ('注意力', 'attention'),
-}
-DOMAINS = {'programming': {'python'}, 'math': {'linear algebra', 'probability', 'math'},
-           'ml_dl': {'transformer', 'diffusion', 'machine learning', 'deep learning', 'yolo', 'cnn', 'ppo', 'trpo', 'attention'}}
 
 
 def rank_resources(resources: list[Resource], profile: LearnerProfile, target_outcome: str = 'understand') -> list[Resource]:
@@ -98,8 +83,8 @@ def _structure_score(resource: Resource) -> float:
 
 
 def _difficulty_fit(resource: Resource, profile: LearnerProfile) -> float:
-    terms = _tokenize(profile.goal)
-    domain = max(DOMAINS, key=lambda key: len(terms & DOMAINS[key]))
+    domain = (dominant_domain(' '.join(resource.concepts))
+              or dominant_domain(resource.title) or dominant_domain(profile.goal))
     level_values = {profile.levels.get(domain, 'familiar')}
     if "beginner" in level_values or "初学" in level_values:
         target = 0
@@ -133,18 +118,6 @@ def _translation_note(resource: Resource, output_language: str) -> str:
     if output_language == "bilingual":
         return "Keep original title and add bilingual study notes."
     return "No translation needed."
-
-
-def _tokenize(value: str) -> set[str]:
-    normalized = value.lower().replace("/", " ").replace("-", " ")
-    for canonical, aliases in ALIASES.items():
-        for alias in aliases:
-            normalized = normalized.replace(alias, ' ' + canonical + ' ')
-    tokens = {token.strip(".,:;()[]{}") for token in normalized.split() if token.strip()}
-    for keyword in ("transformer", "diffusion", "yolo", "ppo", "trpo", "cnn", "python"):
-        if keyword in normalized:
-            tokens.add(keyword)
-    return tokens
 
 
 def _dedupe_by_url(resources: list[Resource]) -> list[Resource]:
