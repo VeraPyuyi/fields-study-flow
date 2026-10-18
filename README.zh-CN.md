@@ -230,4 +230,8 @@ CLI `roadmap` 默认离线；`--live --sources arxiv,github` 显式调用公开�
 
 排序输出相关性、可信度、结构、难度、成果偏好、语言等分项及缺失词项。小型中英别名表和领域等级避免全局降级；仍是词汇匹配，不是语义模型。30 条固定样例位于 `tests/fixtures/ranking_cases.json`。低相关性标为补充资料，不声称匹配。先修图使用上文的小型人工图，由目标和已提供的资源概念（包括 README 的已知 Transformer 论文）触发，并跳过明确已知主题；任意论文 URL 不代表已提取论文概念。阶段和串行周计划共用资源依赖顺序，环和未知先修引用会明确报错。目标论文在依赖之后进入核心阶段。未知时长使该项及后续周次未定，`known_estimated_hours` 保留已知小计，总工时与总周数保持 unknown。先修与资源学习工时可能重叠，人工估算不保证实际完成时间。学习等级接受 `beginner/familiar/advanced` 和已有中文别名 `初学/熟悉/老手`，错误等级会提示允许值。
 
-合规校验使用解析后的 URL 主机/协议和 `metadata.access_policy` 的结构化动作（metadata/link/summarize）；旧记录的肯定违规指令保留兼容校验，不把生成的否定安全说明当成访问操作。
+合规校验使用解析后的 URL 主机/协议。存在 `metadata.access_policy` 时，以结构化 policy 为访问动作的权威：允许 `metadata/link/summarize`，拒绝其他动作、绕登录、镜像或 `authorized: false`；此时不再对旧文案做动作交叉检查。URL 与访问说明缺失检查仍独立执行。
+
+没有结构化 policy 时，英文自由文案仅使用**有限兼容规则**，不支持任意英文语义解析。规则识别既定的视频下载、绕登录、全文/长篇版权复制、受限页面抓取动作及下载工具名，覆盖词形、限定词和有限被动助动表达（`must`、`need(s) to`、`has/have to`、`is/are required to`）。局部明确禁止包括 `do not`、`never`、尾部 `is/are prohibited` 或 `not/never allowed/permitted`；并列动作列表可以共享禁止范围。标点、`but/however/then/instead`、显式新主语及识别到的限定谓语/祈使标记终止继承的否定，标记与敏感动作之间插入普通动作也如此。因此 `Videos need to be downloaded` 和 `Do not copy full text and instead watch and download video content` 被拒绝，`Downloading videos is never permitted` 被允许。
+
+这些词法规则不解析任意同义词、间接请求、引语、条件句、代词、嵌套从句、所有双重否定或其他语言。未列出的英文句式仍可能漏判或误判；legacy 返回 `valid` 不代表任意文案安全。机器生成的访问决策应提供明确的结构化 policy。校验器不会抓取、下载或执行文案中的指令。

@@ -26,10 +26,12 @@ DISALLOWED_URL_TERMS = (
     "anna-archive",
 )
 
-# Match actions and their objects, including inflections and passive instructions.
-# These are deliberately local patterns: a prohibition elsewhere in a note must
-# not hide an affirmative instruction.
+# Bounded legacy-English compatibility, not a general semantic policy parser.
+# Match each action/object in either voice, then resolve only local prohibition
+# and coordination. Structured metadata.access_policy remains authoritative.
 _ACCESS_DETERMINER = r'(?:(?:the|a|an|this|that|these|those|any|all|some|your|their)\s+)*'
+_ACCESS_PREDICATE = r'(?:must|should|may|can|cannot|will|shall|is|are|needs?|has|have)'
+_ACCESS_NEW_INSTRUCTION = re.compile(r'\b(?:' + _ACCESS_PREDICATE + r'|do|please)\b')
 _ACCESS_OBJECTS = (
     (r'download(?:s|ed|ing)?', r'videos?(?:\s+content)?', 'downloaded'),
     (r'bypass(?:es|ed|ing)?', r'login', 'bypassed'),
@@ -40,7 +42,7 @@ _ACCESS_ACTION = re.compile(
     r'\b(?:(?P<active>' + '|'.join(
         verb + r'\s+' + _ACCESS_DETERMINER + obj for verb, obj, _ in _ACCESS_OBJECTS
     ) + r')|(?P<tool>yt-dlp|youtube-dl)|(?P<passive>' + '|'.join(
-        obj + r'\s+(?:(?:must|should|may|can|cannot|will|shall|is|are|be|been|being|not|never|to)\s+)+' + participle
+        obj + r'\s+(?:(?:' + _ACCESS_PREDICATE + r'|be|been|being|not|never|to|required)\s+)+' + participle
         for _, obj, participle in _ACCESS_OBJECTS
     ) + r'))\b'
 )
@@ -50,7 +52,7 @@ _ACCESS_NEGATION = re.compile(
 )
 _ACCESS_PREVENTION = re.compile(r'\b(?:avoid\s+|(?:forbidden|prohibited|banned)\s+(?:to|from)\s+)$')
 _ACCESS_PROHIBITION = re.compile(
-    r'\s+(?:is|are)\s+(?:strictly\s+)?(?:prohibited|forbidden|banned|not\s+(?:allowed|permitted))\b'
+    r'\s+(?:is|are)\s+(?:strictly\s+)?(?:prohibited|forbidden|banned|(?:not|never)\s+(?:allowed|permitted))\b'
 )
 
 
@@ -167,7 +169,7 @@ def _affirmative_access_actions(note: str) -> list[str]:
     # A fresh subject, modal, or imperative ends inherited negation, even when
     # its subject is omitted ("do not copy ... and must download ...").
     clauses = re.split(
-        r'[.;:!?\n]|\b(?:but|however|then)\b|\b(?:and|or)\s+'
+        r'[.;:!?\n]|\b(?:but|however|then|instead)\b|\b(?:and|or)\s+'
         r'(?=(?:you|we|they|he|she|it|one|the|users?|agents?|must|should|may|can|will|shall|do|please)\b)',
         note.lower().replace('’', "'"),
     )
@@ -211,8 +213,13 @@ def _affirmative_access_actions(note: str) -> list[str]:
             # A passive clause or gerund with its own predicate has its own
             # subject; it cannot inherit the previous action's prohibition.
             own_subject = (match.lastgroup == 'passive' or
-                           re.match(r'\s+(?:is|are|must|should|may|can|will)\b', clause[match.end():]))
-            coordinated = (not own_subject and
+                           re.match(r'\s+' + _ACCESS_PREDICATE + r'\b', clause[match.end():]))
+            # A finite predicate or imperative marker anywhere in the gap
+            # starts a new instruction, even with intervening ordinary actions
+            # ("and students must watch and download videos"). Do not infer
+            # arbitrary English subjects or verbs; only these explicit markers.
+            new_instruction = _ACCESS_NEW_INSTRUCTION.search(before)
+            coordinated = (not own_subject and not new_instruction and
                            (index in list_links or (',' not in before and
                             re.search(r'\b(?:and|or)\s+(?:(?:use|run)\s+)?$', before))))
             # An infinitive purpose stays inside the negated action:
