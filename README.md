@@ -27,7 +27,7 @@ Most learning-path tools stop at a plausible list of links. fields-study-flow ke
 | Area | What it does |
 | --- | --- |
 | Personalized interview | Captures goal type, known topics, skill levels, time budget, output language, and resource language preference. |
-| AI/CS taxonomy | Seeds routes with math, programming, ML/DL, LLM, RL, systems, and paper-reading prerequisites. |
+| Curated prerequisites | Covers math, Python, ML/DL, Transformer, diffusion, and LLM; YOLO/CNN map to DL. RL, systems, and general paper-reading prerequisite graphs are not implemented. |
 | Multi-source discovery | Models GitHub, arXiv, OpenAlex, Semantic Scholar, Unpaywall, Papers with Code, YouTube, Bilibili, Zhihu, Hugging Face, Kaggle, MIT OCW, fast.ai, Google MLCC, and more. |
 | Language-aware ranking | Supports `zh-first`, `en-first`, `balanced`, `zh-only`, and `en-only`. |
 | Paper deep reading | Makes the target paper first-class, then adds prerequisites, intuition resources, and reproduction checkpoints. |
@@ -200,7 +200,9 @@ python -m pip install -e .
 pytest -q
 ```
 
-Current test coverage includes language preference parsing, bilingual query generation, registry policy filtering, GitHub-style ranking signals, URL de-duplication, MCP tool boundaries, safety validation, roadmap schema, and CLI smoke tests.
+For a reproducible Windows CPython 3.14.7 environment, use [the pinned constraints and build/install steps](docs/REPRODUCIBILITY.md). The constraints include transitive runtime, test, and build dependencies; unconstrained installs can resolve different versions.
+
+Current test coverage includes language preference parsing, bilingual query generation, registry policy filtering, GitHub-style ranking signals, URL de-duplication, MCP tool boundaries, safety validation, concurrent rate limiting and atomic cache writes, dependency ordering and unknown schedules, roadmap schema, and CLI smoke tests.
 
 ## Roadmap
 
@@ -217,12 +219,12 @@ MIT. See [LICENSE](LICENSE).
 
 ## Current capabilities and limits
 
-`roadmap` remains offline by default. Add `--live --sources arxiv,github` to query public metadata APIs. MCP `searchResources` uses `filters={"offline": false}` for live queries; `type`, `language`, and `difficulty` filters apply to actual results. Offline catalog entries are suggestions, not live search matches. Other registered platforms are link/catalog only. Retrieval reports `offline`, `live`, `cache`, `mixed`, or `degraded` with reasons; network errors return no invented matches. API calls use a 5-second timeout, a 3-second minimum interval per service instance and a one-hour disk cache (`FIELDS_STUDY_FLOW_CACHE` overrides its directory). There are no paid APIs or authenticated fetches.
+`roadmap` remains offline by default. Add `--live --sources arxiv,github` to query public metadata APIs. MCP `searchResources` uses `filters={"offline": false}` for live queries; `type`, `language`, and `difficulty` filters apply to actual results. Offline catalog entries are suggestions, not live search matches. Other registered platforms are link/catalog only. Retrieval reports `offline`, `live`, `cache`, `mixed`, or `degraded` with reasons; network errors return no invented matches. API calls use a 5-second timeout, a 3-second minimum interval shared across service instances per API host in one process, and a one-hour disk cache with atomic replacement (`FIELDS_STUDY_FLOW_CACHE` overrides its directory). There are no paid APIs or authenticated fetches.
 
 `ingestUrl` is URL-only by default. `fetchMetadata=true` requests public GitHub repository or arXiv metadata through the same service, refusing credentials and redirects. Unsupported hosts remain URL-only with an explicit degraded reason. GitHub resource language is the interface/metadata language (English); programming language is recorded separately and is not a natural-language classifier.
 
 Standard MCP hosts must run `python -m fields_study_flow.mcp_server --mcp`. Both editor configurations use this command. The no-flag invocation and `--legacy-jsonl` retain the previous JSONL protocol, including the `git4study` alias. See [MCP transport](docs/MCP.md). The official SDK 2.x negotiates its supported protocol versions; local tests exercise initialize, eight tool schemas, calls, and errors. Editor GUI attachment remains an external check.
 
-Ranking exposes relevance, trust, structure, difficulty, outcome and language components plus unmatched goal terms. A small bilingual alias map and domain levels improve explanations; this is lexical ranking, not semantic search. Thirty fixed review cases live in `tests/fixtures/ranking_cases.json`. Low lexical relevance is labeled supplemental. Prerequisites use a curated mathematics/programming/ML/DL/Transformer/LLM graph, skip explicitly known topics and appear before resource study. Numerical hours determine relative week ranges; unknown durations and infeasible target dates are explicit. These estimates are planning aids, not completion guarantees. Target papers anchor core study rather than the first foundation item.
+Ranking exposes relevance, trust, structure, difficulty, outcome and language components plus unmatched goal terms. A small bilingual alias map and domain levels improve explanations; this is lexical ranking, not semantic search. Thirty fixed review cases live in `tests/fixtures/ranking_cases.json`. Low lexical relevance is labeled supplemental. Prerequisites use the small curated graph described above, seeded by the goal and supplied resource concepts (including the README's known Transformer paper), and skip explicitly known topics. Arbitrary paper URLs do not imply extracted paper concepts. Phases and sequential schedules share one resource dependency order; cycles and unknown prerequisite references raise explicit errors. Target papers start core study after their dependencies. Unknown durations leave that item and all later weeks undetermined; `known_estimated_hours` retains the known subtotal while total hours/weeks remain unknown. These curated estimates may overlap between prerequisites and resource study and are planning aids, not completion guarantees. Learner levels accept `beginner`, `familiar`, `advanced` and the existing Chinese aliases `初学`, `熟悉`, `老手`; invalid levels report allowed values.
 
 Safety checks use parsed URL hosts/schemes and structured `metadata.access_policy` actions (`metadata`, `link`, `summarize`). Legacy notes retain compatibility checks for affirmative prohibited instructions; generated safety advice is not treated as an access operation.
