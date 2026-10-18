@@ -55,7 +55,7 @@ def order_resources(profile, nodes, resources):
         {'beginner': 0, 'intermediate': 1, 'advanced': 2}.get(resource.difficulty, 1),
     ))
     learned = {concept_id(topic) for topic in profile.known_topics}
-    planned = {node['id'] for node in nodes}
+    planned = {concept_id(node['id']) for node in nodes}
     provided = {concept_id(concept) for resource in resources for concept in resource.concepts}
     # Prefer concrete resource providers over a generic curated estimate.
     available = learned | (planned - provided)
@@ -69,6 +69,15 @@ def order_resources(profile, nodes, resources):
         ready = next((resource for resource in remaining
                       if all(concept_id(dep) in available for dep in resource.prerequisites)), None)
         if ready is None:
+            # Concrete providers are preferred, but may themselves require the
+            # concept they teach. Curated foundations are already scheduled
+            # before every resource, so use that independent coverage before
+            # declaring a cycle. Never invent coverage for custom concepts.
+            covered = {concept_id(dep) for resource in remaining for dep in resource.prerequisites}
+            covered &= planned - available
+            if covered:
+                available.update(covered)
+                continue
             blocked = '; '.join(f'{resource.title}: {", ".join(resource.prerequisites)}' for resource in remaining)
             raise ValueError('Resource dependency cycle: ' + blocked)
         remaining.remove(ready)
