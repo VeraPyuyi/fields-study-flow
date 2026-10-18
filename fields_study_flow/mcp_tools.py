@@ -26,14 +26,31 @@ DISALLOWED_URL_TERMS = (
     "anna-archive",
 )
 
-DISALLOWED_ACCESS_NOTE_TERMS = (
-    "download video",
-    "yt-dlp",
-    "youtube-dl",
-    "bypass login",
-    "copy full text",
-    "copy long copyrighted",
-    "scrape restricted",
+# Match actions and their objects, including inflections and passive instructions.
+# These are deliberately local patterns: a prohibition elsewhere in a note must
+# not hide an affirmative instruction.
+_ACCESS_DETERMINER = r'(?:(?:the|a|an|this|that|these|those|any|all|some|your|their)\s+)*'
+_ACCESS_OBJECTS = (
+    (r'download(?:s|ed|ing)?', r'videos?(?:\s+content)?', 'downloaded'),
+    (r'bypass(?:es|ed|ing)?', r'login', 'bypassed'),
+    (r'(?:copy|copies|copied|copying)', r'(?:full\s+text|long\s+copyrighted(?:\s+(?:content|passages|excerpts))?)', 'copied'),
+    (r'scrap(?:e|es|ed|ing)', r'restricted(?:\s+(?:pages|content))?', 'scraped'),
+)
+_ACCESS_ACTION = re.compile(
+    r'\b(?:(?P<active>' + '|'.join(
+        verb + r'\s+' + _ACCESS_DETERMINER + obj for verb, obj, _ in _ACCESS_OBJECTS
+    ) + r')|(?P<tool>yt-dlp|youtube-dl)|(?P<passive>' + '|'.join(
+        obj + r'\s+(?:(?:must|should|may|can|cannot|will|shall|is|are|be|been|being|not|never|to)\s+)+' + participle
+        for _, obj, participle in _ACCESS_OBJECTS
+    ) + r'))\b'
+)
+_ACCESS_NEGATION = re.compile(
+    r"\b(?:not|never|cannot|no|don't|doesn't|mustn't|shouldn't|can't|won't)\s+"
+    r'(?:(?:ever|use|run|to|be|allowed|permitted|attempt|try)\s+)*$'
+)
+_ACCESS_PREVENTION = re.compile(r'\b(?:avoid\s+|(?:forbidden|prohibited|banned)\s+(?:to|from)\s+)$')
+_ACCESS_PROHIBITION = re.compile(
+    r'\s+(?:is|are)\s+(?:strictly\s+)?(?:prohibited|forbidden|banned|not\s+(?:allowed|permitted))\b'
 )
 
 
@@ -147,19 +164,65 @@ def buildRoadmap(
 
 def _affirmative_access_actions(note: str) -> list[str]:
     actions = []
-    action_pattern = r'\b(?:' + '|'.join(re.escape(term) for term in DISALLOWED_ACCESS_NOTE_TERMS) + r')\b'
-    # Only immediate prohibitions and coordinated actions share negation.
-    # Punctuation, adversatives, or a new subject start a new instruction.
-    clauses = re.split(r'[.,;:!?\n]|\b(?:but|however|then)\b|\b(?:and|or)\s+(?=(?:you|we|they|one)\b)', note.lower())
+    # A fresh subject, modal, or imperative ends inherited negation, even when
+    # its subject is omitted ("do not copy ... and must download ...").
+    clauses = re.split(
+        r'[.;:!?\n]|\b(?:but|however|then)\b|\b(?:and|or)\s+'
+        r'(?=(?:you|we|they|he|she|it|one|the|users?|agents?|must|should|may|can|will|shall|do|please)\b)',
+        note.lower().replace('’', "'"),
+    )
     for clause in clauses:
+        matches = list(_ACCESS_ACTION.finditer(clause))
+        # Commas share scope only in an action list with an explicit final
+        # conjunction. A bare comma still starts an independent instruction.
+        list_links = set()
+        for index in range(1, len(matches)):
+            gap = clause[matches[index - 1].end():matches[index].start()]
+            if not re.fullmatch(r'\s*,?\s*\b(?:and|or)\s+', gap):
+                continue
+            list_links.add(index)
+            for earlier in range(index - 1, 0, -1):
+                gap = clause[matches[earlier - 1].end():matches[earlier].start()]
+                if not re.fullmatch(r'\s*,\s*', gap):
+                    break
+                list_links.add(earlier)
         negated, previous_end = False, 0
-        for match in re.finditer(action_pattern, clause):
-            before, after = clause[previous_end:match.start()], clause[match.end():]
-            direct = re.search(r"\b(?:do not|don't|never|must not|cannot|no)\s+(?:(?:ever|use|run)\s+)*$", before)
-            coordinated = re.fullmatch(r'\s*(?:and|or)\s+(?:(?:use|run)\s+)?', before)
-            negated = bool(direct or (negated and coordinated))
-            prohibited = re.match(r'\s+(?:is|are)\s+(?:prohibited|forbidden|banned|not allowed)\b', after)
-            if not negated and not prohibited:
+        prohibited = set()
+        for index, match in enumerate(matches):
+            if not _ACCESS_PROHIBITION.match(clause[match.end():]):
+                continue
+            prohibited.add(index)
+            # A trailing predicate can govern a list of gerunds or tool names.
+            # Do not extend it over an imperative or a separate finite clause.
+            for earlier in range(index - 1, -1, -1):
+                left, right = matches[earlier:earlier + 2]
+                same_form = (left.lastgroup == right.lastgroup == 'tool' or
+                             (left.group().split()[0].endswith('ing') and
+                              right.group().split()[0].endswith('ing')))
+                if not same_form or earlier + 1 not in list_links:
+                    break
+                prohibited.add(earlier)
+        for index, match in enumerate(matches):
+            before = clause[previous_end:match.start()]
+            direct = _ACCESS_NEGATION.search(before)
+            prevention = _ACCESS_PREVENTION.search(before)
+            if prevention and not _ACCESS_NEGATION.search(before[:prevention.start()]):
+                direct = True
+            # A passive clause or gerund with its own predicate has its own
+            # subject; it cannot inherit the previous action's prohibition.
+            own_subject = (match.lastgroup == 'passive' or
+                           re.match(r'\s+(?:is|are|must|should|may|can|will)\b', clause[match.end():]))
+            coordinated = (not own_subject and
+                           (index in list_links or (',' not in before and
+                            re.search(r'\b(?:and|or)\s+(?:(?:use|run)\s+)?$', before))))
+            # An infinitive purpose stays inside the negated action:
+            # "do not use yt-dlp / bypass login to download videos".
+            purpose = (index > 0 and not own_subject and
+                       re.fullmatch(r'\s+to\s+', before))
+            passive_negative = (match.lastgroup == 'passive' and
+                                re.search(r'\b(?:not|never|cannot)\b', match.group()))
+            negated = bool(direct or passive_negative or (negated and (coordinated or purpose)))
+            if not negated and index not in prohibited:
                 actions.append(match.group())
             previous_end = match.end()
     return actions
