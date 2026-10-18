@@ -19,6 +19,15 @@ class LearnerProfile:
 
     def __post_init__(self) -> None:
         self.resource_language_preference = normalize_resource_language_preference(self.resource_language_preference)
+        import math
+        import re
+        from datetime import date
+        if self.weekly_hours is not None and (isinstance(self.weekly_hours, bool) or not isinstance(self.weekly_hours, (int, float)) or not math.isfinite(self.weekly_hours) or not 0 < self.weekly_hours <= 168):
+            raise ValueError('weekly_hours must be a finite number in (0, 168]')
+        if self.target_date is not None:
+            if not isinstance(self.target_date, str) or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', self.target_date):
+                raise ValueError('target_date must be YYYY-MM-DD')
+            date.fromisoformat(self.target_date)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -43,6 +52,8 @@ class Resource:
     translation_note: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
     score: float = 0.0
+    score_components: dict[str, float] = field(default_factory=dict)
+    missing_concepts: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

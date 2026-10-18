@@ -1,0 +1,812 @@
+[
+  {
+    "goal": "transformer",
+    "resources": [
+      {
+        "title": "transformer",
+        "url": "https://example.org/0",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "transformer"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "transformer",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "TRANSFORMER",
+    "resources": [
+      {
+        "title": "transformer",
+        "url": "https://example.org/1",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "transformer"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "transformer",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "diffusion",
+    "resources": [
+      {
+        "title": "diffusion",
+        "url": "https://example.org/2",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "diffusion"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "diffusion",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "DIFFUSION",
+    "resources": [
+      {
+        "title": "diffusion",
+        "url": "https://example.org/3",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "diffusion"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "diffusion",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "python",
+    "resources": [
+      {
+        "title": "python",
+        "url": "https://example.org/4",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "python"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "python",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "PYTHON",
+    "resources": [
+      {
+        "title": "python",
+        "url": "https://example.org/5",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "python"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "python",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "probability",
+    "resources": [
+      {
+        "title": "probability",
+        "url": "https://example.org/6",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "probability"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "probability",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "PROBABILITY",
+    "resources": [
+      {
+        "title": "probability",
+        "url": "https://example.org/7",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "probability"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "probability",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "database",
+    "resources": [
+      {
+        "title": "database",
+        "url": "https://example.org/8",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "database"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "database",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "DATABASE",
+    "resources": [
+      {
+        "title": "database",
+        "url": "https://example.org/9",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "database"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "database",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "transaction",
+    "resources": [
+      {
+        "title": "transaction",
+        "url": "https://example.org/10",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "transaction"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "transaction",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "TRANSACTION",
+    "resources": [
+      {
+        "title": "transaction",
+        "url": "https://example.org/11",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "transaction"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "transaction",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "attention",
+    "resources": [
+      {
+        "title": "attention",
+        "url": "https://example.org/12",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "attention"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "attention",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "ATTENTION",
+    "resources": [
+      {
+        "title": "attention",
+        "url": "https://example.org/13",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "attention"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "attention",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "cnn",
+    "resources": [
+      {
+        "title": "cnn",
+        "url": "https://example.org/14",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "cnn"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "cnn",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "CNN",
+    "resources": [
+      {
+        "title": "cnn",
+        "url": "https://example.org/15",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "cnn"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "cnn",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "yolo",
+    "resources": [
+      {
+        "title": "yolo",
+        "url": "https://example.org/16",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "yolo"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "yolo",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "YOLO",
+    "resources": [
+      {
+        "title": "yolo",
+        "url": "https://example.org/17",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "yolo"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "yolo",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "ppo",
+    "resources": [
+      {
+        "title": "ppo",
+        "url": "https://example.org/18",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "ppo"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "ppo",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "PPO",
+    "resources": [
+      {
+        "title": "ppo",
+        "url": "https://example.org/19",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "ppo"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "ppo",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "trpo",
+    "resources": [
+      {
+        "title": "trpo",
+        "url": "https://example.org/20",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "trpo"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "trpo",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "TRPO",
+    "resources": [
+      {
+        "title": "trpo",
+        "url": "https://example.org/21",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "trpo"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "trpo",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "linear algebra",
+    "resources": [
+      {
+        "title": "linear algebra",
+        "url": "https://example.org/22",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "linear algebra"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "linear algebra",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "LINEAR ALGEBRA",
+    "resources": [
+      {
+        "title": "linear algebra",
+        "url": "https://example.org/23",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "linear algebra"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "linear algebra",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "machine learning",
+    "resources": [
+      {
+        "title": "machine learning",
+        "url": "https://example.org/24",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "machine learning"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "machine learning",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "MACHINE LEARNING",
+    "resources": [
+      {
+        "title": "machine learning",
+        "url": "https://example.org/25",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "machine learning"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "machine learning",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "deep learning",
+    "resources": [
+      {
+        "title": "deep learning",
+        "url": "https://example.org/26",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "deep learning"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "deep learning",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "DEEP LEARNING",
+    "resources": [
+      {
+        "title": "deep learning",
+        "url": "https://example.org/27",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "deep learning"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "deep learning",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "optimization",
+    "resources": [
+      {
+        "title": "optimization",
+        "url": "https://example.org/28",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "optimization"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "optimization",
+      "unrelated css"
+    ]
+  },
+  {
+    "goal": "OPTIMIZATION",
+    "resources": [
+      {
+        "title": "optimization",
+        "url": "https://example.org/29",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "optimization"
+        ]
+      },
+      {
+        "title": "unrelated css",
+        "url": "https://example.org/css",
+        "source": "course",
+        "type": "article",
+        "concepts": [
+          "css"
+        ]
+      }
+    ],
+    "expected_titles": [
+      "optimization",
+      "unrelated css"
+    ]
+  }
+]

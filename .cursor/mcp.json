@@ -2,7 +2,7 @@
   "mcpServers": {
     "fields-study-flow": {
       "command": "python",
-      "args": ["-m", "fields_study_flow.mcp_server"]
+      "args": ["-m", "fields_study_flow.mcp_server", "--mcp"]
     }
   }
 }

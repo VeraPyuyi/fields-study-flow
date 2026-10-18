@@ -17,8 +17,27 @@ OUTPUT_FILES = [
 
 
 def build_roadmap(profile: LearnerProfile, resources: list[Resource]) -> dict[str, Any]:
-    phases = _build_phases(profile, resources)
+    from fields_study_flow.prerequisites import prerequisite_nodes, schedule
+    nodes = prerequisite_nodes(profile)
+    # Resource ordering follows explicit dependencies, then difficulty; target papers anchor core study.
+    remaining = sorted(resources, key=lambda r: (bool(r.metadata.get('target_paper')), {'beginner': 0, 'intermediate': 1, 'advanced': 2}.get(r.difficulty, 1)))
+    ordered, seen = [], set(profile.known_topics)
+    while remaining:
+        ready = next((r for r in remaining if all(p in seen or not any(p in other.concepts for other in remaining) for p in r.prerequisites)), remaining[0])
+        remaining.remove(ready)
+        ordered.append(ready)
+        seen.update(ready.concepts)
+    phases = _build_phases(profile, ordered)
+    if any(r.metadata.get('target_paper') for r in ordered):
+        targets = [r.to_dict() for r in ordered if r.metadata.get('target_paper')]
+        for phase in phases:
+            phase['resources'] = [r for r in phase['resources'] if not r['metadata'].get('target_paper')]
+        if len(phases) == 1:
+            phases.append({'name': _phase_name(profile, 'Phase 2', '阶段 2', 'Core Understanding', '核心理解'), 'objective': 'Study the target paper after prerequisites.', 'resources': []})
+        phases[1]['resources'].extend(targets)
     return {
+        'prerequisites': nodes,
+        'schedule': schedule(profile, nodes, ordered),
         "title": _title(profile),
         "profile": profile.to_dict(),
         "outputs": OUTPUT_FILES.copy(),
@@ -89,7 +108,16 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
                 ]
             )
         lines.append("")
-    lines.extend(["## Checkpoints", ""])
+    lines.extend(['## Prerequisites', ''])
+    for node in roadmap.get('prerequisites', []):
+        lines.append(f"- {node['id']}: {node['status']} ({node['reason']}); {node['estimated_hours']}h")
+    lines.extend(['', '## Schedule', ''])
+    schedule = roadmap.get('schedule', {})
+    lines.append(f"- Estimated weeks: {schedule.get('total_weeks', 'unknown')}; target date: {schedule.get('target_date') or 'not set'}")
+    lines.append(f"- Deadline feasible: {schedule.get('deadline_feasible')}; unknown durations: {len(schedule.get('unknown_estimates', []))}")
+    for item in schedule.get('items', []):
+        lines.append(f"- {item['id']}: {item['hours'] if item['hours'] is not None else 'unknown'}h; weeks {item['start_week']}–{item['end_week']}")
+    lines.extend(['', "## Checkpoints", ""])
     for checkpoint in roadmap["checkpoints"]:
         lines.append(f"- {checkpoint}")
     lines.extend(["", "## Safety Policy", ""])

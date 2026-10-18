@@ -180,7 +180,7 @@ fields_study_flow/
   ranking.py          # 评分、目标论文 boost、URL 规范化去重
   roadmap.py          # roadmap schema 与 Markdown 渲染
   mcp_tools.py        # agent 可调用工具函数
-  mcp_server.py       # JSON-lines 工具服务器
+  mcp_server.py       # SDK MCP stdio（--mcp）与旧 JSONL
   cli.py              # 命令行入口
 ```
 
@@ -207,12 +207,25 @@ pytest -q
 
 ## 路线图
 
-- 接入 GitHub、YouTube、OpenAlex、Semantic Scholar、Hugging Face、Papers with Code 的官方 API adapter；
+- 继续接入 YouTube、OpenAlex、Semantic Scholar、Hugging Face、Papers with Code adapter；
 - 扩展 AI/CS 前置知识图谱；
 - 增加进度追踪和间隔复习导出；
 - 增加浏览器版路线预览；
-- 打包正式 MCP SDK server。
+- 补充编辑器 GUI 的 MCP 连接验证。
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## 当前能力与限制
+
+CLI `roadmap` 默认离线；`--live --sources arxiv,github` 显式调用公开元数据 API。MCP `searchResources` 传 `filters={"offline": false}` 启用实时检索，`type`、`language`、`difficulty` 会真正过滤资源。其他 registry 平台目前只有链接/目录能力。返回 `offline/live/cache/mixed/degraded` 和降级原因；失败不会伪造查询结果。默认超时 5 秒、同一服务实例请求至少间隔 3 秒、磁盘缓存 1 小时，缓存目录可由 `FIELDS_STUDY_FLOW_CACHE` 设置。不使用付费 API 或认证内容。
+
+`ingestUrl` 默认只录入 URL；`fetchMetadata=true` 从公开 GitHub/arXiv API 获取元数据，拒绝凭据和重定向，其他来源明确降级。GitHub 的 `language=en` 表示元数据界面语言；编程语言另存 metadata，不保证仓库正文语言分类。
+
+标准 MCP 启动命令为 `python -m fields_study_flow.mcp_server --mcp`，两份编辑器配置已同步。无参数启动和 `--legacy-jsonl` 保留旧 JSONL，`git4study` 入口兼容。协议版本由官方 SDK 2.x 协商，详见 [MCP 文档](docs/MCP.md)。本地 SDK 测试涵盖握手、8 工具 schema、调用和错误；编辑器 GUI 实际连接仍需外部验收。
+
+排序输出相关性、可信度、结构、难度、成果偏好、语言等分项及缺失词项。小型中英别名表和领域等级避免全局降级；仍是词汇匹配，不是语义模型。30 条固定样例位于 `tests/fixtures/ranking_cases.json`。低相关性标为补充资料，不声称匹配。先修图覆盖数学/编程/ML/DL/Transformer/LLM，明确跳过已知主题；工时产生相对周排期，缺失时长标 unknown，期限不足会提示。目标论文放在核心阶段。工时是人工估算，不能保证实际完成时间。
+
+合规校验使用解析后的 URL 主机/协议和 `metadata.access_policy` 的结构化动作（metadata/link/summarize）；旧记录的肯定违规指令保留兼容校验，不把生成的否定安全说明当成访问操作。

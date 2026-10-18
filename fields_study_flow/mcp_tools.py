@@ -70,7 +70,7 @@ def discoverSources(
         "output_language": normalize_output_language(outputLanguage),
         "resource_language_preference": str(normalize_resource_language_preference(resourceLanguagePreference)),
         "region": region,
-        "sources": [source.to_dict() for source in sources],
+        "sources": [{**source.to_dict(), "adapter_status": "implemented" if source.id in {"arxiv", "github"} else "link-only"} for source in sources],
     }
 
 
@@ -80,23 +80,31 @@ def searchResources(
     filters: dict[str, Any] | None = None,
     languagePreference: str = "balanced",
 ) -> dict[str, Any]:
-    allowed_sources = set(sources or [])
-    resources = offline_resources_for_goal(query)
-    if allowed_sources:
-        resources = [resource for resource in resources if resource.source in allowed_sources or resource.source.replace("-", "_") in allowed_sources]
+    from fields_study_flow.sources_adapters import SearchService
+    options = filters or {}
+    result = SearchService().search(query, sources, options, offline=options.get('offline', True))
+    resources = [Resource(**resource) for resource in result['resources']]
     profile = LearnerProfile(
         goal=query,
         resource_language_preference=normalize_resource_language_preference(languagePreference),
     )
     resources = rank_resources(resources, profile)
     return {
+        **result,
         "queries": build_language_queries(query, languagePreference),
         "filters": filters or {},
         "resources": [resource.to_dict() for resource in resources],
     }
 
 
-def ingestUrl(url: str, sourceHint: str | None = None) -> dict[str, Any]:
+def ingestUrl(url: str, sourceHint: str | None = None, fetchMetadata: bool = False) -> dict[str, Any]:
+    degraded = 'Metadata fetch not requested; URL-only import'
+    if fetchMetadata:
+        from fields_study_flow.sources_adapters import SearchService
+        try:
+            return SearchService().ingest(url)
+        except (OSError, ValueError, KeyError) as exc:
+            degraded = f'{type(exc).__name__}: {exc}'
     source = sourceHint or _guess_source(url)
     return Resource(
         title=url.rstrip("/").split("/")[-1] or url,
@@ -108,6 +116,7 @@ def ingestUrl(url: str, sourceHint: str | None = None) -> dict[str, Any]:
         concepts=[],
         trust_score=0.45,
         license_or_access_note="User-provided URL. Parse metadata only; do not bypass login or copy long content.",
+        metadata={"access_policy": {"action": "metadata", "bypass_login": False}, "retrieval_mode": "degraded" if fetchMetadata else "offline", "degraded": degraded},
     ).to_dict()
 
 
@@ -120,7 +129,7 @@ def rankResources(
     profile = _profile_from_dict(learnerProfile)
     if languagePreference:
         profile.resource_language_preference = normalize_resource_language_preference(languagePreference)
-    ranked = rank_resources([Resource(**resource) for resource in resources], profile)
+    ranked = rank_resources([Resource(**resource) for resource in resources], profile, target_outcome=targetOutcome)
     return {"target_outcome": targetOutcome, "resources": [resource.to_dict() for resource in ranked]}
 
 
@@ -141,15 +150,29 @@ def validateSources(plan: dict[str, Any]) -> dict[str, Any]:
         for resource in phase.get("resources", []):
             url = resource.get("url", "")
             access_note = resource.get("license_or_access_note", "")
-            normalized_url = url.lower()
-            normalized_note = access_note.lower()
-            if not url.startswith("http"):
-                issues.append(f"Resource has non-http URL: {resource.get('title')}")
-            if any(term in normalized_url for term in DISALLOWED_URL_TERMS):
+            from urllib.parse import urlsplit
+            import re
+
+            parsed = urlsplit(url)
+            host = (parsed.hostname or '').lower()
+            if parsed.scheme.lower() not in {'http', 'https'} or not host or parsed.username or parsed.password:
+                issues.append(f"Resource has unsafe URL: {resource.get('title')}")
+            if any(term in host for term in DISALLOWED_URL_TERMS):
                 issues.append(f"Disallowed source detected: {url}")
-            for term in DISALLOWED_ACCESS_NOTE_TERMS:
-                if term in normalized_note:
-                    issues.append(f"Disallowed access instruction ({term}): {resource.get('title')}")
+            policy = resource.get('metadata', {}).get('access_policy')
+            if policy is not None:
+                if (policy.get('action', 'metadata') not in {'metadata', 'link', 'summarize'}
+                        or policy.get('bypass_login') or policy.get('mirror') or policy.get('authorized') is False):
+                    issues.append(f"Disallowed access policy: {resource.get('title')}")
+            else:
+                # Legacy records encoded operations in notes. Ignore explicitly negated clauses;
+                # structured records never infer operations from explanatory prose.
+                for clause in re.split(r'[.;]', access_note.lower()):
+                    if re.search(r'\b(do not|don.t|never|must not)\b', clause):
+                        continue
+                    for term in DISALLOWED_ACCESS_NOTE_TERMS:
+                        if term in clause:
+                            issues.append(f"Disallowed access instruction ({term}): {resource.get('title')}")
             if not access_note:
                 issues.append(f"Missing access note: {resource.get('title')}")
     return {"valid": not issues, "issues": issues}

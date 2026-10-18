@@ -177,7 +177,7 @@ fields_study_flow/
   ranking.py          # scoring, target-paper boost, canonical URL de-duplication
   roadmap.py          # roadmap schema and Markdown rendering
   mcp_tools.py        # tool functions for agents
-  mcp_server.py       # simple JSON-lines tool server
+  mcp_server.py       # SDK MCP stdio (--mcp), legacy JSONL default
   cli.py              # command-line interface
 ```
 
@@ -204,12 +204,25 @@ Current test coverage includes language preference parsing, bilingual query gene
 
 ## Roadmap
 
-- Live official API adapters for GitHub, YouTube, OpenAlex, Semantic Scholar, Hugging Face, and Papers with Code.
+- Additional live API adapters for YouTube, OpenAlex, Semantic Scholar, Hugging Face, and Papers with Code.
 - A richer AI/CS prerequisite graph with versioned topic nodes.
 - Progress tracking and spaced-review exports.
 - Browser-friendly roadmap preview.
-- Full MCP SDK packaging.
+- Wider MCP host GUI compatibility checks.
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
+
+## Current capabilities and limits
+
+`roadmap` remains offline by default. Add `--live --sources arxiv,github` to query public metadata APIs. MCP `searchResources` uses `filters={"offline": false}` for live queries; `type`, `language`, and `difficulty` filters apply to actual results. Offline catalog entries are suggestions, not live search matches. Other registered platforms are link/catalog only. Retrieval reports `offline`, `live`, `cache`, `mixed`, or `degraded` with reasons; network errors return no invented matches. API calls use a 5-second timeout, a 3-second minimum interval per service instance and a one-hour disk cache (`FIELDS_STUDY_FLOW_CACHE` overrides its directory). There are no paid APIs or authenticated fetches.
+
+`ingestUrl` is URL-only by default. `fetchMetadata=true` requests public GitHub repository or arXiv metadata through the same service, refusing credentials and redirects. Unsupported hosts remain URL-only with an explicit degraded reason. GitHub resource language is the interface/metadata language (English); programming language is recorded separately and is not a natural-language classifier.
+
+Standard MCP hosts must run `python -m fields_study_flow.mcp_server --mcp`. Both editor configurations use this command. The no-flag invocation and `--legacy-jsonl` retain the previous JSONL protocol, including the `git4study` alias. See [MCP transport](docs/MCP.md). The official SDK 2.x negotiates its supported protocol versions; local tests exercise initialize, eight tool schemas, calls, and errors. Editor GUI attachment remains an external check.
+
+Ranking exposes relevance, trust, structure, difficulty, outcome and language components plus unmatched goal terms. A small bilingual alias map and domain levels improve explanations; this is lexical ranking, not semantic search. Thirty fixed review cases live in `tests/fixtures/ranking_cases.json`. Low lexical relevance is labeled supplemental. Prerequisites use a curated mathematics/programming/ML/DL/Transformer/LLM graph, skip explicitly known topics and appear before resource study. Numerical hours determine relative week ranges; unknown durations and infeasible target dates are explicit. These estimates are planning aids, not completion guarantees. Target papers anchor core study rather than the first foundation item.
+
+Safety checks use parsed URL hosts/schemes and structured `metadata.access_policy` actions (`metadata`, `link`, `summarize`). Legacy notes retain compatibility checks for affirmative prohibited instructions; generated safety advice is not treated as an access operation.
