@@ -1,9 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
+from enum import Enum
 from typing import Any
 
 from fields_study_flow.language import ResourceLanguagePreference, normalize_resource_language_preference
+
+
+class KnowledgeLevel(str, Enum):
+    BEGINNER = 'beginner'
+    FAMILIAR = 'familiar'
+    ADVANCED = 'advanced'
+
+
+LEVEL_ALIASES = {'初学': 'beginner', '熟悉': 'familiar', '老手': 'advanced'}
 
 
 @dataclass(slots=True)
@@ -19,6 +29,15 @@ class LearnerProfile:
 
     def __post_init__(self) -> None:
         self.resource_language_preference = normalize_resource_language_preference(self.resource_language_preference)
+        if not isinstance(self.levels, dict):
+            raise ValueError('levels must map domains to beginner, familiar, or advanced')
+        for domain, level in self.levels.items():
+            try:
+                if not isinstance(level, str):
+                    raise ValueError('level must be text')
+                KnowledgeLevel(LEVEL_ALIASES.get(level, level))
+            except ValueError:
+                raise ValueError(f'Invalid level {level!r} for {domain!r}; expected beginner, familiar, or advanced (aliases: 初学, 熟悉, 老手)') from None
         import math
         import re
         from datetime import date

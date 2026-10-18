@@ -17,10 +17,11 @@ from fields_study_flow.sources import SourceRegistry
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "roadmap":
-        return _roadmap(args)
-    if args.command == "paper":
-        return _paper(args)
+    if args.command in {"roadmap", "paper"}:
+        try:
+            return _roadmap(args) if args.command == "roadmap" else _paper(args)
+        except ValueError as exc:
+            parser.error(str(exc))
     if args.command == "ingest-url":
         return _ingest_url(args)
     if args.command == "discover-sources":
@@ -176,9 +177,10 @@ def _parse_sources(value: str) -> set[str]:
 def _parse_levels(values: list[str]) -> dict[str, str]:
     levels: dict[str, str] = {}
     for value in values:
-        if "=" in value:
-            key, level = value.split("=", 1)
-            levels[key.strip()] = level.strip()
+        if "=" not in value or not value.split("=", 1)[0].strip():
+            raise ValueError('--level must be domain=beginner|familiar|advanced')
+        key, level = value.split("=", 1)
+        levels[key.strip()] = level.strip()
     return levels
 
 

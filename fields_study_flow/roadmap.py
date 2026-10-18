@@ -17,24 +17,10 @@ OUTPUT_FILES = [
 
 
 def build_roadmap(profile: LearnerProfile, resources: list[Resource]) -> dict[str, Any]:
-    from fields_study_flow.prerequisites import prerequisite_nodes, schedule
-    nodes = prerequisite_nodes(profile)
-    # Resource ordering follows explicit dependencies, then difficulty; target papers anchor core study.
-    remaining = sorted(resources, key=lambda r: (bool(r.metadata.get('target_paper')), {'beginner': 0, 'intermediate': 1, 'advanced': 2}.get(r.difficulty, 1)))
-    ordered, seen = [], set(profile.known_topics)
-    while remaining:
-        ready = next((r for r in remaining if all(p in seen or not any(p in other.concepts for other in remaining) for p in r.prerequisites)), remaining[0])
-        remaining.remove(ready)
-        ordered.append(ready)
-        seen.update(ready.concepts)
+    from fields_study_flow.prerequisites import order_resources, prerequisite_nodes, schedule
+    nodes = prerequisite_nodes(profile, resources)
+    ordered = order_resources(profile, nodes, resources)
     phases = _build_phases(profile, ordered)
-    if any(r.metadata.get('target_paper') for r in ordered):
-        targets = [r.to_dict() for r in ordered if r.metadata.get('target_paper')]
-        for phase in phases:
-            phase['resources'] = [r for r in phase['resources'] if not r['metadata'].get('target_paper')]
-        if len(phases) == 1:
-            phases.append({'name': _phase_name(profile, 'Phase 2', '阶段 2', 'Core Understanding', '核心理解'), 'objective': 'Study the target paper after prerequisites.', 'resources': []})
-        phases[1]['resources'].extend(targets)
     return {
         'prerequisites': nodes,
         'schedule': schedule(profile, nodes, ordered),
@@ -142,9 +128,17 @@ def _build_phases(profile: LearnerProfile, resources: list[Resource]) -> list[di
         ("Practice and Reproduction", "实践复现", "Turn understanding into code, notes, or proof steps.", "把理解转成代码、笔记或推导步骤。"),
     ]
     phases: list[dict[str, Any]] = []
-    chunk_size = max(1, (len(resources) + len(buckets) - 1) // len(buckets))
+    target_index = next((i for i, resource in enumerate(resources) if resource.metadata.get('target_paper')), None)
+    if target_index is None:
+        chunk_size = max(1, (len(resources) + len(buckets) - 1) // len(buckets))
+        chunks = [resources[i * chunk_size:(i + 1) * chunk_size] for i in range(len(buckets))]
+    else:
+        # Change phase boundaries, never the dependency order. A target paper
+        # follows every foundation resource and precedes its dependent practice.
+        core_end = max(i for i, resource in enumerate(resources) if resource.metadata.get('target_paper')) + 1
+        chunks = [resources[:target_index], resources[target_index:core_end], resources[core_end:]]
     for index, (en_name, zh_name, en_obj, zh_obj) in enumerate(buckets):
-        chunk = resources[index * chunk_size : (index + 1) * chunk_size]
+        chunk = chunks[index]
         if not chunk and index > 0:
             continue
         phases.append(
