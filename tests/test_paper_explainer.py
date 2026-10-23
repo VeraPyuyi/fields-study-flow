@@ -39,7 +39,7 @@ def test_six_ordered_prose_paragraphs_without_invented_numbers(paper):
 def test_title_only_does_not_infer_scientific_claims():
     result = explain(TITLE_ONLY)
     assert len(result['missing_information']) == 6
-    assert '摘要未给出具体指标，需查看实验结果表' in result['text']
+    assert '当前检索未定位指标，请核对原文及实验结果表' in result['text']
     assert '元数据' in result['text']
     assert all(p['basis'] == ['inferred'] for p in result['paragraphs'])
 
@@ -75,7 +75,7 @@ def test_user_text_anchors_preserve_original_paragraph_indices():
 
 def test_qualitative_results_do_not_invent_metrics():
     result = explain({'abstract': 'Results show better translation quality.'})
-    assert '摘要未给出具体指标，需查看实验结果表' in result['paragraphs'][3]['text']
+    assert '当前候选未定位到数值' in result['paragraphs'][3]['text']
     assert any(gap['role'] == 'results' for gap in result['missing_information'])
     assert result['paragraphs'][3]['basis'] == ['abstract']
 

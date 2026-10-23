@@ -59,6 +59,11 @@ async def check_stdio():
                 payload = json.loads(result.content[0].text)
                 if name == 'explainPaper':
                     assert payload['paragraphs'][1]['basis'] == ['abstract']
+                    assert payload['source_material']['items'][0]['text'] == arguments['metadata']['abstract']
+                    long_abstract = 'Our method uses ' + 'context ' * 30 + 'a gated recurrent memory.'
+                    detailed = await session.call_tool('explainPaper', {'metadata': {'abstract': long_abstract}})
+                    assert not detailed.is_error
+                    assert json.loads(detailed.content[0].text)['source_material']['items'][0]['text'] == long_abstract
             print('Installed MCP stdio: 9 tools listed, 9/9 calls PASS')
 
 

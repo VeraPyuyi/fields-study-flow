@@ -166,7 +166,9 @@ def explainPaper(
             raise ValueError('Supply a paper URL, metadata or userText')
         from fields_study_flow.sources_adapters import SearchService
         resource = SearchService().ingest(url)
-        metadata = {**resource['metadata'], 'title': resource['title']}
+        metadata = {**resource['metadata'], 'title': resource['title'],
+                    'url': resource.get('url', url),
+                    'license_or_access_note': resource.get('license_or_access_note', 'Public API abstract only; no full-paper permission implied.')}
     return explain_paper(metadata, userText, level, language)
 
 
