@@ -1,5 +1,16 @@
 # fields-study-flow
 
+## Reproducible paper path and limits
+
+Default CLI and MCP searches are offline. Opt into public arXiv/GitHub metadata with `roadmap --live`, `ingest-url --fetch-metadata`, or MCP `filters.offline=false` / `fetchMetadata=true`. The `paper` CLI remains a curated offline route; it does not parse arbitrary papers. arXiv abs/PDF links use the Atom metadata API, normalizing title, authors, abstract (`summary`), year, categories and version-independent IDs. No PDF body is downloaded. DOI and ordinary PDF URLs remain URL-only imports with an actionable explanation; supply metadata/concept tags manually or an arXiv URL.
+
+Offline regression: `python -m pytest tests/test_paper_path_e2e.py -q`. Fixed Atom fixtures cover URL → metadata → prerequisite DAG → phase checkpoints → JSON export, plus 404, timeout, 429 and missing abstracts. Missing metadata still permits a minimal route; missing abstract is explicitly title-only. Concepts match a small curated vocabulary (math, Python, machine learning, deep learning, Transformer, diffusion, LLM); this is not arbitrary-paper semantic analysis. Free-text access policies use limited English rules; structured access policies are preferable.
+
+Search filters `pages` (1–10, default 1) and `page_size` (1–100, default 10) use explicit stable provider sorting and ID deduplication. Live provider updates can still shift page boundaries; no snapshot guarantee is implied. Cache entries retain source and UTC retrieval time, expire after one hour by default, and rebuild after corruption. Atomic file replacement protects concurrent in-process instances from partial files; concurrent misses may make duplicate requests. Rate spacing is per host within one process (default 3 seconds), not distributed. There are no automatic retries for 429/errors and no login scraping.
+
+Every phase has an observable checkpoint. Unknown durations remain unknown; known hours form a subtotal. Weekly budget changes both scheduling and deadline capacity. `shortfall_hours` is the known-hour deficit and is only a lower bound when durations are missing. Estimates may overlap and are not completion guarantees.
+
+
 [简体中文](README.zh-CN.md) | English
 
 Agent-native learning roadmaps for AI/CS researchers, builders, and students.

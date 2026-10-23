@@ -151,7 +151,20 @@ class SearchService:
                 import re
                 if not re.fullmatch(r'(?:\d{4}\.\d{4,5}|[a-z-]+/\d{7})(?:v\d+)?', identifier):
                     raise ValueError('invalid arXiv id')
-                output.append(Resource(title=' '.join(entry.findtext('a:title', '', ns).split()), url='https://arxiv.org/abs/' + identifier, source='arxiv', type='paper', language='en', difficulty='advanced', trust_score=0.85, metadata={'id': 'arxiv:' + identifier, 'retrieved_at': now, 'source': source, 'summary': entry.findtext('a:summary', '', ns)}).to_dict())
+                from fields_study_flow.concepts import tokenize
+                from fields_study_flow.prerequisites import GRAPH
+                identifier = re.sub(r'v\d+$', '', identifier)
+                title = ' '.join(entry.findtext('a:title', '', ns).split())
+                summary = ' '.join(entry.findtext('a:summary', '', ns).split())
+                published = entry.findtext('a:published', '', ns)
+                metadata = {'id': 'arxiv:' + identifier, 'retrieved_at': now, 'source': source,
+                            'summary': summary, 'authors': [' '.join(a.findtext('a:name', '', ns).split()) for a in entry.findall('a:author', ns)],
+                            'year': int(published[:4]) if re.match(r'^\d{4}-', published) else None,
+                            'categories': sorted({c.get('term') for c in entry.findall('a:category', ns) if c.get('term')})}
+                if not summary:
+                    metadata.update(degraded='Abstract unavailable; title-only concept matching', next_action='Supply an abstract and concept tags, or use an arXiv metadata URL.')
+                concepts = sorted(set(GRAPH) & tokenize(title + ' ' + summary))
+                output.append(Resource(title=title, url='https://arxiv.org/abs/' + identifier, source='arxiv', type='paper', language='en', difficulty='advanced', concepts=concepts, trust_score=0.85, metadata=metadata).to_dict())
         return output
 
     def search(self, query, sources=None, filters=None, offline=False):
@@ -176,13 +189,23 @@ class SearchService:
                 if source not in {'arxiv', 'github'}:
                     reasons.append(f'{source}: adapter unavailable')
                     continue
-                url = ('https://api.github.com/search/repositories?' + urlencode({'q': query, 'per_page': 10}) if source == 'github' else 'https://export.arxiv.org/api/query?' + urlencode({'search_query': 'all:' + query, 'max_results': 10}))
-                try:
-                    found, mode = self._fetch(url)
-                    resources.extend(found)
-                    modes.append(mode)
-                except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as exc:
-                    reasons.append(f'{source}: {type(exc).__name__}: {exc}')
+                pages = max(1, min(10, int(filters.get('pages', 1))))
+                size = max(1, min(100, int(filters.get('page_size', 10))))
+                for page in range(pages):
+                    url = ('https://api.github.com/search/repositories?' + urlencode({'q': query, 'per_page': size, 'page': page + 1, 'sort': 'updated', 'order': 'asc'}) if source == 'github' else 'https://export.arxiv.org/api/query?' + urlencode({'search_query': 'all:' + query, 'max_results': size, 'start': page * size, 'sortBy': 'submittedDate', 'sortOrder': 'ascending'}))
+                    try:
+                        found, mode = self._fetch(url)
+                        resources.extend(found)
+                        modes.append(mode)
+                        if len(found) < size:
+                            break
+                    except (OSError, ValueError, KeyError, TypeError, ET.ParseError) as exc:
+                        reasons.append(f'{source}: {type(exc).__name__}: {exc}')
+                        break
+        unique = {}
+        for resource in resources:
+            unique.setdefault(resource['metadata'].get('id', resource['url']), resource)
+        resources = list(unique.values())
         for field in ('type', 'language', 'difficulty'):
             if filters.get(field):
                 resources = [r for r in resources if r[field] == filters[field]]
@@ -202,5 +225,7 @@ class SearchService:
         resources, mode = self._fetch(api)
         if not resources:
             raise ValueError('no public metadata returned')
+        if parsed.hostname == 'arxiv.org':
+            resources[0]['metadata']['target_paper'] = True
         resources[0]['metadata']['retrieval_mode'] = mode
         return resources[0]

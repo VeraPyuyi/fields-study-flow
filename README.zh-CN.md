@@ -1,5 +1,16 @@
 # fields-study-flow
 
+## 可复现论文路径与边界
+
+CLI/MCP 默认离线。`roadmap --live`、`ingest-url --fetch-metadata` 或 MCP `filters.offline=false` / `fetchMetadata=true` 才请求公开 arXiv/GitHub 元数据。`paper` CLI 保持离线精选路线，不解析任意论文。arXiv abs/PDF 链接通过 Atom API 规范化标题、作者、摘要（summary）、年份、分类和去版本 ID，不下载 PDF 正文。DOI/普通 PDF 仅保留链接并解释限制：可手工提供元数据/概念标签或改用 arXiv URL。
+
+运行 `python -m pytest tests/test_paper_path_e2e.py -q`，固定 Atom fixture 覆盖 URL→元数据→先修图→阶段检查点→JSON 导出，以及 404、超时、429、缺摘要降级。元数据不可用仍可生成最小路线；无摘要明确标记仅按标题匹配。先修图只覆盖数学、Python、机器学习、深度学习、Transformer、diffusion、LLM 等有限词表；自由文本访问策略只是有限英语规则，推荐结构化策略，不声称理解任意论文。
+
+检索 filters 支持 pages（1–10，默认 1）、page_size（1–100，默认 10），固定提供方排序并按 ID 去重；远端更新仍可能移动分页边界，不保证快照。缓存保留来源和 UTC 抓取时间，默认一小时过期，损坏自动重建；原子替换防止进程内多实例读取半写文件，并发 miss 可能重复请求。限流间隔默认每主机 3 秒，仅进程内共享；429/错误不自动重试，不抓登录内容。
+
+每个阶段包含可观察完成条件。未知时长保留未知，已知时长仅为小计；每周预算同时影响周排期与截止日容量。shortfall_hours 表示已知时长缺口，有未知时长时只是下界，估算可能重叠，不保证实际按期完成。
+
+
 简体中文 | [English](README.md)
 
 面向 AI/CS 研究者、工程师和学生的 agent-native 学习路线生成器。

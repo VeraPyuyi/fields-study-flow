@@ -136,7 +136,7 @@ def ingestUrl(url: str, sourceHint: str | None = None, fetchMetadata: bool = Fal
         concepts=[],
         trust_score=0.45,
         license_or_access_note="User-provided URL. Parse metadata only; do not bypass login or copy long content.",
-        metadata={"access_policy": {"action": "metadata", "bypass_login": False}, "retrieval_mode": "degraded" if fetchMetadata else "offline", "degraded": degraded},
+        metadata={"access_policy": {"action": "metadata", "bypass_login": False}, "retrieval_mode": "degraded" if fetchMetadata else "offline", "degraded": degraded, "next_action": "Check the URL or retry later; supply title, abstract and concept tags manually, or use an arXiv metadata URL. DOI and ordinary PDF parsing are not supported."},
     ).to_dict()
 
 

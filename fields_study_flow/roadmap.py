@@ -21,6 +21,8 @@ def build_roadmap(profile: LearnerProfile, resources: list[Resource]) -> dict[st
     nodes = prerequisite_nodes(profile, resources)
     ordered = order_resources(profile, nodes, resources)
     phases = _build_phases(profile, ordered)
+    for index, phase in enumerate(phases):
+        phase['checkpoints'] = [_checkpoints(profile)[min(index, 2)]]
     return {
         'prerequisites': nodes,
         'schedule': schedule(profile, nodes, ordered),
@@ -79,6 +81,8 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
     )
     for phase in roadmap["phases"]:
         lines.extend([f"### {phase['name']}", phase["objective"], ""])
+        for checkpoint in phase.get('checkpoints', []):
+            lines.append(f'- [ ] {checkpoint}')
         if not phase["resources"]:
             lines.append("- No resources selected yet; add sources with `fields-study-flow ingest-url`.")
         for resource in phase["resources"]:
@@ -101,6 +105,7 @@ def render_markdown(roadmap: dict[str, Any]) -> str:
     schedule = roadmap.get('schedule', {})
     lines.append(f"- Estimated weeks: {schedule.get('total_weeks', 'unknown')}; target date: {schedule.get('target_date') or 'not set'}")
     lines.append(f"- Deadline feasible: {schedule.get('deadline_feasible')}; unknown durations: {len(schedule.get('unknown_estimates', []))}")
+    lines.append(f"- Shortfall: {schedule.get('shortfall_hours')}h; lower bound: {schedule.get('shortfall_is_lower_bound', False)}")
     for item in schedule.get('items', []):
         lines.append(f"- {item['id']}: {item['hours'] if item['hours'] is not None else 'unknown'}h; weeks {item['start_week']}–{item['end_week']}")
     lines.extend(['', "## Checkpoints", ""])
