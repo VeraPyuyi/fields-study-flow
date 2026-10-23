@@ -140,6 +140,36 @@ def ingestUrl(url: str, sourceHint: str | None = None, fetchMetadata: bool = Fal
     ).to_dict()
 
 
+def explainPaper(
+    url: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    userText: list[str] | None = None,
+    level: str = 'beginner',
+    language: str = 'zh',
+) -> dict[str, Any]:
+    """Organize candidate evidence for a host-agent explanation; no model calls.
+
+    Supplied metadata/body stays offline. URL-only requests fetch public arXiv
+    metadata, never full text. Local files are supported by the CLI only.
+    """
+    from urllib.parse import urlsplit
+    from fields_study_flow.paper_explainer import explain_paper
+    if url:
+        parsed = urlsplit(url)
+        if (parsed.scheme != 'https' or parsed.hostname != 'arxiv.org'
+                or parsed.username or parsed.password or parsed.port not in {None, 443}
+                or not re.fullmatch(r'/(?:abs|pdf)/(?:\d{4}\.\d{4,5}|[a-z-]+/\d{7})(?:v\d+)?(?:\.pdf)?', parsed.path)
+                or parsed.query or parsed.fragment):
+            raise ValueError('Only public HTTPS arXiv abs/pdf URLs are supported; supply metadata or userText for other papers')
+    if metadata is None and not userText:
+        if not url:
+            raise ValueError('Supply a paper URL, metadata or userText')
+        from fields_study_flow.sources_adapters import SearchService
+        resource = SearchService().ingest(url)
+        metadata = {**resource['metadata'], 'title': resource['title']}
+    return explain_paper(metadata, userText, level, language)
+
+
 def rankResources(
     resources: list[dict[str, Any]],
     learnerProfile: dict[str, Any],

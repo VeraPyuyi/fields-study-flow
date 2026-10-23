@@ -1,0 +1,3 @@
+Our method uses attention to combine relevant information. This is a synthetic teaching example, not a reproduction of a published paper.
+
+The model achieves 85% accuracy on the supplied evaluation data.

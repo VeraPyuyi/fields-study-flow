@@ -1,5 +1,18 @@
 # fields-study-flow
 
+## Explain a paper to a beginner
+
+Ask your host agent: “Explain this paper to a beginner in connected prose, with no headings or lists, following motivation, method, experiments, results, limitations and outlook.” The `paper-roadmap` skill calls `explainPaper` to organize evidence, then the host checks the supplied material and writes the natural explanation. Stages may span multiple paragraphs; length follows evidence and learning needs.
+
+```bash
+fields-study-flow explain-paper --url examples/paper-explainer/abstract.json --json
+fields-study-flow explain-paper --url https://arxiv.org/abs/1706.03762 --text-file examples/paper-explainer/body.txt --language zh
+```
+
+Both examples are offline; the files contain explicitly synthetic teaching material. Local JSON accepts title/authors/abstract (or summary)/year/categories; local UTF-8 text and `--text-file` accept body paragraphs separated by blank lines. `--level` defaults to beginner; `--language` accepts zh or en. URL-only input fetches public arXiv abs/PDF metadata through the existing adapter, never the PDF body. Other remote URLs are unsupported; supply their material yourself.
+
+The backend returns **offline evidence organization**, not a detailed explanation of arbitrary papers. JSON contains six ordered candidate stages, short excerpts, source/paragraph anchors, gaps and an explanation contract; plain text contains no headings or lists. Limited English/Chinese keyword rules can miss or misclassify evidence. No paid model is called. The host must verify context, explain terms in the requested language, distinguish general background from author claims, and never invent absent results, author limitations or future work. No full-text access is implied, and short English excerpts are not Chinese translations.
+
 ## Reproducible paper path and limits
 
 Default CLI and MCP searches are offline. Opt into public arXiv/GitHub metadata with `roadmap --live`, `ingest-url --fetch-metadata`, or MCP `filters.offline=false` / `fetchMetadata=true`. The `paper` CLI remains a curated offline route; it does not parse arbitrary papers. arXiv abs/PDF links use the Atom metadata API, normalizing title, authors, abstract (`summary`), year, categories and version-independent IDs. No PDF body is downloaded. DOI and ordinary PDF URLs remain URL-only imports with an actionable explanation; supply metadata/concept tags manually or an arXiv URL.

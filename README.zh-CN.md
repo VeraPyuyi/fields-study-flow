@@ -1,5 +1,18 @@
 # fields-study-flow
 
+## 给初学者讲一篇论文
+
+对宿主 Agent 说：“我是初学者，请按动机—方法—实验—效果（结果）—不足—展望详细讲解，不要小标题或列表，尽量用成段文字。”`paper-roadmap` skill 会调用 `explainPaper` 整理证据，再由宿主核实材料、生成自然精讲。六个论述阶段可以各有多段，不强制六段或固定字数。
+
+```bash
+fields-study-flow explain-paper --url examples/paper-explainer/abstract.json --json
+fields-study-flow explain-paper --url https://arxiv.org/abs/1706.03762 --text-file examples/paper-explainer/body.txt --language zh
+```
+
+这两个示例都离线，示例文件是明确标注的合成教学材料。本地 JSON 支持标题、作者、abstract/summary、年份和分类；本地 UTF-8 文本与 `--text-file` 以空行分隔正文段落。`--level` 默认 beginner，语言支持 zh/en。仅传 arXiv abs/PDF URL 时才沿用现有适配器请求公开元数据，不下载 PDF 正文；其他远端 URL 请改为提供材料。
+
+后端输出明确标为“离线材料梳理”，不宣称理解或精讲任意论文。JSON 提供六阶段候选证据、短摘录、来源/段落定位、缺失清单和精讲契约；纯文本无小标题、无列表。中英文关键词规则可能漏检或误分类；宿主必须回查原材料、解释首次出现的术语、区分作者结论和一般背景。没有全文就说明只依据摘要或用户正文，没有结果就提示补充结果表，不编造数字、作者不足或展望，不把英文原句拼接当中文精讲。开发与测试不调用付费模型，宿主自然精讲能力取决于其自身配置。
+
 ## 可复现论文路径与边界
 
 CLI/MCP 默认离线。`roadmap --live`、`ingest-url --fetch-metadata` 或 MCP `filters.offline=false` / `fetchMetadata=true` 才请求公开 arXiv/GitHub 元数据。`paper` CLI 保持离线精选路线，不解析任意论文。arXiv abs/PDF 链接通过 Atom API 规范化标题、作者、摘要（summary）、年份、分类和去版本 ID，不下载 PDF 正文。DOI/普通 PDF 仅保留链接并解释限制：可手工提供元数据/概念标签或改用 arXiv URL。

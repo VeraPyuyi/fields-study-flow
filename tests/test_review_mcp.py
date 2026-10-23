@@ -19,7 +19,7 @@ def test_sdk_all_eight_tools_schema_calls_and_errors(tmp_path):
                 initialized = await session.initialize()
                 assert initialized.server_info.name == 'fields-study-flow'
                 listing = await session.list_tools()
-                assert {tool.name for tool in listing.tools} == TOOL_NAMES
+                assert {tool.name for tool in listing.tools} == TOOL_NAMES | {'explainPaper'}
                 schemas = {tool.name: tool.input_schema for tool in listing.tools}
                 for schema in schemas.values():
                     assert schema['type'] == 'object'
