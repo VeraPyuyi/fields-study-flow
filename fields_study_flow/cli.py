@@ -17,6 +17,11 @@ from fields_study_flow.sources import SourceRegistry
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.command == 'explain-paper':
+        try:
+            return _explain_paper(args)
+        except (ValueError, OSError) as exc:
+            parser.error(str(exc))
     if args.command in {"roadmap", "paper"}:
         try:
             return _roadmap(args) if args.command == "roadmap" else _paper(args)
@@ -73,7 +78,32 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--format", choices=["markdown", "json", "anki"], default="json")
     export.add_argument("--output-dir", default="fields-study-flow-export")
 
+    explain = subparsers.add_parser('explain-paper', help='Organize offline evidence for a beginner explanation.')
+    explain.add_argument('--url', required=True, help='Public arXiv URL or local UTF-8 text/metadata JSON file')
+    explain.add_argument('--level', default='beginner')
+    explain.add_argument('--language', default='zh')
+    explain.add_argument('--text-file', help='User supplied UTF-8 body paragraphs; disables URL fetching')
+    explain.add_argument('--json', action='store_true')
     return parser
+
+
+def _explain_paper(args: argparse.Namespace) -> int:
+    import re
+    from fields_study_flow.mcp_tools import explainPaper
+    metadata, paragraphs, url = None, [], args.url
+    if '://' not in url:
+        source = Path(url)
+        content = source.read_text(encoding='utf-8-sig')
+        if source.suffix.lower() == '.json':
+            metadata = json.loads(content)
+        else:
+            paragraphs = re.split(r'\n\s*\n', content)
+        url = None
+    if args.text_file:
+        paragraphs.extend(re.split(r'\n\s*\n', Path(args.text_file).read_text(encoding='utf-8-sig')))
+    result = explainPaper(url, metadata, paragraphs or None, args.level, args.language)
+    print(json.dumps(result, ensure_ascii=False, indent=2) if args.json else result['text'])
+    return 0
 
 
 def _roadmap(args: argparse.Namespace) -> int:

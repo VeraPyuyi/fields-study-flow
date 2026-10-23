@@ -1,5 +1,29 @@
 # fields-study-flow
 
+## 给初学者讲一篇论文
+
+对宿主 Agent 说：“我是初学者，请按动机—方法—实验—效果（结果）—不足—展望详细讲解，不要小标题或列表，尽量用成段文字。”`paper-roadmap` skill 会调用 `explainPaper` 整理证据，再由宿主核实材料、生成自然精讲。六个论述阶段可以各有多段，不强制六段或固定字数。
+
+```bash
+fields-study-flow explain-paper --url examples/paper-explainer/abstract.json --json
+fields-study-flow explain-paper --url https://arxiv.org/abs/1706.03762 --text-file examples/paper-explainer/body.txt --language zh
+```
+
+这两个示例都离线，示例文件是明确标注的合成教学材料。本地 JSON 支持标题、作者、abstract/summary、年份和分类；本地 UTF-8 文本与 `--text-file` 以空行分隔正文段落。`--level` 默认 beginner，语言支持 zh/en。仅传 arXiv abs/PDF URL 时才沿用现有适配器请求公开元数据，不下载 PDF 正文；其他远端 URL 请改为提供材料。
+
+后端输出明确标为“离线材料梳理”，不宣称理解或精讲任意论文。JSON 提供六阶段候选证据、短摘录、来源/段落定位、缺失清单和精讲契约；纯文本无小标题、无列表。中英文关键词规则可能漏检或误分类；宿主必须回查原材料、解释首次出现的术语、区分作者结论和一般背景。没有全文就说明只依据摘要或用户正文，没有结果就提示补充结果表，不编造数字、作者不足或展望，不把英文原句拼接当中文精讲。开发与测试不调用付费模型，宿主自然精讲能力取决于其自身配置。
+
+## 可复现论文路径与边界
+
+CLI/MCP 默认离线。`roadmap --live`、`ingest-url --fetch-metadata` 或 MCP `filters.offline=false` / `fetchMetadata=true` 才请求公开 arXiv/GitHub 元数据。`paper` CLI 保持离线精选路线，不解析任意论文。arXiv abs/PDF 链接通过 Atom API 规范化标题、作者、摘要（summary）、年份、分类和去版本 ID，不下载 PDF 正文。DOI/普通 PDF 仅保留链接并解释限制：可手工提供元数据/概念标签或改用 arXiv URL。
+
+运行 `python -m pytest tests/test_paper_path_e2e.py -q`，固定 Atom fixture 覆盖 URL→元数据→先修图→阶段检查点→JSON 导出，以及 404、超时、429、缺摘要降级。元数据不可用仍可生成最小路线；无摘要明确标记仅按标题匹配。先修图只覆盖数学、Python、机器学习、深度学习、Transformer、diffusion、LLM 等有限词表；自由文本访问策略只是有限英语规则，推荐结构化策略，不声称理解任意论文。
+
+检索 filters 支持 pages（1–10，默认 1）、page_size（1–100，默认 10），固定提供方排序并按 ID 去重；远端更新仍可能移动分页边界，不保证快照。缓存保留来源和 UTC 抓取时间，默认一小时过期，损坏自动重建；原子替换防止进程内多实例读取半写文件，并发 miss 可能重复请求。限流间隔默认每主机 3 秒，仅进程内共享；429/错误不自动重试，不抓登录内容。
+
+每个阶段包含可观察完成条件。未知时长保留未知，已知时长仅为小计；每周预算同时影响周排期与截止日容量。shortfall_hours 表示已知时长缺口，有未知时长时只是下界，估算可能重叠，不保证实际按期完成。
+
+
 简体中文 | [English](README.md)
 
 面向 AI/CS 研究者、工程师和学生的 agent-native 学习路线生成器。

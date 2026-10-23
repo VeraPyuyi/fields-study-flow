@@ -107,7 +107,8 @@ def schedule(profile, nodes, resources):
         item['end_week'] = max(1, math.ceil(total / profile.weekly_hours)) if profile.weekly_hours and not uncertain else None
     weeks = math.ceil(total / profile.weekly_hours) if profile.weekly_hours and not unknown else None
     feasible = None
+    available = None
     if profile.target_date and profile.weekly_hours:
         available = max(0, (date.fromisoformat(profile.target_date) - date.today()).days) / 7 * profile.weekly_hours
         feasible = False if total > available else None if unknown else True
-    return {'items': items, 'estimated_hours': None if unknown else total, 'known_estimated_hours': total, 'unknown_estimates': unknown, 'total_weeks': weeks, 'target_date': profile.target_date, 'deadline_feasible': feasible, 'note': 'Sequential study estimates; weeks after an unknown duration remain unknown. Known hours are a subtotal. Prerequisite and resource study may overlap.'}
+    return {'available_hours': available, 'shortfall_hours': max(0, total - available) if available is not None else None, 'shortfall_is_lower_bound': bool(unknown), 'items': items, 'estimated_hours': None if unknown else total, 'known_estimated_hours': total, 'unknown_estimates': unknown, 'total_weeks': weeks, 'target_date': profile.target_date, 'deadline_feasible': feasible, 'note': 'Sequential study estimates; weeks after an unknown duration remain unknown. Known hours are a subtotal. Prerequisite and resource study may overlap.'}

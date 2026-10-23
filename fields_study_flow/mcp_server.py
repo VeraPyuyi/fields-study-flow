@@ -16,6 +16,7 @@ TOOLS: dict[str, Callable[..., Any]] = {
     "buildRoadmap": mcp_tools.buildRoadmap,
     "validateSources": mcp_tools.validateSources,
     "exportPlan": mcp_tools.exportPlan,
+    "explainPaper": mcp_tools.explainPaper,
 }
 
 

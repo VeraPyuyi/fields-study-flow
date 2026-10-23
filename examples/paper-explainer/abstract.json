@@ -1,0 +1,4 @@
+{
+  "title": "Small classifier (synthetic offline example)",
+  "abstract": "The problem is image classification with limited data. Our method uses a classifier with gradient descent. We evaluate on the CIFAR dataset. The model achieves 91.2% accuracy. A limitation is sensitivity to noisy labels. Future work will evaluate robustness."
+}

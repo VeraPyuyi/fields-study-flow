@@ -1,5 +1,29 @@
 # fields-study-flow
 
+## Explain a paper to a beginner
+
+Ask your host agent: “Explain this paper to a beginner in connected prose, with no headings or lists, following motivation, method, experiments, results, limitations and outlook.” The `paper-roadmap` skill calls `explainPaper` to organize evidence, then the host checks the supplied material and writes the natural explanation. Stages may span multiple paragraphs; length follows evidence and learning needs.
+
+```bash
+fields-study-flow explain-paper --url examples/paper-explainer/abstract.json --json
+fields-study-flow explain-paper --url https://arxiv.org/abs/1706.03762 --text-file examples/paper-explainer/body.txt --language zh
+```
+
+Both examples are offline; the files contain explicitly synthetic teaching material. Local JSON accepts title/authors/abstract (or summary)/year/categories; local UTF-8 text and `--text-file` accept body paragraphs separated by blank lines. `--level` defaults to beginner; `--language` accepts zh or en. URL-only input fetches public arXiv abs/PDF metadata through the existing adapter, never the PDF body. Other remote URLs are unsupported; supply their material yourself.
+
+The backend returns **offline evidence organization**, not a detailed explanation of arbitrary papers. JSON contains six ordered candidate stages, short excerpts, source/paragraph anchors, gaps and an explanation contract; plain text contains no headings or lists. Limited English/Chinese keyword rules can miss or misclassify evidence. No paid model is called. The host must verify context, explain terms in the requested language, distinguish general background from author claims, and never invent absent results, author limitations or future work. No full-text access is implied, and short English excerpts are not Chinese translations.
+
+## Reproducible paper path and limits
+
+Default CLI and MCP searches are offline. Opt into public arXiv/GitHub metadata with `roadmap --live`, `ingest-url --fetch-metadata`, or MCP `filters.offline=false` / `fetchMetadata=true`. The `paper` CLI remains a curated offline route; it does not parse arbitrary papers. arXiv abs/PDF links use the Atom metadata API, normalizing title, authors, abstract (`summary`), year, categories and version-independent IDs. No PDF body is downloaded. DOI and ordinary PDF URLs remain URL-only imports with an actionable explanation; supply metadata/concept tags manually or an arXiv URL.
+
+Offline regression: `python -m pytest tests/test_paper_path_e2e.py -q`. Fixed Atom fixtures cover URL → metadata → prerequisite DAG → phase checkpoints → JSON export, plus 404, timeout, 429 and missing abstracts. Missing metadata still permits a minimal route; missing abstract is explicitly title-only. Concepts match a small curated vocabulary (math, Python, machine learning, deep learning, Transformer, diffusion, LLM); this is not arbitrary-paper semantic analysis. Free-text access policies use limited English rules; structured access policies are preferable.
+
+Search filters `pages` (1–10, default 1) and `page_size` (1–100, default 10) use explicit stable provider sorting and ID deduplication. Live provider updates can still shift page boundaries; no snapshot guarantee is implied. Cache entries retain source and UTC retrieval time, expire after one hour by default, and rebuild after corruption. Atomic file replacement protects concurrent in-process instances from partial files; concurrent misses may make duplicate requests. Rate spacing is per host within one process (default 3 seconds), not distributed. There are no automatic retries for 429/errors and no login scraping.
+
+Every phase has an observable checkpoint. Unknown durations remain unknown; known hours form a subtotal. Weekly budget changes both scheduling and deadline capacity. `shortfall_hours` is the known-hour deficit and is only a lower bound when durations are missing. Estimates may overlap and are not completion guarantees.
+
+
 [简体中文](README.zh-CN.md) | English
 
 Agent-native learning roadmaps for AI/CS researchers, builders, and students.

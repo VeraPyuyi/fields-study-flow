@@ -22,7 +22,10 @@ def test_sdk_stdio_round_trip(config_path):
                 initialized = await session.initialize()
                 assert initialized.server_info.name == 'fields-study-flow'
                 tools = await session.list_tools()
-                assert len(tools.tools) == 8
+                assert len(tools.tools) == 9
+                explained = await session.call_tool('explainPaper', {'metadata': {'title': 'Offline paper', 'abstract': 'Our method uses attention.'}, 'language': 'en'})
+                assert not explained.is_error
+                assert 'offline_evidence_outline' in explained.content[0].text
                 assert all(t.input_schema.get('type') == 'object' for t in tools.tools)
                 result = await session.call_tool('buildRoadmap', {'goal': 'transformer', 'profile': {}, 'rankedResources': []})
                 assert not result.is_error
